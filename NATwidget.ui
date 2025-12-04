@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+    <class>Form</class>
+    <widget class="QWidget" name="Form">
+        <property name="geometry">
+            <rect>
+                <x>0</x>
+                <y>0</y>
+                <width>292</width>
+                <height>352</height>
+            </rect>
+        </property>
+        <property name="windowTitle">
+            <string notr="true">PyMOL Nucleic Acid Toolbox</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout">
+            <item>
+                <widget class="QLabel" name="label">
+                    <property name="sizePolicy">
+                        <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+                            <horstretch>0</horstretch>
+                            <verstretch>0</verstretch>
+                        </sizepolicy>
+                    </property>
+                    <property name="minimumSize">
+                        <size>
+                            <width>280</width>
+                            <height>60</height>
+                        </size>
+                    </property>
+                    <property name="styleSheet">
+                        <string notr="true">background-color: #000;color:white; padding: 20px</string>
+                    </property>
+                    <property name="text">
+                        <string notr="true">PyMOL Plugin
+                            Nucleic Acid Toolbox
+                        </string>
+                    </property>
+                    <property name="textFormat">
+                        <enum>Qt::PlainText</enum>
+                    </property>
+                    <property name="alignment">
+                        <set>Qt::AlignCenter</set>
+                    </property>
+                    <property name="wordWrap">
+                        <bool>true</bool>
+                    </property>
+                </widget>
+            </item>
+            <item>
+                <layout class="QGridLayout" name="gridLayout">
+                    <item row="0" column="0">
+                        <widget class="QLabel" name="label_1">
+                            <property name="text">
+                                <string notr="true">Object</string>
+                            </property>
+                        </widget>
+                    </item>
+                    <item row="0" column="1" colspan="2">
+                        <widget class="QComboBox" name="input_objects">
+                        </widget>
+                    </item>
+                    <item row="1" column="0">
+                        <widget class="QLabel" name="label_2">
+                            <property name="text">
+                                <string notr="true">Frame</string>
+                            </property>
+                        </widget>
+                    </item>
+                    <item row="1" column="1">
+                        <widget class="QPushButton" name="button_basis_show">
+                            <property name="text">
+                                <string notr="true">Show</string>
+                            </property>
+                        </widget>
+                    </item>
+                    <item row="1" column="2">
+                        <widget class="QPushButton" name="button_basis_hide">
+                            <property name="text">
+                                <string notr="true">Hide</string>
+                            </property>
+                        </widget>
+                    </item>
+                    <item row="2" column="0">
+                        <widget class="QLabel" name="label_3">
+                            <property name="text">
+                                <string notr="true">Color</string>
+                            </property>
+                        </widget>
+                    </item>
+                    <item row="2" column="1">
+                        <widget class="QPushButton" name="button_color_chi">
+                            <property name="text">
+                                <string notr="true">Chi</string>
+                            </property>
+                        </widget>
+                    </item>
+                    <item row="2" column="2">
+                        <widget class="QPushButton" name="button_color_pucker">
+                            <property name="text">
+                                <string notr="true">Pucker</string>
+                            </property>
+                        </widget>
+                    </item>
+                    <item row="3" column="0">
+                        <widget class="QLabel" name="label_4">
+                            <property name="text">
+                                <string notr="true">Base Pair</string>
+                            </property>
+                        </widget>
+                    </item>
+                    <item row="3" column="1">
+                        <widget class="QPushButton" name="button_basepair_show">
+                            <property name="text">
+                                <string notr="true">Show</string>
+                            </property>
+                        </widget>
+                    </item>
+                    <item row="3" column="2">
+                        <widget class="QPushButton" name="button_basepair_hide">
+                            <property name="text">
+                                <string notr="true">Hide</string>
+                            </property>
+                        </widget>
+                    </item>
+                </layout>
+            </item>
+            <item>
+                <layout class="QHBoxLayout" name="horizontalLayout">
+                    <item>
+                        <widget class="QPushButton" name="button_test">
+                            <property name="text">
+                                <string notr="true">Test</string>
+                            </property>
+                        </widget>
+                    </item>
+                    <item>
+                        <widget class="QPushButton" name="button_close">
+                            <property name="text">
+                                <string notr="true">Close</string>
+                            </property>
+                        </widget>
+                    </item>
+                </layout>
+            </item>
+        </layout>
+    </widget>
+    <resources/>
+    <connections/>
+</ui>
