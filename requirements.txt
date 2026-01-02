@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+pydantic
+rdkit
+pandas
+numpy
