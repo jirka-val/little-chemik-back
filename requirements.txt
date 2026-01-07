@@ -4,3 +4,5 @@ pydantic
 rdkit
 pandas
 numpy
+pydantic-settings
+httpx
