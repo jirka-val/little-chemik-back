@@ -1,84 +1,100 @@
+import io
 import logging
-from typing import List, Dict, Any
-from app.services.pdb_service import PDBService
-from app.utils.alias import resn_alias, name_alias
-from app.utils.NucleicAcidToolbox import get_nucleotides
+from typing import Dict, Any
+from pdbfixer import PDBFixer
 
 logger = logging.getLogger(__name__)
 
 
-# Pomocné třídy pro NucleicAcidToolbox
-class Atom:
-    def __init__(self, name, resn, resi, chain, coord):
-        self.name = name
-        self.resn = resn
-        self.resi = resi
-        self.chain = chain
-        self.coord = coord
-
-
-class PDBModel:
-    def __init__(self, atoms: List[Atom]):
-        self.atom = atoms
-
-
 class ValidationService:
-    def __init__(self):
-        self.pdb_service = PDBService()
+    def validate_pdb_content(self, pdb_content: str, label: str = "current_state") -> Dict[str, Any]:
 
-    def _parse_pdb_to_model(self, pdb_content: str) -> PDBModel:
-        """Převede text PDB na objekt model, který očekává NucleicAcidToolbox."""
-        atoms = []
-        for line in pdb_content.splitlines():
-            if line.startswith("ATOM") or line.startswith("HETATM"):
-                # Jednoduchý PDB parser podle pozic v řádku
-                name = line[12:16].strip()
-                resn = line[17:20].strip()
-                chain = line[21:22].strip()
-                resi = int(line[22:26].strip())
-                x = float(line[30:38].strip())
-                y = float(line[38:46].strip())
-                z = float(line[46:54].strip())
-
-                # 1. Aplikace aliasů (standardizace názvů)
-                standard_resn = resn_alias(resn)
-                standard_name = name_alias(standard_resn, name)
-
-                atoms.append(Atom(standard_name, standard_resn, resi, chain, [x, y, z]))
-        return PDBModel(atoms)
-
-    async def validate_molecule(self, pdb_code: str) -> Dict[str, Any]:
-        """Hlavní metoda pro validaci molekuly."""
         try:
-            # Získání obsahu souboru
-            content = await self.pdb_service.fetch_pdb_content(pdb_code.lower())
-            model = self._parse_pdb_to_model(content)
+            f = io.StringIO(pdb_content)
+            fixer = PDBFixer(pdbfile=f)
 
-            # 2. Kontrola integrity pomocí NucleicAcidToolbox
-            # get_nucleotides interně volá check_nucleotide() a check_bond()
-            valid_nucleotides = get_nucleotides(model)
+            fixer.findMissingResidues()
+            fixer.findNonstandardResidues()
+            fixer.findMissingAtoms()
 
-            # Analýza výsledků
-            total_atoms = len(model.atom)
-            num_valid_nucs = len(valid_nucleotides)
+            errors = []  # Blokační chyby
+            warnings = []  # Informační varování
 
-            is_ready = num_valid_nucs > 0
+            # ---  KONTROLA TĚŽKÝCH ATOMŮ (Kritické) ---
+            for residue, atoms in fixer.missingAtoms.items():
+                atom_names = [atom.name for atom in atoms]
+                chain_id = getattr(residue.chain, 'id', str(residue.chain))
+                errors.append({
+                    "resn": residue.name,
+                    "id": residue.index,
+                    "chain": chain_id,
+                    "issue": f"Chybějící těžké atomy: {', '.join(atom_names)}"
+                })
+
+            # ---  KONTROLA PŘERUŠENÍ ŘETĚZCE (Kritické) ---
+            for chain_res, res_names in fixer.missingResidues.items():
+                chain_item = chain_res[0]
+
+                # Zjištění ID řetězce bezpečně
+                if hasattr(chain_item, 'id'):
+                    chain_id = chain_item.id
+                elif isinstance(chain_item, int):
+                    try:
+                        chains = list(fixer.topology.chains())
+                        chain_id = chains[chain_item].id
+                    except (IndexError, AttributeError):
+                        chain_id = f"Index:{chain_item}"
+                else:
+                    chain_id = str(chain_item)
+
+                errors.append({
+                    "chain": chain_id,
+                    "issue": f"V řetězci chybí úsek o délce {len(res_names)} reziduí (diskontinuita)."
+                })
+
+            # ---  KONTROLA VODÍKŮ (Kritické) ---
+            has_hydrogens = any(atom.element.symbol == 'H' for atom in fixer.topology.atoms())
+            if not has_hydrogens:
+                errors.append({
+                    "issue": "Molekula neobsahuje žádné vodíky. Je nutná protonace (Add Hydrogens)."
+                })
+
+            # ---  NESTANDARDNÍ REZIDUA (Kritické/Varování) ---
+            for res in fixer.nonstandardResidues:
+                errors.append({
+                    "resn": res.name,
+                    "id": res.index,
+                    "issue": f"Nestandardní reziduum ({res.name}). Chybí parametry Force Field."
+                })
+
+            # ---  HETEROGENY  ---
+            water_residues = [r for r in fixer.topology.residues() if r.name in ['HOH', 'WAT', 'TIP3']]
+            if water_residues:
+                warnings.append({
+                    "issue": f"Nalezeno {len(water_residues)} molekul krystalové vody (doporučeno odstranit)."
+                })
+
+            ions = [r.name for r in fixer.topology.residues() if r.name in ['NA', 'CL', 'MG', 'K', 'ZN']]
+            if ions:
+                warnings.append({
+                    "issue": f"Detekovány ionty: {', '.join(set(ions))}."
+                })
+
+            is_ready = len(errors) == 0
 
             return {
-                "pdb_code": pdb_code,
+                "label": label,
                 "is_ready_for_hpc": is_ready,
                 "stats": {
-                    "total_atoms_parsed": total_atoms,
-                    "valid_nucleotides_found": num_valid_nucs
+                    "total_errors": len(errors),
+                    "total_warnings": len(warnings),
+                    "atom_count": sum(1 for _ in fixer.topology.atoms())
                 },
-                "details": [
-                    {"id": n.id, "type": n.nuc, "chain": n.chain}
-                    for n in valid_nucleotides
-                ] if is_ready else "Žádné validní nukleové kyseliny nebyly nalezeny."
+                "errors": errors,
+                "warnings": warnings
             }
 
-        except FileNotFoundError:
-            return {"error": f"Molekula {pdb_code} nebyla nalezena."}
         except Exception as e:
-            logger.exception(f"Chyba při validaci {pdb_code}")
-            return {"error": f"Interní chyba validace: {str(e)}"}
+            # Přidáno exc_info=True, abys v konzoli viděl přesné místo chyby
+            logger.error(f"Chyba při komplexní diagnostice molekuly: {str(e)}", exc_info=True)
+            return {"error": f"Diagnostika selhala: {str(e)}"}
