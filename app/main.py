@@ -22,7 +22,7 @@ app.add_middleware(
 
 app.add_exception_handler(AppBaseException, app_exception_handler)
 
-app.include_router(api_router, prefix="/api")
+app.include_router(api_router)
 
 @app.get("/", tags=["Health Check"])
 async def root():
