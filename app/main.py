@@ -1,14 +1,18 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.services.pdb_service import PDBService
+from app.api.api import api_router
 from app.core.logging import setup_logging
-import logging
+from app.core.exceptions import AppBaseException, app_exception_handler
 
 setup_logging()
-logger = logging.getLogger("api")
 
-app = FastAPI(title="Nucleic Acid Analysis API", version="1.0.0")
+app = FastAPI(
+    title="Little Chemik API",
+    description="Profesionální backend pro analýzu nukleových kyselin.",
+    version="1.2.0"
+)
 
+# CORS nastavení
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,19 +20,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-pdb_service = PDBService()
+app.add_exception_handler(AppBaseException, app_exception_handler)
 
-@app.get("/")
+app.include_router(api_router, prefix="/api")
+
+@app.get("/", tags=["Health Check"])
 async def root():
-    return {"status": "online", "service": "Nucleic Acid Analysis"}
-
-@app.get("/api/process/{pdb_code}")
-async def process_molecule(pdb_code: str):
-    try:
-        content = await pdb_service.fetch_pdb_content(pdb_code.lower())
-        return content
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.exception("Neočekávaná chyba při zpracování molekuly")
-        raise HTTPException(status_code=500, detail="Interní chyba serveru.")
+    return {"status": "online", "version": "1.2.0"}

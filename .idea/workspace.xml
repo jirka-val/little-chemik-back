@@ -4,16 +4,12 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="test">
-      <change afterPath="$PROJECT_DIR$/app/api/v1/molecules.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/core/config.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/core/logging.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/models/molecule.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/services/analysis.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/services/pdb_service.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/utils/aliases.py" afterDir="false" />
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="Refactoring">
+      <change afterPath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/app/core/exceptions.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/molecules.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/main.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -68,6 +64,7 @@
 }</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\DevProjects\little-chemik\test_molecular-modification\app\api\v1\endpoints" />
       <recent name="C:\DevProjects\little-chemik\test_molecular-modification\data" />
       <recent name="C:\DevProjects\little-chemik\test_molecular-modification\app" />
       <recent name="C:\DevProjects\test_molecular-modification" />
@@ -270,7 +267,7 @@
       <workItem from="1767391042301" duration="3248000" />
       <workItem from="1767476803819" duration="17000" />
       <workItem from="1767713059321" duration="607000" />
-      <workItem from="1767790493389" duration="3842000" />
+      <workItem from="1767790493389" duration="6064000" />
     </task>
     <task id="LOCAL-00001" summary="Init">
       <option name="closed" value="true" />
@@ -312,7 +309,15 @@
       <option name="project" value="LOCAL" />
       <updated>1767794104767</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="Refactoring">
+      <option name="closed" value="true" />
+      <created>1767801375302</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1767801375302</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -322,7 +327,8 @@
     <MESSAGE value="Init" />
     <MESSAGE value="..." />
     <MESSAGE value="test" />
-    <option name="LAST_COMMIT_MESSAGE" value="test" />
+    <MESSAGE value="Refactoring" />
+    <option name="LAST_COMMIT_MESSAGE" value="Refactoring" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/test_molecular_modification$test_molecular_modification.coverage" NAME="test_molecular-modification Coverage Results" MODIFIED="1767790876743" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
