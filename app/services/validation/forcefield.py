@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Set, List
+from typing import List, Set
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ class ForceFieldValidator:
             for category in self.ff_dict.values():
                 self.supported_residues.update(category.keys())
         except Exception as e:
-            logger.error(f"Chyba při načítání FF slovníku: {e}")
+            logger.error(f"Nepodařilo se načíst konverzní slovník: {e}")
             self.supported_residues = set()
 
     def check_residue_compatibility(self, topology) -> List[str]:
@@ -26,10 +26,11 @@ class ForceFieldValidator:
                 res_name = residue.name
                 possible_names = [res_name]
 
+                # Inteligentní mapování terminálů
                 if len(residues) > 1:
-                    if i == 0:  # N-konec / 5'
+                    if i == 0:  # Začátek řetězce
                         possible_names.extend([f"{res_name}5", f"N{res_name}"])
-                    elif i == len(residues) - 1:  # C-konec / 3'
+                    elif i == len(residues) - 1:  # Konec řetězce
                         possible_names.extend([f"{res_name}3", f"C{res_name}"])
                 else:
                     possible_names.append(f"{res_name}N")

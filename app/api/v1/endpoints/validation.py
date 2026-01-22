@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Dict
-from app.services.validation_service import ValidationService
+from app.services.validation import ValidationService
 
 router = APIRouter()
 validation_service = ValidationService()
