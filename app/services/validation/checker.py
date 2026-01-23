@@ -73,8 +73,13 @@ class StructureChecker:
 
         # 3. Kontrola diskontinuity (Missing Residues)
         for chain_res, res_names in self.fixer.missingResidues.items():
-            # chain_res[0] je objekt řetězce
-            chain_id = chain_res[0].id
+            chain = chain_res[0]
+
+            # Pokud je chain pouze index (int), musíme získat skutečný objekt z topologie
+            if isinstance(chain, int):
+                chain = list(self.fixer.topology.chains())[chain]
+
+            chain_id = chain.id
             errors.append({
                 "chain": chain_id,
                 "issue": f"V řetězci {chain_id} chybí úsek o délce {len(res_names)} reziduí."
