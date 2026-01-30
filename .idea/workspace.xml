@@ -5,8 +5,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="New validation">
+      <change afterPath="$PROJECT_DIR$/app/services/analysis_service.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/validation/checker.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/validation/checker.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/api.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/analysis.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -255,6 +258,17 @@
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Init" />
