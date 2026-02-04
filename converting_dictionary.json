@@ -108,7 +108,11 @@
         "O2'": [
           "HO2'"
         ]
-      }
+      },
+      "terminal": [
+        "RA3",
+        "RA5"
+      ]
     },
     "RA3": {
       "atom": {
@@ -222,7 +226,8 @@
         "O3'": [
           "HO3'"
         ]
-      }
+      },
+      "terminal": []
     },
     "RA5": {
       "atom": {
@@ -328,7 +333,8 @@
         "O2'": [
           "HO2'"
         ]
-      }
+      },
+      "terminal": []
     },
     "RAN": {
       "atom": {
@@ -438,7 +444,8 @@
         "O3'": [
           "HO3'"
         ]
-      }
+      },
+      "terminal": []
     },
     "RC": {
       "atom": {
@@ -539,7 +546,11 @@
         "O2'": [
           "HO2'"
         ]
-      }
+      },
+      "terminal": [
+        "RC3",
+        "RC5"
+      ]
     },
     "RC3": {
       "atom": {
@@ -644,7 +655,8 @@
         "O3'": [
           "HO3'"
         ]
-      }
+      },
+      "terminal": []
     },
     "RC5": {
       "atom": {
@@ -741,7 +753,8 @@
         "O2'": [
           "HO2'"
         ]
-      }
+      },
+      "terminal": []
     },
     "RCN": {
       "atom": {
@@ -842,7 +855,8 @@
         "O3'": [
           "HO3'"
         ]
-      }
+      },
+      "terminal": []
     },
     "RG": {
       "atom": {
@@ -954,7 +968,11 @@
         "O2'": [
           "HO2'"
         ]
-      }
+      },
+      "terminal": [
+        "RG3",
+        "RG5"
+      ]
     },
     "RG3": {
       "atom": {
@@ -1070,7 +1088,8 @@
         "O3'": [
           "HO3'"
         ]
-      }
+      },
+      "terminal": []
     },
     "RG5": {
       "atom": {
@@ -1178,7 +1197,8 @@
         "O2'": [
           "HO2'"
         ]
-      }
+      },
+      "terminal": []
     },
     "RGN": {
       "atom": {
@@ -1290,7 +1310,8 @@
         "O3'": [
           "HO3'"
         ]
-      }
+      },
+      "terminal": []
     },
     "RU": {
       "atom": {
@@ -1387,7 +1408,11 @@
         "O2'": [
           "HO2'"
         ]
-      }
+      },
+      "terminal": [
+        "RU3",
+        "RU5"
+      ]
     },
     "RU3": {
       "atom": {
@@ -1488,7 +1513,8 @@
         "O3'": [
           "HO3'"
         ]
-      }
+      },
+      "terminal": []
     },
     "RU5": {
       "atom": {
@@ -1581,7 +1607,8 @@
         "O2'": [
           "HO2'"
         ]
-      }
+      },
+      "terminal": []
     },
     "RUN": {
       "atom": {
@@ -1678,7 +1705,8 @@
         "O3'": [
           "HO3'"
         ]
-      }
+      },
+      "terminal": []
     }
   },
   "D": {
@@ -1786,7 +1814,11 @@
           "H2'",
           "H2''"
         ]
-      }
+      },
+      "terminal": [
+        "DA3",
+        "DA5"
+      ]
     },
     "DA3": {
       "atom": {
@@ -1896,7 +1928,8 @@
         "O3'": [
           "HO3'"
         ]
-      }
+      },
+      "terminal": []
     },
     "DA5": {
       "atom": {
@@ -1998,7 +2031,8 @@
           "H2'",
           "H2''"
         ]
-      }
+      },
+      "terminal": []
     },
     "DAN": {
       "atom": {
@@ -2104,7 +2138,8 @@
         "O3'": [
           "HO3'"
         ]
-      }
+      },
+      "terminal": []
     },
     "DC": {
       "atom": {
@@ -2201,7 +2236,11 @@
           "H2'",
           "H2''"
         ]
-      }
+      },
+      "terminal": [
+        "DC3",
+        "DC5"
+      ]
     },
     "DC3": {
       "atom": {
@@ -2302,7 +2341,8 @@
         "O3'": [
           "HO3'"
         ]
-      }
+      },
+      "terminal": []
     },
     "DC5": {
       "atom": {
@@ -2395,7 +2435,8 @@
           "H2'",
           "H2''"
         ]
-      }
+      },
+      "terminal": []
     },
     "DCN": {
       "atom": {
@@ -2492,7 +2533,8 @@
         "O3'": [
           "HO3'"
         ]
-      }
+      },
+      "terminal": []
     },
     "DG": {
       "atom": {
@@ -2600,7 +2642,11 @@
           "H2'",
           "H2''"
         ]
-      }
+      },
+      "terminal": [
+        "DG3",
+        "DG5"
+      ]
     },
     "DG3": {
       "atom": {
@@ -2712,7 +2758,8 @@
         "O3'": [
           "HO3'"
         ]
-      }
+      },
+      "terminal": []
     },
     "DG5": {
       "atom": {
@@ -2816,7 +2863,8 @@
           "H2'",
           "H2''"
         ]
-      }
+      },
+      "terminal": []
     },
     "DGN": {
       "atom": {
@@ -2924,7 +2972,8 @@
         "O3'": [
           "HO3'"
         ]
-      }
+      },
+      "terminal": []
     },
     "DT": {
       "atom": {
@@ -3025,7 +3074,11 @@
           "H2'",
           "H2''"
         ]
-      }
+      },
+      "terminal": [
+        "DT3",
+        "DT5"
+      ]
     },
     "DT3": {
       "atom": {
@@ -3130,7 +3183,8 @@
         "O3'": [
           "HO3'"
         ]
-      }
+      },
+      "terminal": []
     },
     "DT5": {
       "atom": {
@@ -3227,7 +3281,8 @@
           "H2'",
           "H2''"
         ]
-      }
+      },
+      "terminal": []
     },
     "DTN": {
       "atom": {
@@ -3328,7 +3383,8 @@
         "O3'": [
           "HO3'"
         ]
-      }
+      },
+      "terminal": []
     }
   },
   "P": {
@@ -3337,7 +3393,7 @@
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PACB",
         "HB1": "PAHB",
         "HB2": "PAHB",
@@ -3363,14 +3419,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CALA",
+        "NALA"
+      ]
     },
     "CALA": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PACB",
         "HB1": "PAHB",
         "HB2": "PAHB",
@@ -3398,11 +3458,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NALA": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -3435,14 +3496,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "ARG": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PRCB",
         "HB2": "PRHB",
         "HB3": "PRHB",
@@ -3508,14 +3570,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CARG",
+        "NARG"
+      ]
     },
     "CARG": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PRCB",
         "HB2": "PRHB",
         "HB3": "PRHB",
@@ -3583,11 +3649,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NARG": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -3660,14 +3727,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "ASN": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PNCB",
         "HB2": "PNHB",
         "HB3": "PNHB",
@@ -3705,14 +3773,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CASN",
+        "NASN"
+      ]
     },
     "CASN": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PNCB",
         "HB2": "PNHB",
         "HB3": "PNHB",
@@ -3752,11 +3824,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NASN": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -3801,14 +3874,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "ASP": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PDCB",
         "HB2": "PDHB",
         "HB3": "PDHB",
@@ -3840,14 +3914,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CASP",
+        "NASP"
+      ]
     },
     "CASP": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PDCB",
         "HB2": "PDHB",
         "HB3": "PDHB",
@@ -3881,11 +3959,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NASP": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -3924,14 +4003,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "CYS": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PCCB",
         "HB2": "PCHB",
         "HB3": "PCHB",
@@ -3961,14 +4041,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CCYS",
+        "NCYS"
+      ]
     },
     "CCYS": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PCCB",
         "HB2": "PCHB",
         "HB3": "PCHB",
@@ -4000,11 +4084,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NCYS": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -4041,14 +4126,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "CYX": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PCCB",
         "HB2": "PCHB",
         "HB3": "PCHB",
@@ -4074,14 +4160,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CCYX",
+        "NCYX"
+      ]
     },
     "CCYX": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PCCB",
         "HB2": "PCHB",
         "HB3": "PCHB",
@@ -4109,11 +4199,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NCYX": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -4146,14 +4237,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "GLN": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PQCB",
         "HB2": "PQHB",
         "HB3": "PQHB",
@@ -4199,14 +4291,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CGLN",
+        "NGLN"
+      ]
     },
     "CGLN": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PQCB",
         "HB2": "PQHB",
         "HB3": "PQHB",
@@ -4254,11 +4350,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NGLN": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -4311,14 +4408,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "GLU": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PECB",
         "HB2": "PEHB",
         "HB3": "PEHB",
@@ -4358,14 +4456,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CGLU",
+        "NGLU"
+      ]
     },
     "CGLU": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PECB",
         "HB2": "PEHB",
         "HB3": "PEHB",
@@ -4407,11 +4509,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NGLU": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -4458,7 +4561,8 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "GLY": {
       "atom": {
@@ -4483,7 +4587,11 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CGLY",
+        "NGLY"
+      ]
     },
     "CGLY": {
       "atom": {
@@ -4510,17 +4618,18 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NGLY": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
         "CA": "PBCA",
-        "HA2": "PBHa",
-        "HA3": "PBHa",
+        "HA2": "PBHA",
+        "HA3": "PBHA",
         "C": "PBC",
         "O": "PBO"
       },
@@ -4539,14 +4648,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "HID": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PHCB",
         "HB2": "PHHB",
         "HB3": "PHHB",
@@ -4597,14 +4707,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CHID",
+        "NHID"
+      ]
     },
     "CHID": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PHCB",
         "HB2": "PHHB",
         "HB3": "PHHB",
@@ -4657,11 +4771,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NHID": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -4719,14 +4834,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "HIE": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PHCB",
         "HB2": "PHHB",
         "HB3": "PHHB",
@@ -4736,7 +4852,7 @@
         "HE1": "PHHE",
         "NE2": "PHNe",
         "HE2": "PHHe",
-        "CD2": "PHCD",
+        "CD2": "PHCd",
         "HD2": "PHHD",
         "C": "PBC",
         "O": "PBO"
@@ -4777,14 +4893,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CHIE",
+        "NHIE"
+      ]
     },
     "CHIE": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PHCB",
         "HB2": "PHHB",
         "HB3": "PHHB",
@@ -4794,7 +4914,7 @@
         "HE1": "PHHE",
         "NE2": "PHNe",
         "HE2": "PHHe",
-        "CD2": "PHCD",
+        "CD2": "PHCd",
         "HD2": "PHHD",
         "C": "PBC",
         "O": "PBOT",
@@ -4837,11 +4957,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NHIE": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -4856,7 +4977,7 @@
         "HE1": "PHHE",
         "NE2": "PHNe",
         "HE2": "PHHe",
-        "CD2": "PHCD",
+        "CD2": "PHCd",
         "HD2": "PHHD",
         "C": "PBC",
         "O": "PBO"
@@ -4899,14 +5020,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "HIP": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PHCB",
         "HB2": "PHHB",
         "HB3": "PHHB",
@@ -4917,7 +5039,7 @@
         "HE1": "PHHE",
         "NE2": "PHNe",
         "HE2": "PHHe",
-        "CD2": "PHCD",
+        "CD2": "PHCd",
         "HD2": "PHHD",
         "C": "PBC",
         "O": "PBO"
@@ -4959,14 +5081,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CHIP",
+        "NHIP"
+      ]
     },
     "CHIP": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PHCB",
         "HB2": "PHHB",
         "HB3": "PHHB",
@@ -4977,7 +5103,7 @@
         "HE1": "PHHE",
         "NE2": "PHNe",
         "HE2": "PHHe",
-        "CD2": "PHCD",
+        "CD2": "PHCd",
         "HD2": "PHHD",
         "C": "PBC",
         "O": "PBOT",
@@ -5021,11 +5147,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NHIP": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -5041,7 +5168,7 @@
         "HE1": "PHHE",
         "NE2": "PHNe",
         "HE2": "PHHe",
-        "CD2": "PHCD",
+        "CD2": "PHCd",
         "HD2": "PHHD",
         "C": "PBC",
         "O": "PBO"
@@ -5085,14 +5212,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "ILE": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PICB",
         "HB": "PIHB",
         "CG2": "PICg",
@@ -5142,14 +5270,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CILE",
+        "NILE"
+      ]
     },
     "CILE": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PICB",
         "HB": "PIHB",
         "CG2": "PICg",
@@ -5201,11 +5333,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NILE": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -5262,14 +5395,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "LEU": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PLCB",
         "HB2": "PLHB",
         "HB3": "PLHB",
@@ -5319,14 +5453,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CLEU",
+        "NLEU"
+      ]
     },
     "CLEU": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PLCB",
         "HB2": "PLHB",
         "HB3": "PLHB",
@@ -5378,11 +5516,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NLEU": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -5439,14 +5578,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "LYS": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PKCB",
         "HB2": "PKHB",
         "HB3": "PKHB",
@@ -5504,14 +5644,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CLYS",
+        "NLYS"
+      ]
     },
     "CLYS": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PKCB",
         "HB2": "PKHB",
         "HB3": "PKHB",
@@ -5571,11 +5715,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NLYS": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -5640,14 +5785,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "MET": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PMCB",
         "HB2": "PMHB",
         "HB3": "PMHB",
@@ -5693,14 +5839,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CMET",
+        "NMET"
+      ]
     },
     "CMET": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PMCB",
         "HB2": "PMHB",
         "HB3": "PMHB",
@@ -5748,11 +5898,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NMET": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -5805,14 +5956,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "PHE": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PFCB",
         "HB2": "PFHB",
         "HB3": "PFHB",
@@ -5871,14 +6023,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CPHE",
+        "NPHE"
+      ]
     },
     "CPHE": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PFCB",
         "HB2": "PFHB",
         "HB3": "PFHB",
@@ -5939,11 +6095,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NPHE": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -6009,14 +6166,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "PRO": {
       "atom": {
         "N": "PBn",
         "CD": "PPCD",
-        "HD2": "PPHD",
-        "HD3": "PPHD",
+        "HD2": "PPHd",
+        "HD3": "PPHd",
         "CG": "PPCG",
         "HG2": "PPHG",
         "HG3": "PPHG",
@@ -6024,7 +6182,7 @@
         "HB2": "PPHB",
         "HB3": "PPHB",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "C": "PBC",
         "O": "PBO"
       },
@@ -6055,14 +6213,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CPRO",
+        "NPRO"
+      ]
     },
     "CPRO": {
       "atom": {
         "N": "PBn",
         "CD": "PPCD",
-        "HD2": "PPHD",
-        "HD3": "PPHD",
+        "HD2": "PPHd",
+        "HD3": "PPHd",
         "CG": "PPCG",
         "HG2": "PPHG",
         "HG3": "PPHG",
@@ -6070,7 +6232,7 @@
         "HB2": "PPHB",
         "HB3": "PPHB",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "C": "PBC",
         "O": "PBOT",
         "OXT": "PBOT"
@@ -6103,11 +6265,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NPRO": {
       "atom": {
-        "N": "PBn",
+        "N": "PBnp",
         "H2": "PBht",
         "H3": "PBht",
         "CD": "PPCD",
@@ -6153,14 +6316,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "SER": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PSCB",
         "HB2": "PSHB",
         "HB3": "PSHB",
@@ -6190,14 +6354,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CSER",
+        "NSER"
+      ]
     },
     "CSER": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PSCB",
         "HB2": "PSHB",
         "HB3": "PSHB",
@@ -6229,11 +6397,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NSER": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -6270,14 +6439,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "THR": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PTCB",
         "HB": "PTHB",
         "CG2": "PTCG",
@@ -6315,14 +6485,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CTHR",
+        "NTHR"
+      ]
     },
     "CTHR": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PTCB",
         "HB": "PTHB",
         "CG2": "PTCG",
@@ -6362,11 +6536,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NTHR": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -6411,14 +6586,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "TRP": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PWCB",
         "HB2": "PWHB",
         "HB3": "PWHB",
@@ -6490,14 +6666,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CTRP",
+        "NTRP"
+      ]
     },
     "CTRP": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PWCB",
         "HB2": "PWHB",
         "HB3": "PWHB",
@@ -6571,11 +6751,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NTRP": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -6654,14 +6835,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "TYR": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PYCB",
         "HB2": "PYHB",
         "HB3": "PYHB",
@@ -6724,14 +6906,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CTYR",
+        "NTYR"
+      ]
     },
     "CTYR": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PYCB",
         "HB2": "PYHB",
         "HB3": "PYHB",
@@ -6796,11 +6982,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NTYR": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -6870,14 +7057,15 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     },
     "VAL": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PVCB",
         "HB": "PVHB",
         "CG1": "PVCG",
@@ -6919,14 +7107,18 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": [
+        "CVAL",
+        "NVAL"
+      ]
     },
     "CVAL": {
       "atom": {
         "N": "PBN",
         "H": "PBH",
         "CA": "PBCA",
-        "HA": "PBHA",
+        "HA": "PBHa",
         "CB": "PVCB",
         "HB": "PVHB",
         "CG1": "PVCG",
@@ -6970,11 +7162,12 @@
           "O",
           "OXT"
         ]
-      }
+      },
+      "terminal": []
     },
     "NVAL": {
       "atom": {
-        "N": "PBN",
+        "N": "PBNp",
         "H1": "PBHT",
         "H2": "PBHT",
         "H3": "PBHT",
@@ -7023,7 +7216,8 @@
         "C": [
           "O"
         ]
-      }
+      },
+      "terminal": []
     }
   },
   "W3": {
@@ -7041,7 +7235,8 @@
         "H1": [
           "H2"
         ]
-      }
+      },
+      "terminal": []
     }
   },
   "W4": {
@@ -7061,7 +7256,8 @@
         "H1": [
           "H2"
         ]
-      }
+      },
+      "terminal": []
     }
   },
   "W5": {
@@ -7083,7 +7279,8 @@
         "H1": [
           "H2"
         ]
-      }
+      },
+      "terminal": []
     }
   },
   "I1": {
@@ -7091,19 +7288,22 @@
       "atom": {
         "Na+": "INa"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "K+": {
       "atom": {
         "K+": "IK"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Cl-": {
       "atom": {
         "Cl-": "ICl-"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     }
   },
   "I1+": {
@@ -7111,37 +7311,43 @@
       "atom": {
         "Li+": "ILi"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Rb+": {
       "atom": {
         "Rb+": "IRb"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Cs+": {
       "atom": {
         "Cs+": "ICs"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "F-": {
       "atom": {
         "F-": "IF-"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Br-": {
       "atom": {
         "Br-": "IBr-"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "I-": {
       "atom": {
         "I-": "II-"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     }
   },
   "Im": {
@@ -7149,7 +7355,8 @@
       "atom": {
         "Mg2+": "IMg2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     }
   },
   "Im+": {
@@ -7157,283 +7364,372 @@
       "atom": {
         "Be2+": "IBe2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Cu2+": {
       "atom": {
         "Cu2+": "ICu2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Ni2+": {
       "atom": {
         "Ni2+": "INi2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Pt2+": {
       "atom": {
         "Pt2+": "IPt2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Zn2+": {
       "atom": {
         "Zn2+": "IZn2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Co2+": {
       "atom": {
         "Co2+": "ICo2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Pd2+": {
       "atom": {
         "Pd2+": "IPd2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Ag2+": {
       "atom": {
         "Ag2+": "IAg2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Cr2+": {
       "atom": {
         "Cr2+": "ICr2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Fe2+": {
       "atom": {
         "Fe2+": "IFe2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "V2+": {
       "atom": {
         "V2+": "IV2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Mn2+": {
       "atom": {
         "Mn2+": "IMn2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Hg2+": {
       "atom": {
         "Hg2+": "IHg2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
+    },
+        "HG": {
+      "atom": {
+        "HG": "IHg2"
+      },
+      "connectivity": {},
+      "terminal": []
     },
     "Cd2+": {
       "atom": {
         "Cd2+": "ICd2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
+    },
+      "CD": {
+      "atom": {
+        "CD": "ICd2"
+      },
+      "connectivity": {},
+      "terminal": []
     },
     "Yb2+": {
       "atom": {
         "Yb2+": "IYb2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Ca2+": {
       "atom": {
         "Ca2+": "ICa2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
+    },
+    "CA": {
+      "atom": {
+        "CA": "ICa2"
+      },
+      "connectivity": {},
+      "terminal": []
     },
     "Sn2+": {
       "atom": {
         "Sn2+": "ISn2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Pb2+": {
       "atom": {
         "Pb2+": "IPb2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Eu2+": {
       "atom": {
         "Eu2+": "IEu2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Sr2+": {
       "atom": {
         "Sr2+": "ISr2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Sm2+": {
       "atom": {
         "Sm2+": "ISm2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Ba2+": {
       "atom": {
         "Ba2+": "IBa2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Ra2+": {
       "atom": {
         "Ra2+": "IRa2"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Al3+": {
       "atom": {
         "Al3+": "IAl3"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Fe3+": {
       "atom": {
         "Fe3+": "IFe3"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Cr3+": {
       "atom": {
         "Cr3+": "ICr3"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "In3+": {
       "atom": {
         "In3+": "IIn3"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Tl3+": {
       "atom": {
         "Tl3+": "ITl3"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Y3+": {
       "atom": {
         "Y3+": "IY3"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "La3+": {
       "atom": {
         "La3+": "ILa3"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Ce3+": {
       "atom": {
         "Ce3+": "ICe3"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
+    },
+        "CE": {
+      "atom": {
+        "CE": "ICe3"
+      },
+      "connectivity": {},
+      "terminal": []
     },
     "Pr3+": {
       "atom": {
         "Pr3+": "IPr3"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Nd3+": {
       "atom": {
         "Nd3+": "INd3"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Sm3+": {
       "atom": {
         "Sm3+": "ISm3"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Eu3+": {
       "atom": {
         "Eu3+": "IEu3"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Gd3+": {
       "atom": {
         "Gd3+": "IGd3"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Tb3+": {
       "atom": {
         "Tb3+": "ITb3"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Dy3+": {
       "atom": {
         "Dy3+": "IDy3"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Er3+": {
       "atom": {
-        "Ey3+": "IEy3"
+        "Er3+": "IEr3"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Tm3+": {
       "atom": {
         "Tm3+": "ITm3"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Lu3+": {
       "atom": {
         "Lu3+": "ILu3"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Hf4+": {
       "atom": {
         "Hf4+": "IHf4"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Zr4+": {
       "atom": {
         "Zr4+": "IZr4"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Ce4+": {
       "atom": {
         "Ce4+": "ICe4"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
+    },
+        "Ce": {
+      "atom": {
+        "Ce": "ICe4"
+      },
+      "connectivity": {},
+      "terminal": []
     },
     "U4+": {
       "atom": {
         "U4+": "IU4"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
+    },
+     "U": {
+      "atom": {
+        "U": "IU4"
+      },
+      "connectivity": {},
+      "terminal": []
     },
     "Pu4+": {
       "atom": {
         "Pu4+": "IPu4"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     },
     "Th4+": {
       "atom": {
         "Th4+": "ITh4"
       },
-      "connectivity": {}
+      "connectivity": {},
+      "terminal": []
     }
   }
 }

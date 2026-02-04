@@ -4,12 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="New validation">
-      <change afterPath="$PROJECT_DIR$/app/services/analysis_service.py" afterDir="false" />
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="build_sequence">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/api.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/analysis.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/analysis_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/analysis_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/converting_dictionary.json" beforeDir="false" afterPath="$PROJECT_DIR$/converting_dictionary.json" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -65,11 +63,11 @@
 }</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\DevProjects\littleChemik\little-chemik-back" />
       <recent name="C:\DevProjects\little-chemik\test_molecular-modification\app\utils" />
       <recent name="C:\DevProjects\little-chemik\test_molecular-modification\app\api\v1\endpoints" />
       <recent name="C:\DevProjects\little-chemik\test_molecular-modification\data" />
       <recent name="C:\DevProjects\little-chemik\test_molecular-modification\app" />
-      <recent name="C:\DevProjects\test_molecular-modification" />
     </key>
   </component>
   <component name="RunManager">
@@ -124,6 +122,7 @@
       <workItem from="1767894981084" duration="6000" />
       <workItem from="1769111274018" duration="6330000" />
       <workItem from="1769119065378" duration="7338000" />
+      <workItem from="1770216461455" duration="1445000" />
     </task>
     <task id="LOCAL-00001" summary="Init">
       <option name="closed" value="true" />
@@ -253,7 +252,15 @@
       <option name="project" value="LOCAL" />
       <updated>1769126759046</updated>
     </task>
-    <option name="localTasksCounter" value="17" />
+    <task id="LOCAL-00017" summary="build_sequence">
+      <option name="closed" value="true" />
+      <created>1769767076029</created>
+      <option name="number" value="00017" />
+      <option name="presentableId" value="LOCAL-00017" />
+      <option name="project" value="LOCAL" />
+      <updated>1769767076029</updated>
+    </task>
+    <option name="localTasksCounter" value="18" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -278,7 +285,8 @@
     <MESSAGE value="optimize backend for production and scientific dependencies" />
     <MESSAGE value="improving validation" />
     <MESSAGE value="New validation" />
-    <option name="LAST_COMMIT_MESSAGE" value="New validation" />
+    <MESSAGE value="build_sequence" />
+    <option name="LAST_COMMIT_MESSAGE" value="build_sequence" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/test_molecular_modification$test_molecular_modification.coverage" NAME="test_molecular-modification Coverage Results" MODIFIED="1767790876743" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
