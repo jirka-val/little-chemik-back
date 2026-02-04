@@ -4,10 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="build_sequence">
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="Updated converting_dictionary.json so i updated analysis_service.py, now i should be able to recognize start and end of reziduum">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/services/analysis_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/analysis_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/converting_dictionary.json" beforeDir="false" afterPath="$PROJECT_DIR$/converting_dictionary.json" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -122,7 +121,7 @@
       <workItem from="1767894981084" duration="6000" />
       <workItem from="1769111274018" duration="6330000" />
       <workItem from="1769119065378" duration="7338000" />
-      <workItem from="1770216461455" duration="1445000" />
+      <workItem from="1770216461455" duration="2706000" />
     </task>
     <task id="LOCAL-00001" summary="Init">
       <option name="closed" value="true" />
@@ -260,7 +259,15 @@
       <option name="project" value="LOCAL" />
       <updated>1769767076029</updated>
     </task>
-    <option name="localTasksCounter" value="18" />
+    <task id="LOCAL-00018" summary="Updated converting_dictionary.json so i updated analysis_service.py, now i should be able to recognize start and end of reziduum">
+      <option name="closed" value="true" />
+      <created>1770219484044</created>
+      <option name="number" value="00018" />
+      <option name="presentableId" value="LOCAL-00018" />
+      <option name="project" value="LOCAL" />
+      <updated>1770219484044</updated>
+    </task>
+    <option name="localTasksCounter" value="19" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -286,7 +293,8 @@
     <MESSAGE value="improving validation" />
     <MESSAGE value="New validation" />
     <MESSAGE value="build_sequence" />
-    <option name="LAST_COMMIT_MESSAGE" value="build_sequence" />
+    <MESSAGE value="Updated converting_dictionary.json so i updated analysis_service.py, now i should be able to recognize start and end of reziduum" />
+    <option name="LAST_COMMIT_MESSAGE" value="Updated converting_dictionary.json so i updated analysis_service.py, now i should be able to recognize start and end of reziduum" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/test_molecular_modification$test_molecular_modification.coverage" NAME="test_molecular-modification Coverage Results" MODIFIED="1767790876743" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
