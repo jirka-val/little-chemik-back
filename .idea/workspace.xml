@@ -4,8 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="Updated converting_dictionary.json so i updated analysis_service.py, now i should be able to recognize start and end of reziduum">
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="add atom validation and connectivity integrity checks to analysis service">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/services/analysis_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/analysis_service.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -121,7 +122,9 @@
       <workItem from="1767894981084" duration="6000" />
       <workItem from="1769111274018" duration="6330000" />
       <workItem from="1769119065378" duration="7338000" />
-      <workItem from="1770216461455" duration="2706000" />
+      <workItem from="1770216461455" duration="2899000" />
+      <workItem from="1770224092587" duration="1666000" />
+      <workItem from="1770337785278" duration="4030000" />
     </task>
     <task id="LOCAL-00001" summary="Init">
       <option name="closed" value="true" />
@@ -267,7 +270,15 @@
       <option name="project" value="LOCAL" />
       <updated>1770219484044</updated>
     </task>
-    <option name="localTasksCounter" value="19" />
+    <task id="LOCAL-00019" summary="add atom validation and connectivity integrity checks to analysis service">
+      <option name="closed" value="true" />
+      <created>1770221052879</created>
+      <option name="number" value="00019" />
+      <option name="presentableId" value="LOCAL-00019" />
+      <option name="project" value="LOCAL" />
+      <updated>1770221052879</updated>
+    </task>
+    <option name="localTasksCounter" value="20" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -294,7 +305,8 @@
     <MESSAGE value="New validation" />
     <MESSAGE value="build_sequence" />
     <MESSAGE value="Updated converting_dictionary.json so i updated analysis_service.py, now i should be able to recognize start and end of reziduum" />
-    <option name="LAST_COMMIT_MESSAGE" value="Updated converting_dictionary.json so i updated analysis_service.py, now i should be able to recognize start and end of reziduum" />
+    <MESSAGE value="add atom validation and connectivity integrity checks to analysis service" />
+    <option name="LAST_COMMIT_MESSAGE" value="add atom validation and connectivity integrity checks to analysis service" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/test_molecular_modification$test_molecular_modification.coverage" NAME="test_molecular-modification Coverage Results" MODIFIED="1767790876743" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
