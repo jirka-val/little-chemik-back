@@ -118,19 +118,22 @@ def _pick_variant(group: Optional[str], pdb_resname: str, conv: Dict, terminal: 
         return None, False
 
     aliased = resn_alias(pdb_resname)
-
     candidates: List[str] = []
-    # Mapování konců (HPC označení)
-    if terminal == "5":
-        candidates += [f"{aliased}5", f"{pdb_resname}5", f"N{aliased}", f"N{pdb_resname}"]
-    elif terminal == "3":
-        candidates += [f"{aliased}3", f"{pdb_resname}3", f"C{aliased}", f"C{pdb_resname}"]
 
+    # Mapování konců přesně podle tvého JSONu (např. RU + 3 = RU3)
+    if terminal == "5":
+        candidates += [f"{aliased}5", f"{pdb_resname}5"]
+    elif terminal == "3":
+        candidates += [f"{aliased}3", f"{pdb_resname}3"]
+
+    # Základní názvy jako fallback
     candidates += [aliased, pdb_resname]
 
     for k in candidates:
         if k in conv[group]:
             return k, True
+
+    # Pokud nic nenajde, vrátí první pokus, ale označí jako neznámé
     return candidates[0] if candidates else None, False
 
 
@@ -141,13 +144,12 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
     if not all_residues:
         return {"chain": chain, "tokens": [], "warnings": ["No residues found in PDB."]}
 
-    # Pokud není specifikován konkrétní řetězec, zpracujeme VŠECHNY nalezené
+    # Filtrace řetězců
     if chain is not None:
         residues_to_process = [r for r in all_residues if r[0] == chain]
     else:
         residues_to_process = all_residues
 
-    # Seskupíme rezidua podle řetězců, abychom pro každý určili vlastní začátek a konec
     chains_dict = {}
     for r in residues_to_process:
         ch_id = r[0]
@@ -159,46 +161,60 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
     warnings = []
     global_pos = 0
 
-    # Procházíme každý řetězec samostatně
     for ch_id, residues in chains_dict.items():
-        residues.sort(key=lambda x: (x[1], x[2]))
+        # 1. ROZDĚLENÍ: Najdeme hlavní polymerní řetězec a ligandy zvlášť
+        main_chain = []
+        ligands = []
 
-        # Určení lokálního začátku a konce pro daný řetězec
-        first_resseq = residues[0][1]
-        last_resseq = residues[-1][1]
+        for r in residues:
+            resname = r[3]
+            group = _infer_group(resname, conv)
+            # Skupiny R (RNA), D (DNA) a P (Proteiny) tvoří hlavní řetězec
+            if group in ["R", "D", "P"]:
+                main_chain.append(r)
+            else:
+                ligands.append(r)
+
+        # Seřadíme hlavní řetězec podle číslování PDB
+        main_chain.sort(key=lambda x: (x[1], x[2]))
+
+        # 2. KONCE: Určíme reálný začátek a konec pouze z hlavního řetězce
+        first_main_seq = main_chain[0][1] if main_chain else None
+        last_main_seq = main_chain[-1][1] if main_chain else None
+
+        # 3. POŘADÍ: Zpracujeme nejdříve řetězec (s mezerami) a pak přidáme ligandy na konec
+        processed_ordered = main_chain + ligands
 
         prev_resseq = None
 
-        for ch, resseq, icode, resname, atoms in residues:
-            # Logika pro vyplnění mezer v rámci řetězce
-            if fill_gaps and prev_resseq is not None and resseq > prev_resseq + 1:
+        for ch, resseq, icode, resname, atoms in processed_ordered:
+            # Mezery vyplňujeme pouze v rámci souvislého hlavního řetězce
+            is_main = any(r[1] == resseq and r[3] == resname for r in main_chain)
+
+            if fill_gaps and is_main and prev_resseq is not None and resseq > prev_resseq + 1:
                 for missing_seq in range(prev_resseq + 1, resseq):
                     global_pos += 1
                     tokens.append({
-                        "position": global_pos,
-                        "chain": ch,
-                        "resseq": None,
-                        "icode": None,
-                        "pdb_resname": "0",
-                        "is_gap": True,
-                        "group": None,
-                        "ff_resname": None,
-                        "known": False,
-                        "atoms": [],
-                        "missing_atoms": []
+                        "position": global_pos, "chain": ch, "resseq": None, "icode": None,
+                        "pdb_resname": "0", "is_gap": True, "group": None, "ff_resname": None,
+                        "known": False, "atoms": [], "missing_atoms": []
                     })
 
             global_pos += 1
             group = _infer_group(resname, conv)
 
-            # Určení terminálu (5' nebo 3') na základě lokálních konců řetězce
-            terminal = "5" if resseq == first_resseq else ("3" if resseq == last_resseq else "")
+            # 4. TERMINÁLY: Přiřadíme 5/3 pouze pokud je to součást hlavního řetězce a je na kraji
+            terminal = ""
+            if is_main:
+                if resseq == first_main_seq:
+                    terminal = "5"
+                elif resseq == last_main_seq:
+                    terminal = "3"
+
+            # Vyhledání varianty (např. RU3) v JSONu - bez diakritiky
             ff_resname, known = _pick_variant(group, resname, conv, terminal)
 
-            # Kontrola chybějících atomů
-            missing_atoms = []
-            if known:
-                missing_atoms = _check_missing_atoms(group, ff_resname, atoms, conv)
+            missing_atoms = _check_missing_atoms(group, ff_resname, atoms, conv) if known else []
 
             if not known:
                 warnings.append(f"Unknown residue '{resname}' at {ch}:{resseq}{icode or ''}")
@@ -207,9 +223,7 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
 
             conn_info = _check_connectivity_integrity(group, ff_resname, atoms, conv)
             if conn_info["is_broken"]:
-                warnings.append(
-                    f"Residue {resname} ({resseq}) at chain {ch} is BROKEN into {conn_info['component_count']} parts!"
-                )
+                warnings.append(f"Residue {resname} ({resseq}) at chain {ch} is BROKEN!")
 
             tokens.append({
                 "position": global_pos,
@@ -227,12 +241,19 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
                 "connectivity_parts": conn_info["components"]
             })
 
-            prev_resseq = resseq
+            if is_main:
+                prev_resseq = resseq
 
-    # Vracíme chain ID (pokud byl zadán) nebo ID prvního zpracovaného řetězce
-    result_chain = chain if chain else (list(chains_dict.keys())[0] if chains_dict else None)
-
-    return {"chain": result_chain, "tokens": tokens, "warnings": warnings}
+    return {
+        "chains": {
+            ch_id: {
+                "chain": ch_id,
+                "tokens": [t for t in tokens if t["chain"] == ch_id],
+                "warnings": [w for w in warnings if f"chain {ch_id}" in w or f"{ch_id}:" in w]
+            }
+            for ch_id in chains_dict.keys()
+        }
+    }
 
 
 def _check_missing_atoms(group: str, ff_name: str, atoms: List[str], conv: Dict) -> List[str]:

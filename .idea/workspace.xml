@@ -4,9 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="add atom validation and connectivity integrity checks to analysis service">
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="problem only one chain">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/services/analysis_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/analysis_service.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -124,7 +123,13 @@
       <workItem from="1769119065378" duration="7338000" />
       <workItem from="1770216461455" duration="2899000" />
       <workItem from="1770224092587" duration="1666000" />
-      <workItem from="1770337785278" duration="4030000" />
+      <workItem from="1770337785278" duration="5230000" />
+      <workItem from="1770364090276" duration="365000" />
+      <workItem from="1770368039295" duration="1042000" />
+      <workItem from="1770587440979" duration="498000" />
+      <workItem from="1770844263430" duration="710000" />
+      <workItem from="1770848575385" duration="1164000" />
+      <workItem from="1770879955268" duration="1223000" />
     </task>
     <task id="LOCAL-00001" summary="Init">
       <option name="closed" value="true" />
@@ -278,7 +283,15 @@
       <option name="project" value="LOCAL" />
       <updated>1770221052879</updated>
     </task>
-    <option name="localTasksCounter" value="20" />
+    <task id="LOCAL-00020" summary="problem only one chain">
+      <option name="closed" value="true" />
+      <created>1770343607022</created>
+      <option name="number" value="00020" />
+      <option name="presentableId" value="LOCAL-00020" />
+      <option name="project" value="LOCAL" />
+      <updated>1770343607022</updated>
+    </task>
+    <option name="localTasksCounter" value="21" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -306,7 +319,8 @@
     <MESSAGE value="build_sequence" />
     <MESSAGE value="Updated converting_dictionary.json so i updated analysis_service.py, now i should be able to recognize start and end of reziduum" />
     <MESSAGE value="add atom validation and connectivity integrity checks to analysis service" />
-    <option name="LAST_COMMIT_MESSAGE" value="add atom validation and connectivity integrity checks to analysis service" />
+    <MESSAGE value="problem only one chain" />
+    <option name="LAST_COMMIT_MESSAGE" value="problem only one chain" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/test_molecular_modification$test_molecular_modification.coverage" NAME="test_molecular-modification Coverage Results" MODIFIED="1767790876743" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
