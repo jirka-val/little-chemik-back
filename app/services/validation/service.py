@@ -5,22 +5,26 @@ from .checker import StructureChecker
 from .forcefield import ForceFieldValidator
 from .conformations import ConformationManager
 
+
 class ValidationService:
     def __init__(self):
         self.ff_validator = ForceFieldValidator()
         self.conf_manager = ConformationManager()
 
-    def validate_pdb_content(self, pdb_content: str, label: str = "current_state") -> Dict[str, Any]:
+    def validate_pdb_content(self, pdb_content: str, label: str = "current_state", selections: Dict[str, str] = None) -> \
+    Dict[str, Any]:
+        """
+        Komplexní validace PDB souboru.
+        Nově zahrnuje geometrickou kontrolu kontinuity, pokud jsou aplikovány selekce AltLocs.
+        """
         # 1. Detekce AltLocs (Konformace)
         alt_locs = self.conf_manager.detect_alt_locs(pdb_content)
 
         # 2. Diagnostika struktury (PDBFixer)
-        # Checker by měl uvnitř používat PDBFixer
         checker = StructureChecker(pdb_content)
-        structure_results = checker.run_diagnostics() # Vrací chybějící atomy, rezidua, atd.
+        structure_results = checker.run_diagnostics()
 
-        # Místo: unsupported = self.ff_validator.check_residue_compatibility(checker.fixer.topology)
-        # Použijeme výsledek z tvé analýzy, kterou už máš (např. z build_sequence_tokens)
+        # 3. Kontrola kompatibility s ForceFieldem
         unsupported = self.ff_validator.check_residue_compatibility(structure_results["tokens"])
 
         # 4. Sestavení komplexního reportu
@@ -32,17 +36,30 @@ class ValidationService:
             errors.append({
                 "type": "CONFORMATION",
                 "issue": "alt_locs_detected",
-                "message": f"Nalezeno {len(alt_locs)} reziduí s více konformacemi.",
+                "message": f"Detected {len(alt_locs)} residues with multiple conformations (AltLocs). Selection required.",
                 "details": alt_locs,
                 "critical": True
             })
+
+        # GEOMETRICKÁ KONTROLA MEZER (Klíčové pro profi použití)
+        # Pokud uživatel už nějaké varianty vybral, zkontrolujeme, zda k sobě pasují
+        if selections:
+            continuity_issues = self.conf_manager.validate_continuity(pdb_content, selections)
+            for issue in continuity_issues:
+                errors.append({
+                    "type": "STRUCTURE",
+                    "issue": "continuity_gap",
+                    "message": issue["message"],
+                    "details": issue["details"],
+                    "critical": True
+                })
 
         # Zařazení chybějících parametrů do reportu
         if unsupported:
             errors.append({
                 "type": "FORCEFIELD",
                 "issue": "unsupported_residues",
-                "message": "Některá rezidua nejsou definována v converting_dictionary.json.",
+                "message": "Some residues are not defined in the HPC forcefield dictionary.",
                 "details": unsupported,
                 "critical": True
             })
@@ -53,7 +70,7 @@ class ValidationService:
             warnings.append({
                 "type": "STRUCTURE",
                 "issue": "missing_hydrogens",
-                "message": "V molekule chybí vodíky. Před simulací bude nutná protonace.",
+                "message": "Molecule lacks hydrogens. Protonation will be required before simulation.",
                 "critical": False
             })
 
@@ -76,5 +93,18 @@ class ValidationService:
             }
         }
 
-    def apply_alt_loc_selection(self, pdb_content: str, selections: Dict[str, str]) -> str:
-        return self.conf_manager.filter_pdb_by_selection(pdb_content, selections)
+    def apply_alt_loc_selection(self, pdb_content: str, selections: Dict[str, str]) -> Dict[str, Any]:
+        """
+        Aplikuje výběr a vrací jak nové PDB, tak novou validaci včetně kontroly mezer.
+        """
+        # 1. Vyfiltrování PDB (ponechání vybraných variant)
+        filtered_pdb = self.conf_manager.filter_pdb_by_selection(pdb_content, selections)
+
+        # 2. Okamžitá re-validace výsledné struktury
+        # Předáváme selections, aby validate_pdb_content mohl spustit validate_continuity
+        validation_results = self.validate_pdb_content(filtered_pdb, label="after_selection", selections=selections)
+
+        return {
+            "pdb_content": filtered_pdb,
+            "validation": validation_results
+        }

@@ -4,10 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="correct analysis of ´5 and ´3">
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="update for front">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/validation/checker.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/validation/checker.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/validation/forcefield.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/validation/forcefield.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/validation.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/validation.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/validation/conformations.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/validation/conformations.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/services/validation/service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/validation/service.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -134,7 +134,8 @@
       <workItem from="1770879955268" duration="4748000" />
       <workItem from="1771179965507" duration="2162000" />
       <workItem from="1771207022613" duration="1189000" />
-      <workItem from="1771321831411" duration="423000" />
+      <workItem from="1771321831411" duration="1506000" />
+      <workItem from="1771345282767" duration="2365000" />
     </task>
     <task id="LOCAL-00001" summary="Init">
       <option name="closed" value="true" />
@@ -304,7 +305,15 @@
       <option name="project" value="LOCAL" />
       <updated>1770881373621</updated>
     </task>
-    <option name="localTasksCounter" value="22" />
+    <task id="LOCAL-00022" summary="update for front">
+      <option name="closed" value="true" />
+      <created>1771322304485</created>
+      <option name="number" value="00022" />
+      <option name="presentableId" value="LOCAL-00022" />
+      <option name="project" value="LOCAL" />
+      <updated>1771322304485</updated>
+    </task>
+    <option name="localTasksCounter" value="23" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -334,7 +343,8 @@
     <MESSAGE value="add atom validation and connectivity integrity checks to analysis service" />
     <MESSAGE value="problem only one chain" />
     <MESSAGE value="correct analysis of ´5 and ´3" />
-    <option name="LAST_COMMIT_MESSAGE" value="correct analysis of ´5 and ´3" />
+    <MESSAGE value="update for front" />
+    <option name="LAST_COMMIT_MESSAGE" value="update for front" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/test_molecular_modification$test_molecular_modification.coverage" NAME="test_molecular-modification Coverage Results" MODIFIED="1767790876743" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
