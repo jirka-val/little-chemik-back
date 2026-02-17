@@ -104,50 +104,70 @@ class ConformationManager:
 
     @staticmethod
     def validate_continuity(pdb_content: str, selections: Dict[str, str]) -> List[Dict[str, Any]]:
-        """
-        GEOMETRICKÁ KONTROLA: Měří vzdálenost C(i) - N(i+1).
-        Pokud je vzdálenost > 1.6 A, nahlásí chybu v kontinuitě.
-        """
-        # Pro zjednodušení znovu vytáhneme souřadnice vybraných variant
-        # V profi implementaci by se toto dalo optimalizovat
         struct_data = {}
+        # Normalizace klíčů (odstranění mezer, aby "A-42-SER" sedělo)
+        normalized_selections = {k.replace(" ", ""): v for k, v in selections.items()}
+
         for line in pdb_content.splitlines():
-            if line.startswith("ATOM") and line[12:16].strip() in ["N", "C"]:
+            if line.startswith(("ATOM", "HETATM")) and len(line) >= 54:
+                atom_name = line[12:16].strip()
+                if atom_name not in ["N", "C"]:
+                    continue
+
                 alt_id = line[16].strip()
                 chain = line[21].strip()
-                res_id = line[22:27].strip()
-                key = f"{chain}-{res_id}"
+                res_id_raw = line[22:27].strip()
+                res_name = line[17:20].strip()  # <--- PŘIDÁNO: Načtení jména rezidua
 
-                # Zpracujeme jen to, co je vybráno, nebo atomy bez AltLoc
-                selected_variant = selections.get(key, 'A')
-                if not alt_id or alt_id == selected_variant:
-                    if chain not in struct_data: struct_data[chain] = []
+                # KLÍČ MUSÍ ODPOVÍDAT FRONTENDU: "Chain-ID-Name"
+                lookup_key = f"{chain}-{res_id_raw}-{res_name}".replace(" ", "")
+                target_variant = normalized_selections.get(lookup_key)
+
+                # DEBUG: Odkomentuj tohle, pokud chceš v logu vidět, co se děje
+                # if alt_id:
+                #     print(f"DEBUG: PDB AltLoc: {alt_id}, Key: {lookup_key}, Match: {target_variant}")
+
+                keep = False
+                if not alt_id:
+                    keep = True
+                elif target_variant and alt_id == target_variant:
+                    keep = True
+                elif not target_variant and alt_id == 'A':
+                    keep = True
+
+                if keep:
+                    if chain not in struct_data:
+                        struct_data[chain] = []
+                    if not struct_data[chain] or struct_data[chain][-1]["res_id"] != res_id_raw:
+                        struct_data[chain].append({"res_id": res_id_raw, "N": None, "C": None})
 
                     try:
                         coords = np.array([float(line[30:38]), float(line[38:46]), float(line[46:54])])
-                        atom_name = line[12:16].strip()
-
-                        # Přidáme do seznamu reziduí v řetězci
-                        if not struct_data[chain] or struct_data[chain][-1]["res_id"] != res_id:
-                            struct_data[chain].append({"res_id": res_id, "N": None, "C": None})
-
                         struct_data[chain][-1][atom_name] = coords
                     except:
                         continue
 
         warnings = []
+        # 2. Výpočet vzdáleností mezi sousedními rezidui
         for chain, residues in struct_data.items():
             for i in range(len(residues) - 1):
                 res_curr = residues[i]
                 res_next = residues[i + 1]
 
+                # Kontrolujeme vzdálenost mezi C atomem aktuálního a N atomem následujícího rezidua
                 if res_curr["C"] is not None and res_next["N"] is not None:
                     dist = np.linalg.norm(res_curr["C"] - res_next["N"])
-                    if dist > 1.6:  # Standardní peptidová vazba je ~1.33 A
+
+                    # Standardní peptidová vazba je ~1.33 A. Hranice 1.6 A spolehlivě detekuje chyby.
+                    if dist > 1.6:
                         warnings.append({
                             "type": "CONTINUITY_GAP",
-                            "message": f"Gap of {dist:.2f}A detected between residue {res_curr['res_id']} and {res_next['res_id']} in chain {chain}. Check your AltLoc selection.",
-                            "details": {"chain": chain, "res_i": res_curr['res_id'], "res_j": res_next['res_id'],
-                                        "distance": dist}
+                            "message": f"Mezera {dist:.2f}Å detekována mezi rezidui {res_curr['res_id']} a {res_next['res_id']} v řetězci {chain}.",
+                            "details": {
+                                "chain": chain,
+                                "res_i": res_curr['res_id'],
+                                "res_j": res_next['res_id'],
+                                "distance": round(float(dist), 3)
+                            }
                         })
         return warnings

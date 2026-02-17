@@ -51,20 +51,27 @@ async def apply_selections(request: FixAltLocRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chyba při aplikaci selekcí: {str(e)}")
 
+
+# app/api/v1/endpoints/validation.py
+
 @router.post("/preview-selection", summary="Náhled geometrie před aplikací")
 async def preview_selection(request: FixAltLocRequest):
     try:
-        print(f"OK")
-        # Používáme metodu validate_continuity, kterou jsme si napsali v ConformationManager
-        warnings = validation_service.conf_manager.validate_continuity(
+        # 1. Získáme seznam problémů s kontinuitou (vzdálenosti vazeb mezi rezidui)
+        issues = validation_service.conf_manager.validate_continuity(
             request.pdb_content,
             request.selections
         )
+
+        # 2. Vyhodnotíme, zda je výběr bezpečný
+        # Za kritické považujeme cokoli, co validate_continuity vrátí
+        is_safe = len(issues) == 0
+
         return {
-            "is_ok": len(warnings) == 0,
-            "warnings": warnings
+            "is_ok": is_safe,
+            "issues": issues,
+            "message": "Výběr je geometricky v pořádku" if is_safe else "Detekovány kritické mezery v řetězci"
         }
     except Exception as e:
-        # Přidáme error logging, ať víme, co se děje na serveru
         print(f"DEBUG: Preview error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
