@@ -7,34 +7,38 @@ logger = logging.getLogger(__name__)
 
 class ForceFieldValidator:
     def __init__(self, dict_path: str = "converting_dictionary.json"):
+        # Načtení slovníku zůstává stejné, abychom měli proti čemu porovnávat
         try:
-            with open(dict_path, 'r') as f:
+            with open(dict_path, 'r', encoding='utf-8') as f:
                 self.ff_dict = json.load(f)
-            self.supported_residues = set()
-            for category in self.ff_dict.values():
-                self.supported_residues.update(category.keys())
+
+            # Vytvoříme si plochý seznam všech klíčů ze všech kategorií (R, D, P, I1...)
+            self.supported_names = set()
+            for category_data in self.ff_dict.values():
+                self.supported_names.update(category_data.keys())
+
         except Exception as e:
             logger.error(f"Nepodařilo se načíst konverzní slovník: {e}")
-            self.supported_residues = set()
+            self.supported_names = set()
 
-    def check_residue_compatibility(self, topology) -> List[str]:
-        """Kontroluje rezidua včetně terminálních variant (DA5, NALA atd.)."""
+    def is_supported(self, name: str) -> bool:
+        """Jednoduchá otázka: Existuje toto jméno v mém JSONu?"""
+        return name in self.supported_names
+
+    def check_residue_compatibility(self, processed_tokens: List[dict]) -> List[str]:
+        """
+        Místo topologie kontrolujeme už hotové tokeny z analýzy.
+        Tím využijeme fakt, že analysis_service už vyřešil RU5, GOL atd.
+        """
         unsupported = set()
-        for chain in topology.chains():
-            residues = list(chain.residues())
-            for i, residue in enumerate(residues):
-                res_name = residue.name
-                possible_names = [res_name]
+        for token in processed_tokens:
+            if token.get("is_gap"):
+                continue
 
-                # Inteligentní mapování terminálů
-                if len(residues) > 1:
-                    if i == 0:  # Začátek řetězce
-                        possible_names.extend([f"{res_name}5", f"N{res_name}"])
-                    elif i == len(residues) - 1:  # Konec řetězce
-                        possible_names.extend([f"{res_name}3", f"C{res_name}"])
-                else:
-                    possible_names.append(f"{res_name}N")
+            # Použijeme už vypočítané ff_resname (např. RU3, RA5, GOL)
+            name_to_check = token.get("ff_resname") or token.get("pdb_resname")
 
-                if not any(name in self.supported_residues for name in possible_names):
-                    unsupported.add(res_name)
+            if not self.is_supported(name_to_check):
+                unsupported.add(name_to_check)
+
         return sorted(list(unsupported))

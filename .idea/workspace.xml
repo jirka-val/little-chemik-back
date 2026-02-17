@@ -4,9 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="problem only one chain">
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="correct analysis of ´5 and ´3">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/analysis_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/analysis_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/validation/checker.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/validation/checker.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/validation/forcefield.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/validation/forcefield.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/validation/service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/validation/service.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -129,7 +131,10 @@
       <workItem from="1770587440979" duration="498000" />
       <workItem from="1770844263430" duration="710000" />
       <workItem from="1770848575385" duration="1164000" />
-      <workItem from="1770879955268" duration="1223000" />
+      <workItem from="1770879955268" duration="4748000" />
+      <workItem from="1771179965507" duration="2162000" />
+      <workItem from="1771207022613" duration="1189000" />
+      <workItem from="1771321831411" duration="423000" />
     </task>
     <task id="LOCAL-00001" summary="Init">
       <option name="closed" value="true" />
@@ -291,7 +296,15 @@
       <option name="project" value="LOCAL" />
       <updated>1770343607022</updated>
     </task>
-    <option name="localTasksCounter" value="21" />
+    <task id="LOCAL-00021" summary="correct analysis of ´5 and ´3">
+      <option name="closed" value="true" />
+      <created>1770881373621</created>
+      <option name="number" value="00021" />
+      <option name="presentableId" value="LOCAL-00021" />
+      <option name="project" value="LOCAL" />
+      <updated>1770881373621</updated>
+    </task>
+    <option name="localTasksCounter" value="22" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -320,7 +333,8 @@
     <MESSAGE value="Updated converting_dictionary.json so i updated analysis_service.py, now i should be able to recognize start and end of reziduum" />
     <MESSAGE value="add atom validation and connectivity integrity checks to analysis service" />
     <MESSAGE value="problem only one chain" />
-    <option name="LAST_COMMIT_MESSAGE" value="problem only one chain" />
+    <MESSAGE value="correct analysis of ´5 and ´3" />
+    <option name="LAST_COMMIT_MESSAGE" value="correct analysis of ´5 and ´3" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/test_molecular_modification$test_molecular_modification.coverage" NAME="test_molecular-modification Coverage Results" MODIFIED="1767790876743" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
