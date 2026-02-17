@@ -54,6 +54,7 @@ async def apply_selections(request: FixAltLocRequest):
 @router.post("/preview-selection", summary="Náhled geometrie před aplikací")
 async def preview_selection(request: FixAltLocRequest):
     try:
+        print(f"OK")
         # Používáme metodu validate_continuity, kterou jsme si napsali v ConformationManager
         warnings = validation_service.conf_manager.validate_continuity(
             request.pdb_content,

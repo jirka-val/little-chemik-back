@@ -7,8 +7,6 @@
     <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="update for front">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/validation.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/validation.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/validation/conformations.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/validation/conformations.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/validation/service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/validation/service.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -135,7 +133,7 @@
       <workItem from="1771179965507" duration="2162000" />
       <workItem from="1771207022613" duration="1189000" />
       <workItem from="1771321831411" duration="1506000" />
-      <workItem from="1771345282767" duration="2365000" />
+      <workItem from="1771345282767" duration="6370000" />
     </task>
     <task id="LOCAL-00001" summary="Init">
       <option name="closed" value="true" />
@@ -313,7 +311,15 @@
       <option name="project" value="LOCAL" />
       <updated>1771322304485</updated>
     </task>
-    <option name="localTasksCounter" value="23" />
+    <task id="LOCAL-00023" summary="update for front">
+      <option name="closed" value="true" />
+      <created>1771347893234</created>
+      <option name="number" value="00023" />
+      <option name="presentableId" value="LOCAL-00023" />
+      <option name="project" value="LOCAL" />
+      <updated>1771347893234</updated>
+    </task>
+    <option name="localTasksCounter" value="24" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
