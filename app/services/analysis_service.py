@@ -10,20 +10,15 @@ from app.utils.alias import resn_alias, name_alias
 
 
 @lru_cache(maxsize=1)
-def load_converting_dictionary() -> Dict:
-    candidates = [
-        os.path.join(os.getcwd(), "converting_dictionary.json"),
-        os.path.join(os.getcwd(), "app", "resources", "converting_dictionary.json"),
-        os.path.join(os.getcwd(), "app", "data", "converting_dictionary.json"),
-        os.path.join(os.getcwd(),
-                     "jirka-val/little-chemik-back/little-chemik-back-a58f320e7b9715efb9053322f92c5fed67c5cd19/converting_dictionary.json"),
-    ]
-    for path in candidates:
-        if os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-    raise FileNotFoundError("converting_dictionary.json not found.")
+def load_converting_dictionary() -> dict:
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    dict_path = os.path.join(base_dir, "data", "converting_dictionary.json")
 
+    try:
+        with open(dict_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}  # Nebo si sem dej logger.error
 
 def _parse_residues_from_pdb(pdb_text: str, chain: Optional[str]) -> List[Tuple[str, int, str, str, List[str]]]:
     """
