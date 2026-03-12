@@ -4,10 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="add unit tests for molecule upload, download, and hydrogenation endpoints">
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="update validation endpoints to enforce workspace management and improve error handling">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/analysis.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/validation.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/validation.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/analysis_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/analysis_service.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -157,6 +156,7 @@
       <workItem from="1773152087272" duration="609000" />
       <workItem from="1773226797877" duration="803000" />
       <workItem from="1773335097466" duration="8000" />
+      <workItem from="1773335108832" duration="3427000" />
     </task>
     <task id="LOCAL-00001" summary="Init">
       <option name="closed" value="true" />
@@ -390,7 +390,15 @@
       <option name="project" value="LOCAL" />
       <updated>1772928830332</updated>
     </task>
-    <option name="localTasksCounter" value="30" />
+    <task id="LOCAL-00030" summary="update validation endpoints to enforce workspace management and improve error handling">
+      <option name="closed" value="true" />
+      <created>1773335243295</created>
+      <option name="number" value="00030" />
+      <option name="presentableId" value="LOCAL-00030" />
+      <option name="project" value="LOCAL" />
+      <updated>1773335243295</updated>
+    </task>
+    <option name="localTasksCounter" value="31" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -429,7 +437,8 @@
     <MESSAGE value="update Dockerfile to include rdkit and libgl1 for improved compatibility" />
     <MESSAGE value="add download endpoint and garbage collector for workspace management" />
     <MESSAGE value="add unit tests for molecule upload, download, and hydrogenation endpoints" />
-    <option name="LAST_COMMIT_MESSAGE" value="add unit tests for molecule upload, download, and hydrogenation endpoints" />
+    <MESSAGE value="update validation endpoints to enforce workspace management and improve error handling" />
+    <option name="LAST_COMMIT_MESSAGE" value="update validation endpoints to enforce workspace management and improve error handling" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/test_molecular_modification$test_molecular_modification.coverage" NAME="test_molecular-modification Coverage Results" MODIFIED="1767790876743" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />

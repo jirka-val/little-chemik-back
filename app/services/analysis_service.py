@@ -1,5 +1,3 @@
-# app/services/analysis_service.py
-
 from __future__ import annotations
 import json
 import os
@@ -18,13 +16,11 @@ def load_converting_dictionary() -> dict:
         with open(dict_path, "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
-        return {}  # Nebo si sem dej logger.error
+        return {}
+
 
 def _parse_residues_from_pdb(pdb_text: str, chain: Optional[str]) -> List[Tuple[str, int, str, str, List[str]]]:
-    """
-    Vrací unikátní residua se seznamem jejich atomů: (chain, resseq, icode, resname, atoms)
-    """
-    residue_data = {}  # (ch, resseq, icode) -> {"resname": str, "atoms": []}
+    residue_data = {}
     ordered_keys = []
 
     for line in pdb_text.splitlines():
@@ -37,7 +33,6 @@ def _parse_residues_from_pdb(pdb_text: str, chain: Optional[str]) -> List[Tuple[
         icode = (line[26] or " ").strip()
         atom_name_raw = line[12:16].strip()
 
-        # Normalizace jména atomu podle aliasů (např. O5* -> O5')
         atom_name = name_alias(resname, atom_name_raw)
 
         if not resseq_raw:
@@ -68,20 +63,11 @@ def _parse_residues_from_pdb(pdb_text: str, chain: Optional[str]) -> List[Tuple[
 
 
 def _infer_group(resname: str, conv: Dict) -> Optional[str]:
-    """
-    Zjišťuje kategorii rezidua (R, D, P, W3, I1, atd.) přímo ze slovníku.
-    Prochází všechny dostupné kategorie a využívá aliasy pro přesnější detekci.
-    """
-    # Získání aliasu (např. 'A' -> 'RA') pro porovnání se slovníkem
     aliased = resn_alias(resname)
-
-    # Procházíme všechny hlavní klíče ve slovníku (automatická podpora celé šíře)
     for category in conv.keys():
-        # Kontrolujeme původní název i alias
         if resname in conv[category] or aliased in conv[category]:
             return category
 
-    # Bezpečný fallback pro nukleové kyseliny, pokud nejsou přímo v kategorii
     if resname.startswith("D"):
         return "D"
     if resname in {"A", "C", "G", "U"} or resname.startswith("R"):
@@ -89,47 +75,39 @@ def _infer_group(resname: str, conv: Dict) -> Optional[str]:
 
     return None
 
-def _validate_connectivity(group: str, ff_name: str, atoms: List[str], conv: Dict) -> List[str]:
+
+def _pick_variant(group: Optional[str], pdb_resname: str, conv: Dict, terminal: str) -> Tuple[
+    Optional[str], bool, Optional[str]]:
     """
-    Kontroluje, zda jsou přítomny všechny atomy vyžadované mapou konektivity.
+    Vrací: (ff_resname, known, search_group)
+    search_group je klíč v JSONu (např. 'RU'), pod kterým se mají hledat atomy.
     """
-    if not group or not ff_name or group not in conv or ff_name not in conv[group]:
-        return []
-
-    res_def = conv[group][ff_name]
-    conn_map = res_def.get("connectivity", {})
-
-    # Množina všech atomů, které konektivita očekává (klíče i sousedé)
-    required_atoms = set(conn_map.keys())
-    for neighbors in conn_map.values():
-        required_atoms.update(neighbors)
-
-    # Vrátíme ty, které v PDB chybí
-    return [a for a in required_atoms if a not in atoms]
-
-
-def _pick_variant(group: Optional[str], pdb_resname: str, conv: Dict, terminal: str) -> Tuple[Optional[str], bool]:
-    if not group or group not in conv:
-        return None, False
-
+    # Normalizace (U -> RU)
     aliased = resn_alias(pdb_resname)
+
+    # Určení základního klíče pro hledání v JSONu
+    # Pokud je v JSONu klíč 'RU', použijeme ho jako search_group
+    search_group = aliased if aliased in conv else pdb_resname
+
     candidates: List[str] = []
-
-    # Mapování konců přesně podle tvého JSONu (např. RU + 3 = RU3)
+    # Definice konců (RU5, RU3)
     if terminal == "5":
-        candidates += [f"{aliased}5", f"{pdb_resname}5"]
+        candidates += [f"{search_group}5"]
     elif terminal == "3":
-        candidates += [f"{aliased}3", f"{pdb_resname}3"]
+        candidates += [f"{search_group}3"]
 
-    # Základní názvy jako fallback
-    candidates += [aliased, pdb_resname]
+    candidates += [search_group]
 
+    # Hledáme shodu v JSONu
     for k in candidates:
-        if k in conv[group]:
-            return k, True
+        if k in conv:
+            return k, True, k
+        # Fallback pokud je to vnořené v kategorii (např. R -> RU)
+        if group and group in conv and k in conv[group]:
+            return k, True, k
 
-    # Pokud nic nenajde, vrátí první pokus, ale označí jako neznámé
-    return candidates[0] if candidates else None, False
+    # Pokud nic nenajde, vrátí aspoň název, ale known=False
+    return search_group, search_group in conv, search_group
 
 
 def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps: bool = True):
@@ -139,11 +117,7 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
     if not all_residues:
         return {"chain": chain, "tokens": [], "warnings": ["No residues found in PDB."]}
 
-    # Filtrace řetězců
-    if chain is not None:
-        residues_to_process = [r for r in all_residues if r[0] == chain]
-    else:
-        residues_to_process = all_residues
+    residues_to_process = [r for r in all_residues if r[0] == chain] if chain else all_residues
 
     chains_dict = {}
     for r in residues_to_process:
@@ -157,33 +131,24 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
     global_pos = 0
 
     for ch_id, residues in chains_dict.items():
-        # 1. ROZDĚLENÍ: Najdeme hlavní polymerní řetězec a ligandy zvlášť
         main_chain = []
         ligands = []
 
         for r in residues:
             resname = r[3]
             group = _infer_group(resname, conv)
-            # Skupiny R (RNA), D (DNA) a P (Proteiny) tvoří hlavní řetězec
             if group in ["R", "D", "P"]:
                 main_chain.append(r)
             else:
                 ligands.append(r)
 
-        # Seřadíme hlavní řetězec podle číslování PDB
         main_chain.sort(key=lambda x: (x[1], x[2]))
-
-        # 2. KONCE: Určíme reálný začátek a konec pouze z hlavního řetězce
         first_main_seq = main_chain[0][1] if main_chain else None
         last_main_seq = main_chain[-1][1] if main_chain else None
-
-        # 3. POŘADÍ: Zpracujeme nejdříve řetězec (s mezerami) a pak přidáme ligandy na konec
         processed_ordered = main_chain + ligands
-
         prev_resseq = None
 
         for ch, resseq, icode, resname, atoms in processed_ordered:
-            # Mezery vyplňujeme pouze v rámci souvislého hlavního řetězce
             is_main = any(r[1] == resseq and r[3] == resname for r in main_chain)
 
             if fill_gaps and is_main and prev_resseq is not None and resseq > prev_resseq + 1:
@@ -198,7 +163,6 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
             global_pos += 1
             group = _infer_group(resname, conv)
 
-            # 4. TERMINÁLY: Přiřadíme 5/3 pouze pokud je to součást hlavního řetězce a je na kraji
             terminal = ""
             if is_main:
                 if resseq == first_main_seq:
@@ -206,19 +170,22 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
                 elif resseq == last_main_seq:
                     terminal = "3"
 
-            # Vyhledání varianty (např. RU3) v JSONu - bez diakritiky
-            ff_resname, known = _pick_variant(group, resname, conv, terminal)
+            # Najdi v build_sequence_tokens tento blok a nahraď ho:
 
-            missing_atoms = _check_missing_atoms(group, ff_resname, atoms, conv) if known else []
+            # 1. Získáme variantu a hlavně search_group
+            ff_resname, known, search_group = _pick_variant(group, resname, conv, terminal)
+
+            # 2. ZMĚNA: Kontrolujeme missing_atoms vždy, když máme search_group,
+            # nehledě na to, jestli 'known' dopadlo jako True/False
+            missing_atoms = _check_missing_atoms(search_group, ff_resname, atoms, conv) if search_group else []
 
             if not known:
                 warnings.append(f"Unknown residue '{resname}' at {ch}:{resseq}{icode or ''}")
             elif missing_atoms:
                 warnings.append(f"Incomplete residue '{resname}' at {ch}:{resseq}: Missing {missing_atoms}")
 
-            conn_info = _check_connectivity_integrity(group, ff_resname, atoms, conv)
-            if conn_info["is_broken"]:
-                warnings.append(f"Residue {resname} ({resseq}) at chain {ch} is BROKEN!")
+            # 3. Kontrola konektivity taky se search_group
+            conn_info = _check_connectivity_integrity(search_group, ff_resname, atoms, conv)
 
             tokens.append({
                 "position": global_pos,
@@ -251,48 +218,39 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
     }
 
 
-def _check_missing_atoms(group: str, ff_name: str, atoms: List[str], conv: Dict) -> List[str]:
-    """
-    Kontroluje, zda jsou přítomny všechny atomy definované v sekci 'atom' pro dané reziduum.
-    """
-    if not group or not ff_name or group not in conv or ff_name not in conv[group]:
+def _check_missing_atoms(search_group: str, ff_name: str, atoms: List[str], conv: Dict) -> List[str]:
+    if not search_group or search_group not in conv:
         return []
 
-    # Získání seznamu povinných atomů ze slovníku
-    res_def = conv[group][ff_name]
-    required_atoms = set(res_def.get("atom", {}).keys())
+    # Najde definici v plochém JSONu (RU5) nebo vnořeném (RU -> RU5)
+    res_def = conv.get(ff_name) or conv[search_group].get(ff_name, conv[search_group])
 
-    # Porovnání se seznamem atomů nalezených v PDB
+    if not isinstance(res_def, dict): return []
+
+    # Získání očekávaných atomů
+    required_atoms_dict = res_def.get("atom", {})
+    if not required_atoms_dict and "connectivity" in res_def:
+        required_atoms_dict = res_def.get("atom", {})  # Fallback
+
+    required_atoms = set(required_atoms_dict.keys())
     actual_atoms_set = set(atoms)
-    missing = [a for a in required_atoms if a not in actual_atoms_set]
 
-    return sorted(missing)
+    return sorted([a for a in required_atoms if a not in actual_atoms_set])
 
 
-def _check_connectivity_integrity(group: str, ff_name: str, atoms: List[str], conv: Dict) -> Dict[str, Any]:
-    """
-    Analyzuje integritu rezidua na základě mapy konektivity ze slovníku.
-    Prověřuje, zda jsou všechny přítomné atomy propojeny v jeden celek.
-    Pokud je reziduum rozděleno na více kusů, označí ho jako 'broken'.
-    """
-    # Pokud reziduum neznáme nebo nemá definovanou konektivitu, považujeme ho za celistvé
-    if not group or not ff_name or group not in conv or ff_name not in conv[group]:
+def _check_connectivity_integrity(search_group: str, ff_name: str, atoms: List[str], conv: Dict) -> Dict[str, Any]:
+    if not search_group or search_group not in conv:
         return {"is_broken": False, "components": []}
 
-    res_def = conv[group][ff_name]
-    conn_map = res_def.get("connectivity", {})
+    res_def = conv.get(ff_name) or conv[search_group].get(ff_name, conv[search_group])
+    if not isinstance(res_def, dict):
+        return {"is_broken": False, "components": []}
 
-    # Pro ionty nebo jednoduché molekuly bez definovaných vazeb v JSONu nehlásíme chybu
+    conn_map = res_def.get("connectivity", {})
     if not conn_map:
         return {"is_broken": False, "components": [atoms] if atoms else []}
 
     present_atoms = set(atoms)
-    if not present_atoms:
-        return {"is_broken": False, "components": []}
-
-    # Sestavení neorientovaného grafu (adjacency list)
-    # Connectivity v JSONu je často definována jednosměrně (rodič -> potomci),
-    # my potřebujeme obousměrné vazby pro hledání souvislých komponent.
     graph = {atom: set() for atom in present_atoms}
     for u, neighbors in conn_map.items():
         if u in present_atoms:
@@ -301,11 +259,8 @@ def _check_connectivity_integrity(group: str, ff_name: str, atoms: List[str], co
                     graph[u].add(v)
                     graph[v].add(u)
 
-    # Algoritmus pro nalezení komponent souvislosti (BFS - Prohledávání do šířky)
     visited = set()
     components = []
-
-    # Seřadíme atomy, aby byl výsledek vždy stejný (deterministický)
     for start_node in sorted(list(present_atoms)):
         if start_node not in visited:
             component = []
@@ -320,11 +275,7 @@ def _check_connectivity_integrity(group: str, ff_name: str, atoms: List[str], co
                         queue.append(v)
             components.append(sorted(component))
 
-    # Reziduum je rozbité ("broken"), pokud se rozpadlo na více nepropojených částí
-    is_broken = len(components) > 1
-
     return {
-        "is_broken": is_broken,
-        "components": components,
-        "component_count": len(components)
+        "is_broken": len(components) > 1,
+        "components": components
     }
