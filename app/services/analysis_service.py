@@ -9,17 +9,24 @@ from app.utils.alias import resn_alias, name_alias
 
 @lru_cache(maxsize=1)
 def load_converting_dictionary() -> dict:
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    dict_path = os.path.join(base_dir, "data", "converting_dictionary.json")
+    """
+    NAČTE KONVERZNÍ SLOVNÍK ZE SOUBORU JSON V KOŘENOVÉM ADRESÁŘI A ZAJIŠŤUJE JEHO CACHOVÁNÍ PRO RYCHLÝ PŘÍSTUP.
+    """
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.dirname(os.path.dirname(current_dir))
+    dict_path = os.path.join(root_dir, "data", "converting_dictionary.json")
 
     try:
         with open(dict_path, "r", encoding="utf-8") as f:
             return json.load(f)
-    except FileNotFoundError:
+    except Exception:
         return {}
 
 
 def _parse_residues_from_pdb(pdb_text: str, chain: Optional[str]) -> List[Tuple[str, int, str, str, List[str]]]:
+    """
+    EXTRAHUJE DATA O REZIDUÍCH A JEJICH ATOMECH Z PDB FORMÁTU, PŘIČEMŽ PROVÁDÍ ALIASING NÁZVŮ ATOMŮ PODLE SLOVNÍKU.
+    """
     residue_data = {}
     ordered_keys = []
 
@@ -63,10 +70,14 @@ def _parse_residues_from_pdb(pdb_text: str, chain: Optional[str]) -> List[Tuple[
 
 
 def _infer_group(resname: str, conv: Dict) -> Optional[str]:
+    """
+    IDENTIFIKUJE CHEMICKOU KATEGORII REZIDUA PROHLEDÁVÁNÍM KLÍČŮ V KONVERZNÍM SLOVNÍKU NEBO POMOCÍ PREFIXŮ.
+    """
     aliased = resn_alias(resname)
     for category in conv.keys():
-        if resname in conv[category] or aliased in conv[category]:
-            return category
+        if isinstance(conv[category], dict):
+            if resname in conv[category] or aliased in conv[category]:
+                return category
 
     if resname.startswith("D"):
         return "D"
@@ -76,41 +87,45 @@ def _infer_group(resname: str, conv: Dict) -> Optional[str]:
     return None
 
 
+def _get_res_def(group: Optional[str], ff_name: str, conv: Dict) -> Optional[Dict]:
+    """
+    VYHLEDÁ DEFINICI REZIDUA (ATOMY A KONEKTIVITU) V KONKRÉTNÍ KATEGORII NEBO PROHLEDÁNÍM CELÉHO SLOVNÍKU.
+    """
+    if group and group in conv and ff_name in conv[group]:
+        return conv[group][ff_name]
+
+    for category in conv.values():
+        if isinstance(category, dict) and ff_name in category:
+            return category[ff_name]
+    return None
+
+
 def _pick_variant(group: Optional[str], pdb_resname: str, conv: Dict, terminal: str) -> Tuple[
     Optional[str], bool, Optional[str]]:
     """
-    Vrací: (ff_resname, known, search_group)
-    search_group je klíč v JSONu (např. 'RU'), pod kterým se mají hledat atomy.
+    URČUJE VHODNOU FF VARIANTU NA ZÁKLADĚ TERMINÁLNÍ POZICE A OVĚŘUJE JEJÍ EXISTENCI V DATABÁZI DEFINIC.
     """
-    # Normalizace (U -> RU)
-    aliased = resn_alias(pdb_resname)
-
-    # Určení základního klíče pro hledání v JSONu
-    # Pokud je v JSONu klíč 'RU', použijeme ho jako search_group
-    search_group = aliased if aliased in conv else pdb_resname
-
+    search_group = resn_alias(pdb_resname)
     candidates: List[str] = []
-    # Definice konců (RU5, RU3)
+
     if terminal == "5":
-        candidates += [f"{search_group}5"]
+        candidates.append(f"{search_group}5")
     elif terminal == "3":
-        candidates += [f"{search_group}3"]
+        candidates.append(f"{search_group}3")
+    candidates.append(search_group)
 
-    candidates += [search_group]
-
-    # Hledáme shodu v JSONu
     for k in candidates:
-        if k in conv:
-            return k, True, k
-        # Fallback pokud je to vnořené v kategorii (např. R -> RU)
-        if group and group in conv and k in conv[group]:
-            return k, True, k
+        res_def = _get_res_def(group, k, conv)
+        if res_def:
+            return k, True, search_group
 
-    # Pokud nic nenajde, vrátí aspoň název, ale known=False
-    return search_group, search_group in conv, search_group
+    return search_group, False, search_group
 
 
 def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps: bool = True):
+    """
+    SESTAVUJE KOMPLETNÍ SEZNAM TOKENS PRO DANÝ ŘETĚZEC, PROVÁDÍ ANALÝZU VARIANT A DETEKCI CHYBĚJÍCÍCH ČÁSTÍ STRUKTURY.
+    """
     conv = load_converting_dictionary()
     all_residues = _parse_residues_from_pdb(pdb_text, chain)
 
@@ -170,22 +185,15 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
                 elif resseq == last_main_seq:
                     terminal = "3"
 
-            # Najdi v build_sequence_tokens tento blok a nahraď ho:
-
-            # 1. Získáme variantu a hlavně search_group
             ff_resname, known, search_group = _pick_variant(group, resname, conv, terminal)
-
-            # 2. ZMĚNA: Kontrolujeme missing_atoms vždy, když máme search_group,
-            # nehledě na to, jestli 'known' dopadlo jako True/False
-            missing_atoms = _check_missing_atoms(search_group, ff_resname, atoms, conv) if search_group else []
+            missing_atoms = _check_missing_atoms(group, ff_resname, atoms, conv)
 
             if not known:
                 warnings.append(f"Unknown residue '{resname}' at {ch}:{resseq}{icode or ''}")
             elif missing_atoms:
                 warnings.append(f"Incomplete residue '{resname}' at {ch}:{resseq}: Missing {missing_atoms}")
 
-            # 3. Kontrola konektivity taky se search_group
-            conn_info = _check_connectivity_integrity(search_group, ff_resname, atoms, conv)
+            conn_info = _check_connectivity_integrity(group, ff_resname, atoms, conv)
 
             tokens.append({
                 "position": global_pos,
@@ -218,33 +226,27 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
     }
 
 
-def _check_missing_atoms(search_group: str, ff_name: str, atoms: List[str], conv: Dict) -> List[str]:
-    if not search_group or search_group not in conv:
+def _check_missing_atoms(group: Optional[str], ff_name: str, atoms: List[str], conv: Dict) -> List[str]:
+    """
+    POROVNÁVÁ SEZNAM ATOMŮ Z PDB SE ŠABLONOU V KONVERZNÍM SLOVNÍKU A VRACÍ SEZNAM VŠECH CHYBĚJÍCÍCH ELEMENTŮ.
+    """
+    res_def = _get_res_def(group, ff_name, conv)
+    if not res_def:
         return []
 
-    # Najde definici v plochém JSONu (RU5) nebo vnořeném (RU -> RU5)
-    res_def = conv.get(ff_name) or conv[search_group].get(ff_name, conv[search_group])
+    required_atoms = set(res_def.get("atom", {}).keys())
+    actual_atoms = set(atoms)
 
-    if not isinstance(res_def, dict): return []
-
-    # Získání očekávaných atomů
-    required_atoms_dict = res_def.get("atom", {})
-    if not required_atoms_dict and "connectivity" in res_def:
-        required_atoms_dict = res_def.get("atom", {})  # Fallback
-
-    required_atoms = set(required_atoms_dict.keys())
-    actual_atoms_set = set(atoms)
-
-    return sorted([a for a in required_atoms if a not in actual_atoms_set])
+    return sorted([a for a in required_atoms if a not in actual_atoms])
 
 
-def _check_connectivity_integrity(search_group: str, ff_name: str, atoms: List[str], conv: Dict) -> Dict[str, Any]:
-    if not search_group or search_group not in conv:
-        return {"is_broken": False, "components": []}
-
-    res_def = conv.get(ff_name) or conv[search_group].get(ff_name, conv[search_group])
-    if not isinstance(res_def, dict):
-        return {"is_broken": False, "components": []}
+def _check_connectivity_integrity(group: Optional[str], ff_name: str, atoms: List[str], conv: Dict) -> Dict[str, Any]:
+    """
+    ANALYZUJE GEOMETRICKOU INTEGRITU REZIDUA POMOCÍ GRAFU KONEKTIVITY A IDENTIFIKUJE IZOLOVANÉ SKUPINY ATOMŮ.
+    """
+    res_def = _get_res_def(group, ff_name, conv)
+    if not res_def:
+        return {"is_broken": False, "components": [atoms] if atoms else []}
 
     conn_map = res_def.get("connectivity", {})
     if not conn_map:

@@ -4,9 +4,13 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="update validation endpoints to enforce workspace management and improve error handling">
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor analysis service for improved residue handling and connectivity checks">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/services/analysis_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/analysis_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/structure/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/structure/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/structure/hydrogenation.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/structure/hydrogenation.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_api.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -50,21 +54,22 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;FastAPI.test_molecular-modification.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
-    &quot;last_opened_file_path&quot;: &quot;C:/DevProjects/littleChemik/little-chemik-back&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "FastAPI.test_molecular-modification.executor": "Run",
+    "Python tests.Python tests for test_api.test_10_3dvz_rna_variants_and_atoms_detection.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "git-widget-placeholder": "master",
+    "last_opened_file_path": "C:/DevProjects/littleChemik/little-chemik-back",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "preferences.pluginManager",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
       <recent name="C:\DevProjects\littleChemik\little-chemik-back\data" />
@@ -74,7 +79,7 @@
       <recent name="C:\DevProjects\little-chemik\test_molecular-modification\data" />
     </key>
   </component>
-  <component name="RunManager">
+  <component name="RunManager" selected="Python tests.Python tests for test_api.test_10_3dvz_rna_variants_and_atoms_detection">
     <configuration name="test_molecular-modification" type="Python.FastAPI">
       <option name="file" value="$PROJECT_DIR$/main.py" />
       <module name="little-chemik-back" />
@@ -90,6 +95,27 @@
       <option name="launchJavascriptDebuger" value="false" />
       <method v="2" />
     </configuration>
+    <configuration name="Python tests for test_api.test_10_3dvz_rna_variants_and_atoms_detection" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
+      <module name="little-chemik-back" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;test_api.test_10_3dvz_rna_variants_and_atoms_detection&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Python tests.Python tests for test_api.test_10_3dvz_rna_variants_and_atoms_detection" />
+      </list>
+    </recent_temporary>
   </component>
   <component name="SharedIndexes">
     <attachedChunks>
@@ -157,6 +183,7 @@
       <workItem from="1773226797877" duration="803000" />
       <workItem from="1773335097466" duration="8000" />
       <workItem from="1773335108832" duration="3427000" />
+      <workItem from="1773352337409" duration="5813000" />
     </task>
     <task id="LOCAL-00001" summary="Init">
       <option name="closed" value="true" />
@@ -398,7 +425,15 @@
       <option name="project" value="LOCAL" />
       <updated>1773335243295</updated>
     </task>
-    <option name="localTasksCounter" value="31" />
+    <task id="LOCAL-00031" summary="refactor analysis service for improved residue handling and connectivity checks">
+      <option name="closed" value="true" />
+      <created>1773352394195</created>
+      <option name="number" value="00031" />
+      <option name="presentableId" value="LOCAL-00031" />
+      <option name="project" value="LOCAL" />
+      <updated>1773352394195</updated>
+    </task>
+    <option name="localTasksCounter" value="32" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -438,9 +473,11 @@
     <MESSAGE value="add download endpoint and garbage collector for workspace management" />
     <MESSAGE value="add unit tests for molecule upload, download, and hydrogenation endpoints" />
     <MESSAGE value="update validation endpoints to enforce workspace management and improve error handling" />
-    <option name="LAST_COMMIT_MESSAGE" value="update validation endpoints to enforce workspace management and improve error handling" />
+    <MESSAGE value="refactor analysis service for improved residue handling and connectivity checks" />
+    <option name="LAST_COMMIT_MESSAGE" value="refactor analysis service for improved residue handling and connectivity checks" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/little_chemik_back$.coverage" NAME=" Coverage Results" MODIFIED="1773355688540" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
     <SUITE FILE_PATH="coverage/test_molecular_modification$test_molecular_modification.coverage" NAME="test_molecular-modification Coverage Results" MODIFIED="1767790876743" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="" />
   </component>
   <component name="github-copilot-workspace">

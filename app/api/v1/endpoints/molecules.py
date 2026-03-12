@@ -67,42 +67,43 @@ async def fetch_pdb_by_code(pdb_code: str):
 @router.post("/add-hydrogens/{workspace_id}")
 async def add_hydrogens(
         workspace_id: str,
-        ph: float = Body(7.0, embed=True)
+        ph: float = Body(7.0, embed=True),
+        optimize: bool = Body(False, embed=True)  # NOVÝ PARAMETR S VÝCHOZÍ HODNOTOU FALSE
 ):
     """
-    Přečte molekulu z disku podle workspace_id, přidá vodíky podle zadaného pH,
-    a přepíše dočasný soubor novou verzí.
+    READS THE MOLECULE FROM DISK, ADDS HYDROGENS BASED ON PH,
+    OPTIONALLY OPTIMIZES PLACEMENT USING FORCEFIELD, AND OVERWRITES THE FILE.
     """
-    logger.info(f"Požadavek na přidání vodíků pro workspace: {workspace_id} s pH {ph}")
+    logger.info(f"Hydrogenation request for workspace: {workspace_id} (pH: {ph}, optimize: {optimize})")
 
-    # 0. Zkontrolujeme, jestli soubor stále existuje
     if not workspace_manager.workspace_exists(workspace_id):
-        logger.error(f"Workspace {workspace_id} nebyl nalezen.")
-        raise HTTPException(status_code=404, detail="Workspace nenalezen. Nahráli jste soubor?")
+        logger.error(f"Workspace {workspace_id} not found.")
+        raise HTTPException(status_code=404, detail="Workspace not found. Did you upload a file?")
 
     try:
         file_path = workspace_manager.get_file_path(workspace_id)
 
-        # 1. Přečtení starého souboru z disku do paměti (tvůj PDBFixer potřebuje text)
+        # 1. Read existing PDB from disk
         with open(file_path, "r", encoding="utf-8") as f:
             pdb_text = f.read()
 
-        # 2. Zavoláme tvou chemickou službu (ta zůstala úplně stejná)
-        updated_pdb_text = hydrogen_service.add_hydrogen_atoms(pdb_text, ph=ph)
+        # 2. Call the service with the new optimize flag
+        # This will now trigger the Amber14 energy minimization if optimize=True
+        updated_pdb_text = hydrogen_service.add_hydrogen_atoms(pdb_text, ph=ph, optimize=optimize)
 
-        # 3. PŘEPÍŠEME ten samý soubor na disku novou, opravenou verzí
+        # 3. Overwrite the file on disk with the hydrogenated/optimized version
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(updated_pdb_text)
 
-        logger.info(f"Vodíky úspěšně přidány do {workspace_id}.")
+        logger.info(f"Hydrogens successfully added to {workspace_id}. Optimization: {optimize}")
 
-        # Vracíme pouze potvrzení! Žádný obří textový string.
         return {
             "workspace_id": workspace_id,
-            "message": "Vodíky byly úspěšně doplněny.",
-            "ph": ph
+            "message": "Hydrogens successfully added.",
+            "ph": ph,
+            "optimized": optimize
         }
 
     except Exception as e:
-        logger.exception(f"Chyba při doplňování vodíků pro {workspace_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Chyba při úpravě struktury: {str(e)}")
+        logger.exception(f"Error during hydrogenation for {workspace_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Structure modification failed: {str(e)}")

@@ -94,3 +94,94 @@ def test_8_add_hydrogens_to_gibberish():
     response = client.post(f"/api/molecules/add-hydrogens/{ws_id}", json={"ph": 7.0})
     assert response.status_code == 500
     assert "Chyba při úpravě struktury" in response.json()["detail"]
+
+
+def test_9_3dvz_sequence_missing_atoms_full_debug():
+    """
+    Diagnostický test pro 3DVZ k ověření vnitřních stavů tokenu.
+    """
+    # 1. Stažení 3DVZ
+    response_fetch = client.get("/api/molecules/fetch-pdb/3dvz")
+    assert response_fetch.status_code == 200
+    workspace_id = response_fetch.json()["workspace_id"]
+
+    # 2. Volání analýzy sekvence
+    response_analysis = client.get(f"/api/analysis/sequence/{workspace_id}")
+    assert response_analysis.status_code == 200
+    data = response_analysis.json()
+
+    # 3. Získání tokenu pro U 2647
+    chain_a_tokens = data["sequence"]["chains"]["A"]["tokens"]
+    u2647 = next((t for t in chain_a_tokens if str(t["resseq"]) == "2647"), None)
+
+    assert u2647 is not None, "Reziduum A 2647 nebylo v sekvenci nalezeno"
+
+    # --- KOMPLETNÍ DIAGNOSTIKA ---
+    print(f"\n" + "=" * 50)
+    print(f"DEBUG DATA PRO REZIDUUM: {u2647['pdb_resname']} {u2647['resseq']}")
+    print(f"=" * 50)
+    print(f"1. Detekovaná FF varianta (ff_resname): {u2647.get('ff_resname')}")
+    print(f"2. Skupina (group): {u2647.get('group')}")
+    print(f"3. Je známo v JSONu (known): {u2647.get('known')}")
+    print(f"4. Pozice v řetězci (position): {u2647.get('position')}")
+    print(f"5. Atomy v PDB ({len(u2647['atoms'])}): {u2647['atoms']}")
+    print(f"6. Chybějící atomy: {u2647['missing_atoms']}")
+
+    # Kontrola, zda jsou přítomny aspoň základní atomy pro identifikaci
+    has_o5_prime = "O5'" in u2647['atoms']
+    print(f"7. Obsahuje O5': {has_o5_prime}")
+
+    # Kontrola varování pro tento workspace (může obsahovat důvod selhání vyhledávání v JSONu)
+    warnings = data["sequence"]["chains"]["A"].get("warnings", [])
+    print(f"8. Varování pro řetězec A: {warnings}")
+    print("=" * 50)
+
+    # 4. KONTROLA
+    assert len(u2647["missing_atoms"]) > 0, \
+        f"Chyba: Reziduum {u2647['ff_resname']} by mělo hlásit chybějící vodíky a HO5'!"
+
+
+def test_10_3dvz_rna_variants_and_atoms_detection():
+    """
+    Testuje, zda backend správně identifikuje RNA varianty (RU5 vs RU)
+    ve struktuře 3DVZ a zda vidí chybějící atomy.
+    """
+    # 1. Stažení 3DVZ z PDB
+    response_fetch = client.get("/api/molecules/fetch-pdb/3dvz")
+    assert response_fetch.status_code == 200
+    workspace_id = response_fetch.json()["workspace_id"]
+
+    # 2. Analýza sekvence
+    response_analysis = client.get(f"/api/analysis/sequence/{workspace_id}")
+    assert response_analysis.status_code == 200
+    data = response_analysis.json()
+
+    # Získáme tokeny pro řetězec A
+    tokens = data["sequence"]["chains"]["A"]["tokens"]
+
+    # --- KONTROLA PRVNÍHO REZIDUA (U 2647 -> RU5) ---
+    u2647 = next((t for t in tokens if str(t["resseq"]) == "2647"), None)
+    assert u2647 is not None
+
+    print(f"\nDiagnostika {u2647['pdb_resname']} {u2647['resseq']}:")
+    print(f"  - FF varianta: {u2647['ff_resname']}")
+    print(f"  - Je známo v JSONu: {u2647['known']}")
+    print(f"  - Chybějící atomy: {u2647['missing_atoms']}")
+
+    # Ověření, že se správně vybrala varianta RU5 (protože je první)
+    assert u2647["ff_resname"] == "RU5", f"Očekáváno RU5, ale nalezeno {u2647['ff_resname']}"
+    assert u2647["known"] is True, "Reziduum RU5 by mělo být v JSONu nalezeno (known: True)"
+    # RU5 v 3DVZ nemá vodíky ani terminální HO5', seznam by neměl být prázdný
+    assert len(u2647["missing_atoms"]) > 0
+
+    # --- KONTROLA VNITŘNÍHO REZIDUA (G 2648 -> RG) ---
+    g2648 = next((t for t in tokens if str(t["resseq"]) == "2648"), None)
+    assert g2648 is not None
+
+    print(f"\nDiagnostika {g2648['pdb_resname']} {g2648['resseq']}:")
+    print(f"  - FF varianta: {g2648['ff_resname']}")
+    print(f"  - Je známo v JSONu: {g2648['known']}")
+
+    # Vnitřní reziduum by mělo být RG (ne RG5 ani RG3)
+    assert g2648["ff_resname"] == "RG"
+    assert g2648["known"] is True
