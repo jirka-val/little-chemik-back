@@ -4,12 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor analysis service for improved residue handling and connectivity checks">
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="enhance hydrogenation service with optimization option and improve residue handling in analysis service">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/analysis_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/analysis_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/structure/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/structure/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/structure/hydrogenation.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/structure/hydrogenation.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/test_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_api.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -183,7 +180,7 @@
       <workItem from="1773226797877" duration="803000" />
       <workItem from="1773335097466" duration="8000" />
       <workItem from="1773335108832" duration="3427000" />
-      <workItem from="1773352337409" duration="5813000" />
+      <workItem from="1773352337409" duration="6515000" />
     </task>
     <task id="LOCAL-00001" summary="Init">
       <option name="closed" value="true" />
@@ -433,7 +430,15 @@
       <option name="project" value="LOCAL" />
       <updated>1773352394195</updated>
     </task>
-    <option name="localTasksCounter" value="32" />
+    <task id="LOCAL-00032" summary="enhance hydrogenation service with optimization option and improve residue handling in analysis service">
+      <option name="closed" value="true" />
+      <created>1773359301251</created>
+      <option name="number" value="00032" />
+      <option name="presentableId" value="LOCAL-00032" />
+      <option name="project" value="LOCAL" />
+      <updated>1773359301251</updated>
+    </task>
+    <option name="localTasksCounter" value="33" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -474,7 +479,8 @@
     <MESSAGE value="add unit tests for molecule upload, download, and hydrogenation endpoints" />
     <MESSAGE value="update validation endpoints to enforce workspace management and improve error handling" />
     <MESSAGE value="refactor analysis service for improved residue handling and connectivity checks" />
-    <option name="LAST_COMMIT_MESSAGE" value="refactor analysis service for improved residue handling and connectivity checks" />
+    <MESSAGE value="enhance hydrogenation service with optimization option and improve residue handling in analysis service" />
+    <option name="LAST_COMMIT_MESSAGE" value="enhance hydrogenation service with optimization option and improve residue handling in analysis service" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/little_chemik_back$.coverage" NAME=" Coverage Results" MODIFIED="1773355688540" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
