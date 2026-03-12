@@ -28,11 +28,11 @@ async def analyze_sequence(workspace_id: str, chain: str | None = None, fill_gap
         with open(file_path, "r", encoding="utf-8") as f:
             pdb_text = f.read()
 
-        # 4. Získáme tvou Diagnózu (chybějící atomy atd.)
+        # TADY JE TA ÚPRAVA - dáme fill_gaps natvrdo na True
         sequence_data = build_sequence_tokens(
             pdb_text=pdb_text,
             chain=chain,
-            fill_gaps=fill_gaps
+            fill_gaps=True  # <-- Vynuceno! Backend teď MUSÍ hledat chybějící atomy
         )
 
         logger.info(f"Analýza pro {workspace_id} byla úspěšně dokončena.")
