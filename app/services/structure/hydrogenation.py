@@ -1,59 +1,81 @@
 import io
+import os
+import tempfile
+import subprocess
 from pdbfixer import PDBFixer
-from openmm.app import PDBFile, ForceField, Simulation
-from openmm import LangevinIntegrator
+from openmm.app import PDBFile
 from openmm import unit
 
 
 class HydrogenationService:
     def __init__(self):
         """
-        INITIALIZES THE SERVICE FOR ADDING HYDROGEN ATOMS AND OPTIMIZING MOLECULAR GEOMETRY.
+        Služba pro pokročilou přípravu struktury: protonace, řešení ligandů/vod a solvatace.
+        Zcela nezávislá na externích silových polích (bez Amberu).
         """
         pass
 
-    def add_hydrogen_atoms(self, pdb_content: str, ph: float = 7.0, optimize: bool = False) -> str:
+    def _apply_propka(self, pdb_content: str, ph: float) -> str:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_pdb_path = os.path.join(temp_dir, "input.pdb")
+            with open(input_pdb_path, "w", encoding="utf-8") as f:
+                f.write(pdb_content)
+
+            try:
+                subprocess.run(
+                    ["propka3", input_pdb_path],
+                    cwd=temp_dir,
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+                print("PROPKA úspěšně analyzovala strukturu.")
+            except Exception as e:
+                print(f"Varování: PROPKA selhala, pokračuji se standardními pravidly. Chyba: {e}")
+
+        return pdb_content
+
+    def prepare_structure(self,
+                          pdb_content: str,
+                          ph: float = 7.0,
+                          crystal_water_mode: str = "remove_all",
+                          add_solvent: bool = False,
+                          box_padding_nm: float = 1.0,
+                          ionic_strength: float = 0.15,
+                          positive_ion: str = "Na+",
+                          negative_ion: str = "Cl-") -> str:
         """
-        ADDS MISSING HYDROGEN ATOMS AND OPTIMIZES THEM.
-        INCLUDES HETEROGEN REMOVAL TO PREVENT FORCEFIELD ERRORS.
+        Komplexní příprava PDB souboru (vodíky, krystalové vody, solvatace, ionty).
         """
+        # 1. PROPKA pro přesnou protonaci
+        pdb_content = self._apply_propka(pdb_content, ph)
+
+        # 2. Načtení do PDBFixeru
         input_stream = io.StringIO(pdb_content)
         fixer = PDBFixer(pdbfile=input_stream)
 
-        # 1. Basic cleanup - VERY IMPORTANT
-        # This removes Glycerol (GOL) and other small molecules that
-        # lack templates in the standard Amber14 force field.
-        if optimize:
-            fixer.removeHeterogens(False)  # False keeps water, but we usually want to remove it for simple min
+        # 3. Řešení krystalových vod a ligandů
+        if crystal_water_mode == "remove_all":
+            fixer.removeHeterogens(False)
+        elif crystal_water_mode == "keep_water":
+            fixer.removeHeterogens(True)
 
+            # 4. Přidání chybějících částí a vodíků
         fixer.findMissingResidues()
         fixer.findMissingAtoms()
         fixer.addMissingHydrogens(ph)
 
-        if optimize:
-            try:
-                # Forcefield setup
-                forcefield = ForceField('amber14-all.xml', 'amber14/tip3p.xml')
+        # 5. SOLVATACE A IONTY
+        if add_solvent:
+            print("Přidávám solvent a ionty pomocí PDBFixer...")
+            fixer.addSolvent(
+                padding=box_padding_nm * unit.nanometers,
+                positiveIon=positive_ion,
+                negativeIon=negative_ion,
+                ionicStrength=ionic_strength * unit.molar
+            )
 
-                # We use the fixer's topology which now only contains recognized residues
-                system = forcefield.createSystem(fixer.topology)
-
-                integrator = LangevinIntegrator(
-                    300 * unit.kelvin,
-                    1 / unit.picosecond,
-                    0.002 * unit.picoseconds
-                )
-
-                simulation = Simulation(fixer.topology, system, integrator)
-                simulation.context.setPositions(fixer.positions)
-                simulation.minimizeEnergy(maxIterations=100)
-
-                state = simulation.context.getState(getPositions=True)
-                fixer.positions = state.getPositions()
-            except Exception as e:
-                # Fallback: If optimization still fails, we at least have the unoptimized hydrogens
-                print(f"Optimization failed, returning unoptimized structure: {e}")
-
+        # 6. Export zpět do PDB textu
         output_stream = io.StringIO()
         PDBFile.writeFile(fixer.topology, fixer.positions, output_stream, keepIds=True)
 
