@@ -1,44 +1,46 @@
-import json
 import logging
-from typing import List, Set
+import requests
+from typing import List
 
 logger = logging.getLogger(__name__)
 
-
 class ForceFieldValidator:
-    def __init__(self, dict_path: str = "converting_dictionary.json"):
-        # Načtení slovníku zůstává stejné, abychom měli proti čemu porovnávat
+    EXTERNAL_URL = "https://next.ida.4sims.eu/api/force_fields/"
+
+    def __init__(self, dict_path: str = None):
+        # Tvůj inicializační kód (načítání slovníku) může zůstat,
+        # ale pro tuhle funkci ho teď nepotřebujeme
+        pass
+
+    # ODSTRANILI JSME @staticmethod, aby to šlo volat přes instanci ff_validator
+    def get_matching_forcefields(self, molecule_types: List[str]):
+        """
+        Stáhne FF z externího API a vybere ty, které odpovídají typům v PDB.
+        """
+        # --- OPRAVA PRO VODU ---
+        # Převedeme seznam na Set (množinu) a pokud je tam 'W',
+        # rovnou k němu přihodíme i specifické varianty vody.
+        search_types = set(molecule_types)
+        if "W" in search_types:
+            search_types.update(["W3", "W4", "W5"])
+        # -----------------------
+
         try:
-            with open(dict_path, 'r', encoding='utf-8') as f:
-                self.ff_dict = json.load(f)
+            # Přidáváme x-client-version header pro jistotu
+            headers = {"x-client-version": "0.1.0"}
+            response = requests.get(self.EXTERNAL_URL, headers=headers, timeout=10)
+            response.raise_for_status()
+            all_ffs = response.json()
 
-            # Vytvoříme si plochý seznam všech klíčů ze všech kategorií (R, D, P, I1...)
-            self.supported_names = set()
-            for category_data in self.ff_dict.values():
-                self.supported_names.update(category_data.keys())
+            matched_ffs = []
+            for ff in all_ffs:
+                ff_types = ff.get("molecule_type") or []
 
+                # Porovnáváme proti 'search_types', které teď obsahuje i W3, W4, W5
+                if any(t in search_types for t in ff_types):
+                    matched_ffs.append(ff)
+
+            return matched_ffs
         except Exception as e:
-            logger.error(f"Nepodařilo se načíst konverzní slovník: {e}")
-            self.supported_names = set()
-
-    def is_supported(self, name: str) -> bool:
-        """Jednoduchá otázka: Existuje toto jméno v mém JSONu?"""
-        return name in self.supported_names
-
-    def check_residue_compatibility(self, processed_tokens: List[dict]) -> List[str]:
-        """
-        Místo topologie kontrolujeme už hotové tokeny z analýzy.
-        Tím využijeme fakt, že analysis_service už vyřešil RU5, GOL atd.
-        """
-        unsupported = set()
-        for token in processed_tokens:
-            if token.get("is_gap"):
-                continue
-
-            # Použijeme už vypočítané ff_resname (např. RU3, RA5, GOL)
-            name_to_check = token.get("ff_resname") or token.get("pdb_resname")
-
-            if not self.is_supported(name_to_check):
-                unsupported.add(name_to_check)
-
-        return sorted(list(unsupported))
+            logger.error(f"Chyba při komunikaci s FF API: {e}")
+            return []

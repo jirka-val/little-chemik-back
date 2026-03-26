@@ -100,20 +100,46 @@ def _get_res_def(group: Optional[str], ff_name: str, conv: Dict) -> Optional[Dic
     return None
 
 
-def _pick_variant(group: Optional[str], pdb_resname: str, conv: Dict, terminal: str) -> Tuple[
+def _pick_variant(group: Optional[str], pdb_resname: str, atoms: List[str], conv: Dict, terminal: str) -> Tuple[
     Optional[str], bool, Optional[str]]:
     """
-    URČUJE VHODNOU FF VARIANTU NA ZÁKLADĚ TERMINÁLNÍ POZICE A OVĚŘUJE JEJÍ EXISTENCI V DATABÁZI DEFINIC.
+    URČUJE VHODNOU FF VARIANTU NA ZÁKLADĚ TERMINÁLNÍ POZICE A PŘÍTOMNÝCH ATOMŮ (NAPŘ. PRO HISTIDIN).
     """
     search_group = resn_alias(pdb_resname)
+
+    # 1. INTELIGENTNÍ DETEKCE HISTIDINU
+    # Pokud máme v PDB 'HIS' (nebo aliasovaný HID, HIE, HIP), zkusíme variantu potvrdit podle reálných vodíků
+    if pdb_resname == "HIS" or search_group in ["HID", "HIE", "HIP"]:
+        # HIP má oba vodíky (HD1 na delta-dusíku a HE2 na epsilon-dusíku)
+        if "HD1" in atoms and "HE2" in atoms:
+            search_group = "HIP"
+        # HIE má vodík jen na epsilon dusíku
+        elif "HE2" in atoms:
+            search_group = "HIE"
+        # HID má vodík na delta dusíku (nebo je to výchozí stav, pokud vodíky chybí)
+        else:
+            search_group = "HID"
+
     candidates: List[str] = []
 
-    if terminal == "5":
-        candidates.append(f"{search_group}5")
-    elif terminal == "3":
-        candidates.append(f"{search_group}3")
+    # 2. SESTAVENÍ KANDIDÁTŮ PRO KONCE ŘETĚZCŮ
+    if group == "P":
+        # Proteiny (skupina P) mají N-konec a C-konec (např. NALA, CALA, NHID, CHID)
+        if terminal == "5":
+            candidates.append(f"N{search_group}")
+        elif terminal == "3":
+            candidates.append(f"C{search_group}")
+    else:
+        # Nukleové kyseliny mají koncovky 5 a 3 (např. RU5, RU3)
+        if terminal == "5":
+            candidates.append(f"{search_group}5")
+        elif terminal == "3":
+            candidates.append(f"{search_group}3")
+
+    # Vždy přidáme jako fallback základní variantu uprostřed řetězce
     candidates.append(search_group)
 
+    # 3. OVĚŘENÍ PROTI SLOVNÍKU
     for k in candidates:
         res_def = _get_res_def(group, k, conv)
         if res_def:
@@ -185,7 +211,7 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
                 elif resseq == last_main_seq:
                     terminal = "3"
 
-            ff_resname, known, search_group = _pick_variant(group, resname, conv, terminal)
+            ff_resname, known, search_group = _pick_variant(group, resname, atoms, conv, terminal)
             missing_atoms = _check_missing_atoms(group, ff_resname, atoms, conv)
 
             if not known:

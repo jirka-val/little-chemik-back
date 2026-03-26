@@ -17,3 +17,25 @@ class PDBService:
                 raise FileNotFoundError(f"Molekula {pdb_code} neexistuje v RCSB databázi.")
 
             return response.text
+
+    def get_molecule_types(self, pdb_content: str) -> list[str]:
+        """
+        Rychlá detekce typů v PDB pro externí API.
+        """
+        found = set()
+        # Mapování reziduí na kódy externího API
+        mapping = {
+            "D": {"DA", "DC", "DG", "DT"},
+            "R": {"A", "C", "G", "U"},
+            "P": {"ALA", "ARG", "ASN", "ASP", "CYS", "GLU", "GLN", "GLY", "HIS",
+                  "ILE", "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL"},
+            "W": {"HOH", "WAT", "SOL"}
+        }
+
+        for line in pdb_content.splitlines():
+            if line.startswith(("ATOM", "HETATM")):
+                res_name = line[17:20].strip()
+                for api_code, residues in mapping.items():
+                    if res_name in residues:
+                        found.add(api_code)
+        return list(found)
