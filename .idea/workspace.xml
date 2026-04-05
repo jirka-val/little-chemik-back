@@ -4,13 +4,13 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor hydrogenation service for enhanced structure preparation and add new endpoint for advanced molecule preparation">
-      <change afterPath="$PROJECT_DIR$/app/api/v1/endpoints/forcefields.py" afterDir="false" />
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="add forcefields endpoint and enhance analysis service for improved residue detection">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/api.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/analysis_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/analysis_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/pdb_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/pdb_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/validation.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/validation.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/structure/hydrogenation.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/structure/hydrogenation.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/services/validation/forcefield.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/validation/forcefield.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/validation/service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/validation/service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_api.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -188,7 +188,12 @@
       <workItem from="1773653038002" duration="110000" />
       <workItem from="1773989914580" duration="6315000" />
       <workItem from="1774451160540" duration="58000" />
-      <workItem from="1774551668017" duration="6488000" />
+      <workItem from="1774551668017" duration="6575000" />
+      <workItem from="1774598041810" duration="1193000" />
+      <workItem from="1774859147876" duration="9000" />
+      <workItem from="1775111398622" duration="1796000" />
+      <workItem from="1775132230214" duration="12000" />
+      <workItem from="1775392366331" duration="2503000" />
     </task>
     <task id="LOCAL-00001" summary="Init">
       <option name="closed" value="true" />
@@ -462,7 +467,15 @@
       <option name="project" value="LOCAL" />
       <updated>1773992911434</updated>
     </task>
-    <option name="localTasksCounter" value="35" />
+    <task id="LOCAL-00035" summary="add forcefields endpoint and enhance analysis service for improved residue detection">
+      <option name="closed" value="true" />
+      <created>1774560290939</created>
+      <option name="number" value="00035" />
+      <option name="presentableId" value="LOCAL-00035" />
+      <option name="project" value="LOCAL" />
+      <updated>1774560290939</updated>
+    </task>
+    <option name="localTasksCounter" value="36" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -480,7 +493,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="..." />
     <MESSAGE value="test" />
     <MESSAGE value="Refactoring" />
     <MESSAGE value="optimize backend for production and scientific dependencies" />
@@ -505,7 +517,8 @@
     <MESSAGE value="enhance hydrogenation service with optimization option and improve residue handling in analysis service" />
     <MESSAGE value="refactor molecule upload and download endpoints for improved error handling and logging" />
     <MESSAGE value="refactor hydrogenation service for enhanced structure preparation and add new endpoint for advanced molecule preparation" />
-    <option name="LAST_COMMIT_MESSAGE" value="refactor hydrogenation service for enhanced structure preparation and add new endpoint for advanced molecule preparation" />
+    <MESSAGE value="add forcefields endpoint and enhance analysis service for improved residue detection" />
+    <option name="LAST_COMMIT_MESSAGE" value="add forcefields endpoint and enhance analysis service for improved residue detection" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/little_chemik_back$.coverage" NAME=" Coverage Results" MODIFIED="1773355688540" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />

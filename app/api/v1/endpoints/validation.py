@@ -4,6 +4,12 @@ from typing import Dict, Any, Optional, Literal
 from app.services.validation.service import ValidationService
 from app.workspaces.manager import workspace_manager
 
+import logging
+import traceback
+import time
+
+logger = logging.getLogger(__name__)
+
 # Importujeme naši vylepšenou službu pro přípravu
 from app.services.structure.hydrogenation import HydrogenationService
 
@@ -127,24 +133,28 @@ async def apply_selections(request: FixAltLocRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chyba při aplikaci selekcí: {str(e)}")
 
+
 @router.post("/prepare", summary="Kompletní příprava: Protonace, Solvatace, Ionty")
 async def prepare_molecule(request: PreparationRequest):
-    """
-    Provede pokročilou přípravu struktury podle specifikací uživatele.
-    Zahrnuje řešení krystalových vod, přidání vodíků, a volitelně vložení
-    do vodního boxu a přidání fyziologické koncentrace iontů.
-    """
+    start_time = time.time()
+    logger.info(f"START: Příprava molekuly pro workspace {request.workspace_id} (pH: {request.ph})")
+
     try:
-        # 1. Zkontrolujeme, zda existuje soubor
         if not workspace_manager.workspace_exists(request.workspace_id):
+            logger.error(f"Workspace {request.workspace_id} nenalezen.")
             raise HTTPException(status_code=404, detail="Soubor molekuly nebyl na serveru nalezen.")
 
-        # 2. Načteme obsah stávajícího souboru
         pdb_path = workspace_manager.get_file_path(request.workspace_id)
         with open(pdb_path, "r", encoding="utf-8") as f:
             pdb_content = f.read()
 
-        # 3. Zpracování přes naši vylepšenou službu bez Amberu
+        logger.debug(f"Původní soubor načten. Délka: {len(pdb_content)} znaků.")
+
+        # LOGOVÁNÍ PŘED SERVISOU
+        logger.info(
+            f"Volám HydrogenationService.prepare_structure s parametry: solvent={request.add_solvent}, ions={request.ionic_strength}")
+
+        # 3. Zpracování
         prepared_pdb = hydrogenation_service.prepare_structure(
             pdb_content=pdb_content,
             ph=request.ph,
@@ -156,11 +166,18 @@ async def prepare_molecule(request: PreparationRequest):
             negative_ion=request.negative_ion
         )
 
-        # 4. Uložení upraveného PDB souboru zpět na server
+        if not prepared_pdb:
+            logger.error("HydrogenationService vrátila prázdný výsledek!")
+            raise ValueError("Výsledný PDB obsah je prázdný.")
+
+        logger.info(f"Struktura připravena za {time.time() - start_time:.2f}s. Ukládám...")
+
+        # 4. Uložení
         with open(pdb_path, "w", encoding="utf-8") as f:
             f.write(prepared_pdb)
 
-        # 5. Okamžitá validace hotového PDB, aby frontend mohl ukázat výsledky
+        # 5. Validace po přípravě
+        logger.debug("Spouštím post-přípravnou validaci.")
         validation_results = validation_service.validate_pdb_content(prepared_pdb, label="prepared_state")
 
         return {
@@ -171,4 +188,14 @@ async def prepare_molecule(request: PreparationRequest):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Chyba při přípravě struktury: {str(e)}")
+        # KLÍČOVÉ: Výpis tracebacku do konzole serveru
+        logger.error(f"KRITICKÁ CHYBA při přípravě workspace {request.workspace_id}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": str(e),
+                "type": type(e).__name__,
+                "msg": "Podívejte se do logů serveru pro kompletní Traceback"
+            }
+        )

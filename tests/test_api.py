@@ -5,6 +5,10 @@ from app.main import app
 client = TestClient(app)
 shared_workspace_id = None
 
+from app.services.structure.hydrogenation import HydrogenationService
+
+
+
 def test_1_upload_valid_pdb():
     """Uploads a valid .pdb file and checks if workspace_id is returned."""
     dummy_pdb_content = b"ATOM      1  N   ALA A   1      -1.011   1.455  -0.082  1.00  0.00           N\n"
@@ -127,3 +131,16 @@ def test_10_3dvz_rna_variants_and_atoms_detection():
     assert g2648 is not None
     assert g2648["ff_resname"] == "RG"
     assert g2648["known"] is True
+
+
+def test_11_inspect_hydrogenation_service():
+    service = HydrogenationService()
+    # Získáme všechny metody, které nejsou interní (nezačínají _)
+    methods = [method for method in dir(service) if callable(getattr(service, method)) and not method.startswith("_")]
+
+    print(f"\n--- DEBUG: Dostupné metody v HydrogenationService ---")
+    for m in methods:
+        print(f" -> {m}")
+
+    # Tento assert nám v testu 'test_5' padá. Tady zjistíme proč.
+    assert "add_hydrogen_atoms" in methods, f"Chyba: HydrogenationService postrádá metodu add_hydrogen_atoms! Dostupné: {methods}"
