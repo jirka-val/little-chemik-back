@@ -1,13 +1,13 @@
 import pytest
+import asyncio
+import time
+from httpx import AsyncClient, ASGITransport
 from fastapi.testclient import TestClient
 from app.main import app
+from app.services.structure.hydrogenation import HydrogenationService
 
 client = TestClient(app)
 shared_workspace_id = None
-
-from app.services.structure.hydrogenation import HydrogenationService
-
-
 
 def test_1_upload_valid_pdb():
     """Uploads a valid .pdb file and checks if workspace_id is returned."""
@@ -133,14 +133,49 @@ def test_10_3dvz_rna_variants_and_atoms_detection():
     assert g2648["known"] is True
 
 
-def test_11_inspect_hydrogenation_service():
-    service = HydrogenationService()
-    # Získáme všechny metody, které nejsou interní (nezačínají _)
-    methods = [method for method in dir(service) if callable(getattr(service, method)) and not method.startswith("_")]
+@pytest.mark.asyncio
+async def test_11_concurrency_no_blocking():
+    """
+    Verifies that a heavy CPU-bound request (sequence analysis) does not block
+    the FastAPI event loop, allowing a light request (download) to be processed instantly.
+    """
+    # Získáme validní molekulu pomocí synchronního klienta, ať máme co analyzovat.
+    response_fetch = client.get("/api/molecules/fetch-pdb/1crn")
+    assert response_fetch.status_code == 200
+    ws_id = response_fetch.json()["workspace_id"]
 
-    print(f"\n--- DEBUG: Dostupné metody v HydrogenationService ---")
-    for m in methods:
-        print(f" -> {m}")
+    # Použijeme asynchronní klient pro simulaci 2 uživatelů naráz
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
 
-    # Tento assert nám v testu 'test_5' padá. Tady zjistíme proč.
-    assert "add_hydrogen_atoms" in methods, f"Chyba: HydrogenationService postrádá metodu add_hydrogen_atoms! Dostupné: {methods}"
+        async def fetch_heavy():
+            """Uživatel 1 - Požádá o těžký výpočet analýzy sekvence."""
+            start = time.time()
+            res = await ac.get(f"/api/analysis/sequence/{ws_id}")
+            duration = time.time() - start
+            return duration, res.status_code
+
+        async def fetch_light():
+            """Uživatel 2 - Zkusí si jen bleskově stáhnout soubor, zatímco se počítá analýza."""
+            # Malé zpoždění, aby těžký úkol zaručeně odstartoval první
+            await asyncio.sleep(0.05)
+            start = time.time()
+            res = await ac.get(f"/api/download/{ws_id}")
+            duration = time.time() - start
+            return duration, res.status_code
+
+        # Spustíme oba dotazy současně
+        results = await asyncio.gather(fetch_heavy(), fetch_light())
+
+        heavy_duration, heavy_status = results[0]
+        light_duration, light_status = results[1]
+
+        assert heavy_status == 200
+        assert light_status == 200
+
+        # Můžeme si to i vypsat pro kontrolu při běhu pytestu s příznakem -s
+        print(f"\nHEAVY TASK (CPU) duration: {heavy_duration:.4f}s")
+        print(f"LIGHT TASK (I/O) duration: {light_duration:.4f}s")
+
+        # Lehký úkol se musí dokončit buď dříve než těžký úkol, nebo v čase menším než 0.1s.
+        # Kdyby backend stále blokoval event loop, lehký úkol by musel čekat na dokončení těžkého.
+        assert light_duration < heavy_duration or light_duration < 0.1

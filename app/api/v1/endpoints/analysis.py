@@ -1,5 +1,8 @@
 import logging
+import aiofiles
 from fastapi import APIRouter, HTTPException
+from fastapi.concurrency import run_in_threadpool
+
 from app.workspaces.manager import workspace_manager
 from app.services.analysis_service import build_sequence_tokens
 
@@ -7,40 +10,47 @@ logger = logging.getLogger("api")
 router = APIRouter()
 
 
-@router.get("/sequence/{workspace_id}")
+@router.get("/sequence/{workspace_id}", summary="Analýza sekvence molekuly")
 async def analyze_sequence(workspace_id: str, chain: str | None = None, fill_gaps: bool = True):
     """
-    Vezme workspace_id, přečte dočasný soubor na pozadí a vrátí sekvenci
-    včetně informací o chybějících atomech (tvůj converting_dictionary).
+    Vezme workspace_id, asynchronně přečte dočasný soubor na pozadí a
+    v dedikovaném vlákně vrátí sekvenci včetně informací o chybějících atomech
+    (pomocí converting_dictionary).
     """
-    logger.info(f"Požadavek na analýzu sekvence pro workspace: {workspace_id}")
+    logger.info(f"Sequence analysis requested for workspace: {workspace_id} (chain: {chain}, fill_gaps: {fill_gaps})")
 
-    # 1. Zkontrolujeme, zda soubor ještě žije (nevypršel čas)
+    # Zkontrolujeme, zda soubor ještě žije
     if not workspace_manager.workspace_exists(workspace_id):
-        logger.error(f"Workspace {workspace_id} nebyl nalezen.")
-        raise HTTPException(status_code=404, detail="Workspace nenalezen. Nahráli jste soubor?")
+        logger.error(f"Workspace {workspace_id} not found.")
+        raise HTTPException(status_code=404, detail="Workspace not found. Have you uploaded a file?")
 
     try:
-        # 2. Zjistíme si cestu k souboru na disku
         file_path = workspace_manager.get_file_path(workspace_id)
 
-        # 3. Přečteme soubor bezpečně do paměti (pro tvou analýzu)
-        with open(file_path, "r", encoding="utf-8") as f:
-            pdb_text = f.read()
+        # Přečteme soubor do paměti
+        async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+            pdb_text = await f.read()
 
-        # TADY JE TA ÚPRAVA - dáme fill_gaps natvrdo na True
-        sequence_data = build_sequence_tokens(
+        # Spustíme CPU-náročnou analýzu tokenů ve vedlejším vlákně
+        sequence_data = await run_in_threadpool(
+            build_sequence_tokens,
             pdb_text=pdb_text,
             chain=chain,
-            fill_gaps=True  # <-- Vynuceno! Backend teď MUSÍ hledat chybějící atomy
+            fill_gaps=True
         )
 
-        logger.info(f"Analýza pro {workspace_id} byla úspěšně dokončena.")
+        logger.info(f"Sequence analysis for workspace {workspace_id} successfully completed.")
+
         return {
             "workspace_id": workspace_id,
             "sequence": sequence_data
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.exception(f"Chyba při zpracování sekvence pro workspace {workspace_id}: {e}")
-        raise HTTPException(status_code=500, detail="Interní chyba při zpracování molekuly.")
+        logger.exception(f"Error processing sequence for workspace {workspace_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error while processing the molecule sequence."
+        )

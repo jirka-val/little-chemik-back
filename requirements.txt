@@ -8,3 +8,4 @@ pydantic-settings
 httpx
 python-multipart
 propka>=3.5.0
+aiofiles

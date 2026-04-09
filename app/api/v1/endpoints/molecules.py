@@ -1,6 +1,9 @@
 import logging
 import io
+import aiofiles
 from fastapi import APIRouter, HTTPException, File, UploadFile, Body
+from fastapi.concurrency import run_in_threadpool
+
 from app.services.pdb_service import PDBService
 from app.workspaces.manager import workspace_manager
 from app.services.structure.hydrogenation import HydrogenationService
@@ -13,7 +16,7 @@ hydrogen_service = HydrogenationService()
 @router.post("/upload")
 async def upload_molecule(file: UploadFile = File(...)):
     """
-    RECEIVES A PDB FILE VIA MULTIPART FORM DATA, CREATES A WORKSPACE, AND RETURNS THE WORKSPACE ID.
+    Přijímá PDB soubor přes multipart form data, vytvoří workspace a vrátí jeho ID.
     """
     if not file.filename.endswith('.pdb'):
         logger.warning(f"Unsupported format attempt: {file.filename}")
@@ -36,10 +39,11 @@ async def upload_molecule(file: UploadFile = File(...)):
 @router.get("/fetch-pdb/{pdb_code}")
 async def fetch_pdb_by_code(pdb_code: str):
     """
-    DOWNLOADS A MOLECULE FROM THE PROTEIN DATA BANK, SAVES IT TO A WORKSPACE, AND RETURNS THE ID.
+    Stáhne molekulu z PDB (Protein Data Bank) asynchronně a uloží ji do workspace.
     """
     try:
         logger.info(f"Fetching PDB code: {pdb_code}")
+        # Toto neblokuje event loop, protože httpx/aiohttp běží asynchronně pod kapotou
         pdb_content = await pdb_service.get_remote_pdb_content(pdb_code.lower())
 
         workspace_id = workspace_manager.create_from_string(pdb_content)
@@ -52,9 +56,9 @@ async def fetch_pdb_by_code(pdb_code: str):
         }
     except FileNotFoundError:
         logger.error(f"PDB code {pdb_code} not found.")
-        raise HTTPException(status_code=404, detail=f"Molecule {pdb_code} does not exist in RCSB database.")
+        raise HTTPException(status_code=404, detail=f"Molecule {pdb_code} does not exist in the RCSB database.")
     except Exception as e:
-        logger.exception(f"Error fetching molecule {pdb_code} from external database.")
+        logger.exception(f"Error fetching molecule {pdb_code} from external database: {e}")
         raise HTTPException(status_code=500, detail=f"Error fetching from PDB: {str(e)}")
 
 
@@ -65,7 +69,8 @@ async def add_hydrogens(
         optimize: bool = Body(False, embed=True)
 ):
     """
-    ADDS HYDROGEN ATOMS TO THE MOLECULE AND OPTIONALLY OPTIMIZES THEIR POSITIONS USING THE AMBER14 FORCEFIELD.
+    Přidá atomy vodíku do molekuly a volitelně je zoptimalizuje (např. pomocí AMBER14).
+    Tato CPU-náročná operace je delegována do threadpoolu, aby neblokovala FastAPI event loop.
     """
     logger.info(f"Hydrogenation request for workspace: {workspace_id} (pH: {ph}, optimize: {optimize})")
 
@@ -76,13 +81,21 @@ async def add_hydrogens(
     try:
         file_path = workspace_manager.get_file_path(workspace_id)
 
-        with open(file_path, "r", encoding="utf-8") as f:
-            pdb_text = f.read()
+        # Asynchronní I/O pro čtení
+        async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+            pdb_text = await f.read()
 
-        updated_pdb_text = hydrogen_service.add_hydrogen_atoms(pdb_text, ph=ph, optimize=optimize)
+        # Delegace těžkého chemického výpočtu na vedlejší vlákno
+        updated_pdb_text = await run_in_threadpool(
+            hydrogen_service.add_hydrogen_atoms,
+            pdb_text,
+            ph=ph,
+            optimize=optimize
+        )
 
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(updated_pdb_text)
+        # Asynchronní I/O pro zápis výsledku
+        async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
+            await f.write(updated_pdb_text)
 
         logger.info(f"Hydrogens added to {workspace_id}. Optimization: {optimize}")
 

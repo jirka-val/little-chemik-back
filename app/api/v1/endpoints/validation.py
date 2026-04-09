@@ -1,90 +1,100 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
-from typing import Dict, Any, Optional, Literal
-from app.services.validation.service import ValidationService
-from app.workspaces.manager import workspace_manager
-
 import logging
 import traceback
 import time
+import aiofiles
+from typing import Dict, Literal
+
+from fastapi import APIRouter, HTTPException
+from fastapi.concurrency import run_in_threadpool
+from pydantic import BaseModel, Field
+
+from app.services.validation.service import ValidationService
+from app.services.structure.hydrogenation import HydrogenationService
+from app.workspaces.manager import workspace_manager
 
 logger = logging.getLogger(__name__)
-
-# Importujeme naši vylepšenou službu pro přípravu
-from app.services.structure.hydrogenation import HydrogenationService
 
 router = APIRouter()
 validation_service = ValidationService()
 hydrogenation_service = HydrogenationService()
 
-# --- Pydantic Modely pro validaci vstupů (UPRAVENO PRO NOVÝ FRONTEND) ---
+
+# --- Data Models ---
 
 class ValidationRequest(BaseModel):
-    workspace_id: str = Field(..., description="ID pracovního prostoru s molekulou")
-    label: str = Field("molecule_from_front", description="Identifikátor stavu molekuly")
+    workspace_id: str = Field(..., description="Workspace ID containing the molecule")
+    label: str = Field("molecule_from_front", description="Molecule state identifier")
 
 
 class FixAltLocRequest(BaseModel):
-    workspace_id: str = Field(..., description="ID pracovního prostoru s molekulou")
+    workspace_id: str = Field(..., description="Workspace ID containing the molecule")
     selections: Dict[str, str] = Field(
         ...,
-        description="Mapa výběru variant, např: {'A-42': 'B'}",
+        description="Variant selection map, e.g., {'A-42': 'B'}",
         example={"A-42": "B", "A-15": "A"}
     )
+
 
 class PreparationRequest(BaseModel):
     workspace_id: str = Field(...)
     ph: float = Field(7.0)
     crystal_water_mode: Literal["remove_all", "keep_water", "keep_all"] = Field("remove_all")
-
-    # Solvatace a ionty
     add_solvent: bool = Field(False)
     box_padding_nm: float = Field(1.0)
-    ionic_strength: float = Field(0.15, description="Koncentrace soli (M). Systém je vždy automaticky neutralizován.")
+    ionic_strength: float = Field(0.15, description="Salt concentration (M). The system is automatically neutralized.")
     positive_ion: Literal["Na+", "K+", "Li+", "Cs+", "Rb+"] = Field("Na+")
     negative_ion: Literal["Cl-", "F-", "Br-", "I-"] = Field("Cl-")
 
-# --- Endpointy ---
+
+# --- Endpoints ---
 
 @router.post("/check", summary="Zvaliduje stav molekuly a detekuje AltLocs")
 async def check_molecule(request: ValidationRequest):
     """
-    Přečte soubor z disku podle workspace_id a provede úvodní analýzu molekuly.
+    Asynchronně načte PDB soubor a provede úvodní analýzu struktury.
     Detekuje alternativní lokace, chybějící atomy a kompatibilitu s forcefieldem.
     """
     try:
-        # 1. Zkontrolujeme, zda soubor existuje pomocí existující metody
         if not workspace_manager.workspace_exists(request.workspace_id):
-            raise HTTPException(status_code=404, detail="Soubor molekuly nebyl na serveru nalezen.")
+            raise HTTPException(status_code=404, detail="Molecule file not found on the server.")
 
-        # 2. Získáme cestu k souboru a přečteme obsah
         pdb_path = workspace_manager.get_file_path(request.workspace_id)
-        with open(pdb_path, "r", encoding="utf-8") as f:
-            pdb_content = f.read()
 
-        # 3. Zvalidujeme obsah
-        return validation_service.validate_pdb_content(pdb_content, request.label)
+        # Non-blocking I/O pro čtení souboru
+        async with aiofiles.open(pdb_path, "r", encoding="utf-8") as f:
+            pdb_content = await f.read()
+
+        # Delegace CPU-bound validace do threadpoolu pro zamezení blokování event loopu
+        return await run_in_threadpool(
+            validation_service.validate_pdb_content,
+            pdb_content,
+            request.label
+        )
+
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Chyba při validaci: {str(e)}")
+        logger.exception(f"Validation error for workspace {request.workspace_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")
 
 
 @router.post("/preview-selection", summary="Náhled geometrie před aplikací")
 async def preview_selection(request: FixAltLocRequest):
     """
-    Přečte soubor z disku a provede náhled geometrických úprav.
+    Provede náhled geometrických úprav na základě uživatelských selekcí
+    bez trvalého zápisu do souboru.
     """
     try:
         if not workspace_manager.workspace_exists(request.workspace_id):
-            raise HTTPException(status_code=404, detail="Soubor molekuly nebyl na serveru nalezen.")
+            raise HTTPException(status_code=404, detail="Molecule file not found on the server.")
 
         pdb_path = workspace_manager.get_file_path(request.workspace_id)
-        with open(pdb_path, "r", encoding="utf-8") as f:
-            pdb_content = f.read()
+        async with aiofiles.open(pdb_path, "r", encoding="utf-8") as f:
+            pdb_content = await f.read()
 
-        # Získáme seznam problémů s kontinuitou
-        issues = validation_service.conf_manager.validate_continuity(
+        # Izolovaný výpočet kontinuity řetězce
+        issues = await run_in_threadpool(
+            validation_service.conf_manager.validate_continuity,
             pdb_content,
             request.selections
         )
@@ -94,68 +104,72 @@ async def preview_selection(request: FixAltLocRequest):
         return {
             "is_ok": is_safe,
             "issues": issues,
-            "message": "Výběr je geometricky v pořádku" if is_safe else "Detekovány kritické mezery v řetězci"
+            "message": "Selection is geometrically valid" if is_safe else "Critical chain gaps detected"
         }
+
     except HTTPException:
         raise
     except Exception as e:
-        print(f"DEBUG: Preview error: {str(e)}")
+        logger.exception(f"Selection preview error for workspace {request.workspace_id}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/apply-selections", summary="Aplikuje výběr konformací a ověří kontinuitu")
 async def apply_selections(request: FixAltLocRequest):
     """
-    Aplikuje výběr uživatele, ověří geometrii a ULOŽÍ NOVÝ SOUBOR na serveru.
+    Aplikuje vybrané konformace a asynchronně přepíše zdrojový PDB soubor.
     """
     try:
         if not workspace_manager.workspace_exists(request.workspace_id):
-            raise HTTPException(status_code=404, detail="Soubor molekuly nebyl na serveru nalezen.")
+            raise HTTPException(status_code=404, detail="Molecule file not found on the server.")
 
         pdb_path = workspace_manager.get_file_path(request.workspace_id)
-        with open(pdb_path, "r", encoding="utf-8") as f:
-            pdb_content = f.read()
+        async with aiofiles.open(pdb_path, "r", encoding="utf-8") as f:
+            pdb_content = await f.read()
 
-        # Aplikujeme výběr (vrátí dict s novým 'pdb_content' a 'validation')
-        result = validation_service.apply_alt_loc_selection(
+        result = await run_in_threadpool(
+            validation_service.apply_alt_loc_selection,
             pdb_content,
             request.selections
         )
 
-        # Přepíšeme starý soubor na disku nově upraveným obsahem
+        # Zápis upravené struktury zpět na disk (non-blocking)
         if "pdb_content" in result:
-            with open(pdb_path, "w", encoding="utf-8") as f:
-                f.write(result["pdb_content"])
+            async with aiofiles.open(pdb_path, "w", encoding="utf-8") as f:
+                await f.write(result["pdb_content"])
 
         return result
+
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Chyba při aplikaci selekcí: {str(e)}")
+        logger.exception(f"Error applying selections for workspace {request.workspace_id}")
+        raise HTTPException(status_code=500, detail=f"Error applying selections: {str(e)}")
 
 
 @router.post("/prepare", summary="Kompletní příprava: Protonace, Solvatace, Ionty")
 async def prepare_molecule(request: PreparationRequest):
+    """
+    Spouští výpočetně náročný proces přípravy struktury (PDBFixer/AMBER).
+    Endpoint využívá threadpool pro paralelizaci a zachování odezvy serveru.
+    """
     start_time = time.time()
-    logger.info(f"START: Příprava molekuly pro workspace {request.workspace_id} (pH: {request.ph})")
+    logger.info(f"Started molecule preparation for workspace: {request.workspace_id} (pH: {request.ph})")
 
     try:
         if not workspace_manager.workspace_exists(request.workspace_id):
-            logger.error(f"Workspace {request.workspace_id} nenalezen.")
-            raise HTTPException(status_code=404, detail="Soubor molekuly nebyl na serveru nalezen.")
+            logger.error(f"Workspace {request.workspace_id} not found.")
+            raise HTTPException(status_code=404, detail="Molecule file not found on the server.")
 
         pdb_path = workspace_manager.get_file_path(request.workspace_id)
-        with open(pdb_path, "r", encoding="utf-8") as f:
-            pdb_content = f.read()
+        async with aiofiles.open(pdb_path, "r", encoding="utf-8") as f:
+            pdb_content = await f.read()
 
-        logger.debug(f"Původní soubor načten. Délka: {len(pdb_content)} znaků.")
+        logger.info(f"Starting HydrogenationService (solvent: {request.add_solvent}, ions: {request.ionic_strength})")
 
-        # LOGOVÁNÍ PŘED SERVISOU
-        logger.info(
-            f"Volám HydrogenationService.prepare_structure s parametry: solvent={request.add_solvent}, ions={request.ionic_strength}")
-
-        # 3. Zpracování
-        prepared_pdb = hydrogenation_service.prepare_structure(
+        # Spuštění primární chemické transformace v dedikovaném vlákně
+        prepared_pdb = await run_in_threadpool(
+            hydrogenation_service.prepare_structure,
             pdb_content=pdb_content,
             ph=request.ph,
             crystal_water_mode=request.crystal_water_mode,
@@ -167,35 +181,36 @@ async def prepare_molecule(request: PreparationRequest):
         )
 
         if not prepared_pdb:
-            logger.error("HydrogenationService vrátila prázdný výsledek!")
-            raise ValueError("Výsledný PDB obsah je prázdný.")
+            logger.error("HydrogenationService returned empty output.")
+            raise ValueError("The resulting PDB content is empty.")
 
-        logger.info(f"Struktura připravena za {time.time() - start_time:.2f}s. Ukládám...")
+        logger.info(f"Structure prepared successfully in {time.time() - start_time:.2f}s. Starting write process.")
 
-        # 4. Uložení
-        with open(pdb_path, "w", encoding="utf-8") as f:
-            f.write(prepared_pdb)
+        async with aiofiles.open(pdb_path, "w", encoding="utf-8") as f:
+            await f.write(prepared_pdb)
 
-        # 5. Validace po přípravě
-        logger.debug("Spouštím post-přípravnou validaci.")
-        validation_results = validation_service.validate_pdb_content(prepared_pdb, label="prepared_state")
+        # Finální validace integrity po modifikaci
+        validation_results = await run_in_threadpool(
+            validation_service.validate_pdb_content,
+            prepared_pdb,
+            label="prepared_state"
+        )
 
         return {
-            "message": "Struktura úspěšně připravena.",
+            "message": "Structure successfully prepared.",
             "validation": validation_results
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        # KLÍČOVÉ: Výpis tracebacku do konzole serveru
-        logger.error(f"KRITICKÁ CHYBA při přípravě workspace {request.workspace_id}")
-        logger.error(traceback.format_exc())
+        logger.error(
+            f"Critical failure during preparation of workspace {request.workspace_id}:\n{traceback.format_exc()}")
         raise HTTPException(
             status_code=500,
             detail={
                 "error": str(e),
                 "type": type(e).__name__,
-                "msg": "Podívejte se do logů serveru pro kompletní Traceback"
+                "msg": "Internal server error. Check logs for details."
             }
         )
