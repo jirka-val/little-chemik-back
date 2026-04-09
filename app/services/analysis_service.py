@@ -4,7 +4,7 @@ import os
 from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Set, Any
 
-from app.utils.alias import resn_alias, name_alias
+from app.utils.adams4sims_processing_library.utils.alias import resn_alias, name_alias
 
 
 @lru_cache(maxsize=1)
