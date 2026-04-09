@@ -4,14 +4,14 @@ from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 
 from app.services.pdb_service import PDBService
-from app.services.validation.forcefield import ForceFieldValidator
+from app.services.forcefield_service import ForceFieldService
 from app.workspaces.manager import workspace_manager
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 pdb_service = PDBService()
-ff_validator = ForceFieldValidator()
+ff_validator = ForceFieldService()
 
 
 @router.get("/{workspace_id}", summary="Získá dostupné forcefieldy pro danou molekulu")

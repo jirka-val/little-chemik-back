@@ -1,4 +1,4 @@
-from adams4sims_processing_library.utils.loader_helper import get_lines
+from app.utils.adams4sims_processing_library.utils.loader_helper import get_lines
 
 
 # CLASS FOR HANDLING IDA FF TYPE

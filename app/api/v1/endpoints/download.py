@@ -21,7 +21,7 @@ async def download_workspace(workspace_id: str):
             logger.warning(f"Download attempt for non-existent or expired workspace: {workspace_id}")
             raise HTTPException(status_code=404, detail="Workspace not found or expired.")
 
-        file_path = workspace_manager.get_file_path(workspace_id)
+        file_path = workspace_manager.get_file_path(workspace_id, "structure.pdb")
         logger.info(f"Serving PDB file for workspace: {workspace_id}")
 
         # FileResponse zajistí bezpečné a asynchronní odeslání souboru klientovi

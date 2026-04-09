@@ -8,8 +8,8 @@ from itertools import combinations
 from collections import deque
 from datetime import datetime
 
-from adams4sims_processing_library.utils.conversion_dict import get_conversion_dict
-from adams4sims_processing_library.utils import alias
+from app.utils.adams4sims_processing_library.utils.conversion_dict import get_conversion_dict
+from app.utils.adams4sims_processing_library.utils import alias
 
 # Function to parse line in AMBER topology
 def parse_line(line, format_spec):

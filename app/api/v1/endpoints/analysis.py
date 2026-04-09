@@ -25,7 +25,7 @@ async def analyze_sequence(workspace_id: str, chain: str | None = None, fill_gap
         raise HTTPException(status_code=404, detail="Workspace not found. Have you uploaded a file?")
 
     try:
-        file_path = workspace_manager.get_file_path(workspace_id)
+        file_path = workspace_manager.get_file_path(workspace_id, "structure.pdb")
 
         # Přečteme soubor do paměti
         async with aiofiles.open(file_path, "r", encoding="utf-8") as f:

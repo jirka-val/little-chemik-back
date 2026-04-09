@@ -1,14 +1,14 @@
 # app/services/validation/service.py
 
-from typing import Dict, Any, List
+from typing import Dict, Any
 from .checker import StructureChecker
-from .forcefield import ForceFieldValidator
+from app.services.forcefield_service import ForceFieldService
 from .conformations import ConformationManager
 
 
 class ValidationService:
     def __init__(self):
-        self.ff_validator = ForceFieldValidator()
+        self.ff_validator = ForceFieldService()
         self.conf_manager = ConformationManager()
 
     def validate_pdb_content(self, pdb_content: str, label: str = "current_state", selections: Dict[str, str] = None) -> \

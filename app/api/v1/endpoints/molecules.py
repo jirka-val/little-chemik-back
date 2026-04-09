@@ -79,7 +79,7 @@ async def add_hydrogens(
         raise HTTPException(status_code=404, detail="Workspace not found. Please upload a file first.")
 
     try:
-        file_path = workspace_manager.get_file_path(workspace_id)
+        file_path = workspace_manager.get_file_path(workspace_id, "structure.pdb")
 
         # Asynchronní I/O pro čtení
         async with aiofiles.open(file_path, "r", encoding="utf-8") as f:

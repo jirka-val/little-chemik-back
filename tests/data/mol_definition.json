@@ -1,0 +1,88 @@
+{
+  "residues": [
+    {
+      "resn": "RG5",
+      "mol_type": "R"
+    },
+    {          
+      "resn": "RG",
+      "mol_type": "R"
+    },
+    {
+      "resn": "RG",
+      "mol_type": "R"
+    },
+    {
+      "resn": "RG",
+      "mol_type": "R"
+    },
+    {
+      "resn": "RA",
+      "mol_type": "R"
+    },
+    {
+      "resn": "RG",
+      "mol_type": "R"
+    },
+    {
+      "resn": "RC",
+      "mol_type": "R"
+    },
+    {
+      "resn": "RC3",
+      "mol_type": "R"
+    },
+    {
+      "resn": "RG5",
+      "mol_type": "R"
+    },
+    {
+      "resn": "RG",
+      "mol_type": "R"
+    },
+    {
+      "resn": "RC",
+      "mol_type": "R"
+    },
+    {
+      "resn": "RG",
+      "mol_type": "R"
+    },
+    {
+      "resn": "RA",
+      "mol_type": "R"
+    },
+    {
+      "resn": "RA",
+      "mol_type": "R"
+    },
+    {
+      "resn": "RG",
+      "mol_type": "R"
+    },
+    {
+      "resn": "RA",
+      "mol_type": "R"
+    },
+    {
+      "resn": "RA",
+      "mol_type": "R"
+    },
+    {
+      "resn": "RC",
+      "mol_type": "R"
+    },
+    { 
+      "resn": "RC3",
+      "mol_type": "R"
+    }
+  ],
+  "force_fields": {
+    "R": "OL3"
+  },
+  "box" : [
+    10.0,
+    20.0,
+    30.0
+  ]
+}

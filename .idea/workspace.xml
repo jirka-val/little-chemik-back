@@ -4,8 +4,27 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor analysis, download, forcefields, and molecules endpoints for improved asynchronous handling and error logging">
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor analysis service import path for improved module organization">
+      <change afterPath="$PROJECT_DIR$/app/api/v1/endpoints/topology.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/app/services/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/app/services/topology_service.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/app/workspaces/tasks/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tests/data/mol_definition.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/api.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/api.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/analysis.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/download.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/download.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/forcefields.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/forcefields.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/pdb_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/pdb_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/validation/forcefield.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/forcefield_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/validation/service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/validation/service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/tasks/garbage_collector.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/workspaces/tasks/garbage_collector.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/utils/adams4sims_processing_library/AMBER_residue.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/utils/adams4sims_processing_library/AMBER_residue.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/utils/adams4sims_processing_library/FF_IDA.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/utils/adams4sims_processing_library/FF_IDA.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/utils/adams4sims_processing_library/utils/AMBER_topology.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/utils/adams4sims_processing_library/utils/AMBER_topology.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/workspaces/manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/workspaces/manager.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -22,6 +41,7 @@
       <list>
         <option value="FastAPI main" />
         <option value="FastAPI test_main" />
+        <option value="Python Script" />
       </list>
     </option>
   </component>
@@ -67,11 +87,11 @@
 }</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
-      <recent name="C:\DevProjects\littleChemik\little-chemik-back\data" />
-      <recent name="C:\DevProjects\littleChemik\little-chemik-back" />
-      <recent name="C:\DevProjects\little-chemik\test_molecular-modification\app\utils" />
-      <recent name="C:\DevProjects\little-chemik\test_molecular-modification\app\api\v1\endpoints" />
-      <recent name="C:\DevProjects\little-chemik\test_molecular-modification\data" />
+      <recent name="C:\DevProjects\littleChemik\little-chemik-back\app\workspaces" />
+      <recent name="C:\DevProjects\littleChemik\little-chemik-back\app\services" />
+      <recent name="C:\DevProjects\littleChemik\little-chemik-back\data\forcefields\TIP3P" />
+      <recent name="C:\DevProjects\littleChemik\little-chemik-back\data\forcefields\FF99BSC0" />
+      <recent name="C:\DevProjects\littleChemik\little-chemik-back\data\forcefields\OL3CP_gHBfix21_NBfix-0BPh" />
     </key>
   </component>
   <component name="RunManager" selected="Python tests.Python tests for test_api.test_10_3dvz_rna_variants_and_atoms_detection">
@@ -192,7 +212,7 @@
       <workItem from="1775731384221" duration="144000" />
       <workItem from="1775734114204" duration="3039000" />
       <workItem from="1775743710336" duration="306000" />
-      <workItem from="1775765066110" duration="1397000" />
+      <workItem from="1775765066110" duration="8363000" />
     </task>
     <task id="LOCAL-00001" summary="Init">
       <option name="closed" value="true" />
@@ -490,7 +510,15 @@
       <option name="project" value="LOCAL" />
       <updated>1775736558031</updated>
     </task>
-    <option name="localTasksCounter" value="38" />
+    <task id="LOCAL-00038" summary="refactor analysis service import path for improved module organization">
+      <option name="closed" value="true" />
+      <created>1775766910882</created>
+      <option name="number" value="00038" />
+      <option name="presentableId" value="LOCAL-00038" />
+      <option name="project" value="LOCAL" />
+      <updated>1775766910882</updated>
+    </task>
+    <option name="localTasksCounter" value="39" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -508,7 +536,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="optimize backend for production and scientific dependencies" />
     <MESSAGE value="improving validation" />
     <MESSAGE value="New validation" />
     <MESSAGE value="build_sequence" />
@@ -533,7 +560,8 @@
     <MESSAGE value="add forcefields endpoint and enhance analysis service for improved residue detection" />
     <MESSAGE value="refactor hydrogenation service for improved error handling and logging, and enhance forcefield compatibility" />
     <MESSAGE value="refactor analysis, download, forcefields, and molecules endpoints for improved asynchronous handling and error logging" />
-    <option name="LAST_COMMIT_MESSAGE" value="refactor analysis, download, forcefields, and molecules endpoints for improved asynchronous handling and error logging" />
+    <MESSAGE value="refactor analysis service import path for improved module organization" />
+    <option name="LAST_COMMIT_MESSAGE" value="refactor analysis service import path for improved module organization" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/little_chemik_back$.coverage" NAME=" Coverage Results" MODIFIED="1773355688540" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />

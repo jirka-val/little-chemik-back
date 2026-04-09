@@ -4,7 +4,7 @@
 import math
 import bisect
 
-from adams4sims_processing_library.utils import alias
+from app.utils.adams4sims_processing_library.utils import alias
 
 class residue:
 

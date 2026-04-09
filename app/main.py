@@ -7,7 +7,7 @@ from app.core.exceptions import AppBaseException, app_exception_handler
 from app.core.config import settings
 
 # <-- NOVÉ: Import naší vytvořené uklízečky
-from app.tasks.garbage_collector import cleanup_old_workspaces
+from app.workspaces.tasks.garbage_collector import cleanup_old_workspaces
 
 setup_logging()
 
