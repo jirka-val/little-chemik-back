@@ -2,6 +2,7 @@
 import httpx
 import logging
 from app.core.config import settings
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -108,3 +109,49 @@ def parse_pdb_to_topology_dict(pdb_content: str, selected_force_fields: dict = N
         "force_fields": selected_force_fields,
         "box": box
     }
+
+
+def remove_residue_from_pdb(pdb_path: Path, chain: str, resseq: int) -> bool:
+    """
+    Odstraní všechna data (ATOM i HETATM) pro dané reziduum z PDB souboru.
+    Vrací True, pokud byla provedena změna.
+    """
+    if not pdb_path.exists():
+        logger.error(f"PDB file not found at {pdb_path}")
+        return False
+
+    try:
+        with open(pdb_path, "r") as f:
+            lines = f.readlines()
+
+        new_lines = []
+        found = False
+
+        for line in lines:
+            # PDB záznamy atomů mají pevnou šířku, musí mít aspoň 26 znaků
+            if len(line) >= 26 and line.startswith(("ATOM", "HETATM")):
+                try:
+                    line_chain = line[21].strip()
+                    line_resseq = int(line[22:26].strip())
+
+                    if line_chain == chain and line_resseq == resseq:
+                        found = True
+                        continue  # Mažeme tento atom
+                except (ValueError, IndexError):
+                    # Pokud narazíme na nečitelný ResSeq, řádek raději necháme
+                    pass
+
+            new_lines.append(line)
+
+        if found:
+            with open(pdb_path, "w") as f:
+                f.writelines(new_lines)
+            logger.info(f"Successfully removed residue {resseq} from chain {chain} in {pdb_path.name}")
+            return True
+
+        logger.warning(f"Residue {resseq} in chain {chain} not found in {pdb_path.name}")
+        return False
+
+    except Exception as e:
+        logger.error(f"Error while editing PDB file: {e}")
+        return False

@@ -1,7 +1,7 @@
 import logging
 import requests
-import os
 import shutil
+import base64
 from typing import List, Dict, Any
 from pathlib import Path
 
@@ -11,24 +11,97 @@ logger = logging.getLogger(__name__)
 class ForceFieldService:
     # URL na externí databázi silových polí
     EXTERNAL_URL = "https://next.ida.4sims.eu/api/force_fields/"
-
-    # Lokální cache pro uložení extrahovaných souborů (.rtp, .itp, .atp)
+    # Lokální cache pro uložení extrahovaných souborů
     CACHE_DIR = Path("data/ff_cache")
 
     def __init__(self):
-        # Vytvoření cache adresáře při inicializaci
         try:
             self.CACHE_DIR.mkdir(parents=True, exist_ok=True)
         except Exception as e:
             logger.error(f"Failed to create cache directory {self.CACHE_DIR}: {e}")
 
+    def _decode_content(self, content: Any) -> str:
+        """Bezpečně dekóduje obsah z API (Base64 nebo čistý text)."""
+        if not content or not isinstance(content, str):
+            return ""
+
+        # Odstranění data URI prefixu, pokud existuje
+        if "base64," in content:
+            content = content.split("base64,")[1]
+
+        try:
+            # Pokus o dekódování base64
+            decoded_bytes = base64.b64decode(content)
+            return decoded_bytes.decode('utf-8')
+        except Exception:
+            # Pokud dekódování selže, předpokládáme, že je to už čistý text
+            return content
+
+    def prepare_forcefield_files(self, ff_data: Dict[str, Any]) -> Path:
+        """
+        Extrahuje, zploští a uloží soubory silového pole na disk.
+        Spojuje hlavní RTP soubor s knihovnou reziduí a nahrazuje #include ostrými daty.
+        """
+        raw_name = ff_data.get('display_name') or ff_data.get('ff_name') or 'unknown_ff'
+        ff_name = raw_name.replace(" ", "_")
+        target_dir = self.CACHE_DIR / ff_name
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"Preparing force field: {ff_name}")
+
+        # 1. Načtení všech potřebných dat z API (včetně residue_lib a atom_types)
+        rtp_raw = ff_data.get('force_field_file')
+        res_lib_raw = ff_data.get('residue_lib_ff_file')
+        nb_raw = ff_data.get('nonbonded_ff_file')
+        b_raw = ff_data.get('bonded_ff_file')
+        atp_raw = ff_data.get('atom_type_ff_file')
+
+        # Dekódování obsahu do textu
+        rtp_content = self._decode_content(rtp_raw)
+        res_lib_content = self._decode_content(res_lib_raw)
+        nb_content = self._decode_content(nb_raw)
+        b_content = self._decode_content(b_raw)
+        atp_content = self._decode_content(atp_raw)
+
+        if not res_lib_content:
+            logger.warning(f"Residue library (residue_lib_ff_file) is missing for {ff_name}. This will likely cause KeyError.")
+
+        # 2. ZPLOŠTĚNÍ RTP (Kombinace a nahrazení #include ostrými daty z ITP)
+        # Šéfova knihovna neumí číst vnořené soubory (#include), tak je vložíme ručně.
+        # Spojíme hlavní RTP wrapper s knihovnou reziduí (to je to "maso" silového pole).
+        raw_combined_content = rtp_content + "\n" + res_lib_content
+
+        flattened_rtp_lines = []
+        for line in raw_combined_content.splitlines():
+            clean_line = line.strip()
+            if clean_line.lower().startswith('#include'):
+                if "nonbonded" in clean_line.lower():
+                    flattened_rtp_lines.append(nb_content)
+                elif "bonded" in clean_line.lower():
+                    flattened_rtp_lines.append(b_content)
+            else:
+                flattened_rtp_lines.append(line)
+
+        final_rtp_content = "\n".join(flattened_rtp_lines)
+
+        # 3. Zápis finálních souborů na disk (názvy vyžadované knihovnou FF_IDA)
+        files = {
+            f"{ff_name}.rtp": final_rtp_content,
+            f"nonbonded_{ff_name}.itp": nb_content,
+            f"bonded_{ff_name}.itp": b_content,
+            f"{ff_name}.atp": atp_content
+        }
+
+        for fname, data in files.items():
+            with open(target_dir / fname, "w", encoding="utf-8") as f:
+                f.write(data)
+
+        logger.info(f"Force field {ff_name} successfully prepared and saved to disk.")
+        return target_dir
+
     def get_matching_forcefields(self, molecule_types: List[str]) -> List[Dict[str, Any]]:
-        """
-        Stáhne kompletní seznam FF z API a profiltruje ty, které odpovídají typům v molekule.
-        Slouží pro nabídku uživateli v UI.
-        """
+        """Stáhne seznam FF z API a vyfiltruje ty odpovídající molekule."""
         search_types = set(molecule_types)
-        # Rozšíření pro různé typy vody, pokud je přítomna
         if "W" in search_types:
             search_types.update(["W3", "W4", "W5"])
 
@@ -45,61 +118,10 @@ class ForceFieldService:
                 ff_types = ff.get("molecule_type") or []
                 if any(t in search_types for t in ff_types):
                     matched_ffs.append(ff)
-
-            logger.info(f"Successfully matched {len(matched_ffs)} force fields.")
             return matched_ffs
-
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
             logger.error(f"External API communication error: {e}")
             return []
-        except Exception as e:
-            logger.error(f"Unexpected error while matching force fields: {e}")
-            return []
-
-    def prepare_forcefield_files(self, ff_data: Dict[str, Any]) -> Path:
-        """
-        Extrahuje soubory z obřího JSONu a uloží je na disk pro FF_IDA.py.
-        Vrací Path k adresáři s konkrétním silovým polem.
-        """
-        ff_name = ff_data.get("name", "unknown_ff").replace(" ", "_")
-        target_dir = self.CACHE_DIR / ff_name
-
-        # Kontrola, zda už FF v cache existuje (abychom neparsovali znovu)
-        if target_dir.exists() and any(target_dir.iterdir()):
-            logger.info(f"Force field '{ff_name}' found in local cache.")
-            return target_dir
-
-        try:
-            target_dir.mkdir(parents=True, exist_ok=True)
-            logger.info(f"Extracting and saving files for force field: {ff_name}")
-
-            # Mapování klíčů z vašeho "extrémního" JSONu na fyzické soubory
-            file_map = {
-                "rtp_file": f"{ff_name}.rtp",
-                "atp_file": f"{ff_name}.atp",
-                "bonded_itp": f"bonded_{ff_name}.itp",
-                "nonbonded_itp": f"nonbonded_{ff_name}.itp"
-            }
-
-            files_saved = 0
-            for json_key, filename in file_map.items():
-                content = ff_data.get(json_key)
-                if content:
-                    file_path = target_dir / filename
-                    with open(file_path, "w", encoding="utf-8") as f:
-                        f.write(content)
-                    files_saved += 1
-
-            if files_saved == 0:
-                logger.warning(f"No valid force field files found in JSON for '{ff_name}'")
-            else:
-                logger.info(f"Saved {files_saved} files to {target_dir}")
-
-            return target_dir
-
-        except Exception as e:
-            logger.error(f"Failed to prepare force field files for '{ff_name}': {e}")
-            raise
 
     def clear_cache(self):
         """Vymaže celou složku ff_cache."""

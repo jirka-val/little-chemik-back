@@ -1,10 +1,10 @@
 import logging
 import io
 import aiofiles
-from fastapi import APIRouter, HTTPException, File, UploadFile, Body
+from fastapi import APIRouter, HTTPException, File, UploadFile, Body, Request
 from fastapi.concurrency import run_in_threadpool
 
-from app.services.pdb_service import PDBService
+from app.services.pdb_service import PDBService, remove_residue_from_pdb
 from app.workspaces.manager import workspace_manager
 from app.services.structure.hydrogenation import HydrogenationService
 
@@ -109,3 +109,24 @@ async def add_hydrogens(
     except Exception as e:
         logger.exception(f"Error during hydrogenation for {workspace_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Structure modification failed: {str(e)}")
+
+
+@router.post("/remove-residue/{workspace_id}")
+async def delete_residue(workspace_id: str, request: Request):
+    data = await request.json()
+
+    FILENAME = "structure.pdb"
+    pdb_path = workspace_manager.get_workspace_dir(workspace_id) / FILENAME
+
+    success = remove_residue_from_pdb(
+        pdb_path=pdb_path,
+        chain=data.get("chain"),
+        resseq=int(data.get("resseq"))
+    )
+
+    if not success:
+        logger.warning(f"Residue removal failed for in {workspace_id}")
+        raise HTTPException(status_code=404, detail="Residue not found or could not be removed.")
+
+    logger.info(f"Residue {data.get('resseq')} removed from chain {data.get('chain')} in workspace {workspace_id}")
+    return {"status": "success"}
