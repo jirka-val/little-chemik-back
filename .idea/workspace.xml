@@ -4,13 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor import paths for improved module organization and add topology generation endpoint">
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor forcefield service to improve file preparation and add residue removal endpoint">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/topology.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/topology.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/forcefield_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/forcefield_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/pdb_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/pdb_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/topology_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/topology_service.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -200,7 +196,7 @@
       <workItem from="1775743710336" duration="306000" />
       <workItem from="1775765066110" duration="17271000" />
       <workItem from="1775785294684" duration="1017000" />
-      <workItem from="1775787591103" duration="935000" />
+      <workItem from="1775787591103" duration="1027000" />
     </task>
     <task id="LOCAL-00001" summary="Init">
       <option name="closed" value="true" />
@@ -514,7 +510,15 @@
       <option name="project" value="LOCAL" />
       <updated>1775775086431</updated>
     </task>
-    <option name="localTasksCounter" value="40" />
+    <task id="LOCAL-00040" summary="refactor forcefield service to improve file preparation and add residue removal endpoint">
+      <option name="closed" value="true" />
+      <created>1775788552575</created>
+      <option name="number" value="00040" />
+      <option name="presentableId" value="LOCAL-00040" />
+      <option name="project" value="LOCAL" />
+      <updated>1775788552575</updated>
+    </task>
+    <option name="localTasksCounter" value="41" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -532,7 +536,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="New validation" />
     <MESSAGE value="build_sequence" />
     <MESSAGE value="Updated converting_dictionary.json so i updated analysis_service.py, now i should be able to recognize start and end of reziduum" />
     <MESSAGE value="add atom validation and connectivity integrity checks to analysis service" />
@@ -557,7 +560,8 @@
     <MESSAGE value="refactor analysis, download, forcefields, and molecules endpoints for improved asynchronous handling and error logging" />
     <MESSAGE value="refactor analysis service import path for improved module organization" />
     <MESSAGE value="refactor import paths for improved module organization and add topology generation endpoint" />
-    <option name="LAST_COMMIT_MESSAGE" value="refactor import paths for improved module organization and add topology generation endpoint" />
+    <MESSAGE value="refactor forcefield service to improve file preparation and add residue removal endpoint" />
+    <option name="LAST_COMMIT_MESSAGE" value="refactor forcefield service to improve file preparation and add residue removal endpoint" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/little_chemik_back$.coverage" NAME=" Coverage Results" MODIFIED="1773355688540" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
