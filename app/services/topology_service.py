@@ -69,6 +69,7 @@ class TopologyService:
                 mol['force_field_data'][ff_name] = ff_instance
 
             # 4. Samotný výpočet AMBER topologie
+
             # Díky zploštěnému RTP teď AMBER_topology najde jednotku 'RU5' přímo v ff_instance.units
             logger.info("Running AMBER topology calculation...")
             topology_data = AMBER_topology.create_AMBER_topology(mol)

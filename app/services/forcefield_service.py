@@ -49,7 +49,7 @@ class ForceFieldService:
 
         logger.info(f"Preparing force field: {ff_name}")
 
-        # 1. Načtení všech potřebných dat z API (včetně residue_lib a atom_types)
+        # Načtení všech potřebných dat z API
         rtp_raw = ff_data.get('force_field_file')
         res_lib_raw = ff_data.get('residue_lib_ff_file')
         nb_raw = ff_data.get('nonbonded_ff_file')
@@ -66,8 +66,7 @@ class ForceFieldService:
         if not res_lib_content:
             logger.warning(f"Residue library (residue_lib_ff_file) is missing for {ff_name}. This will likely cause KeyError.")
 
-        # 2. ZPLOŠTĚNÍ RTP (Kombinace a nahrazení #include ostrými daty z ITP)
-        # Šéfova knihovna neumí číst vnořené soubory (#include), tak je vložíme ručně.
+        # ZPLOŠTĚNÍ RTP (Kombinace a nahrazení #include ostrými daty z ITP)
         # Spojíme hlavní RTP wrapper s knihovnou reziduí (to je to "maso" silového pole).
         raw_combined_content = rtp_content + "\n" + res_lib_content
 
@@ -84,7 +83,7 @@ class ForceFieldService:
 
         final_rtp_content = "\n".join(flattened_rtp_lines)
 
-        # 3. Zápis finálních souborů na disk (názvy vyžadované knihovnou FF_IDA)
+        # Zápis finálních souborů na disk (názvy vyžadované knihovnou FF_IDA)
         files = {
             f"{ff_name}.rtp": final_rtp_content,
             f"nonbonded_{ff_name}.itp": nb_content,

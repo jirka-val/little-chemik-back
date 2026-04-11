@@ -41,6 +41,7 @@ class PDBService:
                         found.add(api_code)
         return list(found)
 
+
 def parse_pdb_to_topology_dict(pdb_content: str, selected_force_fields: dict = None) -> dict:
     if selected_force_fields is None:
         selected_force_fields = {"R": "OL3"}
@@ -64,8 +65,9 @@ def parse_pdb_to_topology_dict(pdb_content: str, selected_force_fields: dict = N
             except ValueError:
                 continue
 
-            if res_name in ['HOH', 'WAT', 'SOL']:
-                continue
+            # ZDE BYLO IGNOROVÁNÍ VODY - NYNÍ ODSTRANĚNO
+            # if res_name in ['HOH', 'WAT', 'SOL']:
+            #     continue
 
             res_key = (chain_id, res_seq)
 
@@ -81,7 +83,12 @@ def parse_pdb_to_topology_dict(pdb_content: str, selected_force_fields: dict = N
         chain_length = len(res_list)
 
         for i, res_name in enumerate(res_list):
+            # Výchozí typ je R (RNA)
             mol_type = "R"
+
+            # Pokud je to voda, změníme typ molekuly na W
+            if res_name in ['HOH', 'WAT', 'SOL']:
+                mol_type = "W"
 
             is_nucleotide = len(res_name) == 1 and res_name in ['A', 'C', 'G', 'U'] or res_name.startswith('R')
 
