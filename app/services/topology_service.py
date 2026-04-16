@@ -1,3 +1,4 @@
+import json
 import logging
 from pathlib import Path
 from typing import Dict, Any
@@ -8,6 +9,7 @@ from app.services.forcefield_service import ForceFieldService
 from app.utils.adams4sims_processing_library.utils import AMBER_topology
 from app.utils.adams4sims_processing_library import FF_IDA
 from app.workspaces.manager import WorkspaceManager
+from app.utils.adams4sims_processing_library.utils.alias import resn_alias
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +24,16 @@ class TopologyService:
         Main pipeline for generating AMBER topology (.prmtop) from a PDB file.
         """
         try:
+            # --- PŘIDÁNO: Uložení příchozího JSONu pro ladění (Debug) ---
+            workspace_dir = self.workspace_manager.get_workspace_dir(workspace_id)
+            debug_json_path = workspace_dir / "received_ff_selections.json"
+
+            with open(debug_json_path, "w", encoding="utf-8") as json_file:
+                json.dump(ff_selections, json_file, indent=4, ensure_ascii=False)
+
+            logger.info(f"Saved incoming forcefield selections to {debug_json_path}")
+            # ------------------------------------------------------------
+
             # 1. Načtení PDB obsahu
             pdb_path = self.workspace_manager.get_file_path(workspace_id, pdb_filename)
             with open(pdb_path, "r") as f:
@@ -64,13 +76,38 @@ class TopologyService:
                     str(ff_path / f"{ff_name}.atp")
                 )
 
-                # Registrace instance k typu molekuly (např. 'R')
+                # --- ZÁPLATA PRO RIGIDNÍ VODU (TIP3P, TIP5P, SPCE) ---
+                if mol_type == 'W':
+                    if hasattr(ff_instance, 'b') and isinstance(ff_instance.b, dict):
+                        if 'angletypes' not in ff_instance.b:
+                            ff_instance.b['angletypes'] = {}
+
+                        # 1. Varianta pro modely rodiny TIP (TIP3P, TIP4P, TIP5P)
+                        ff_instance.b['angletypes'][('WH', 'WH', 'WO')] = [0.0, 37.74, 0.0]
+                        ff_instance.b['angletypes'][('WO', 'WH', 'WH')] = [0.0, 37.74, 0.0]
+                        ff_instance.b['angletypes'][('WH', 'WO', 'WH')] = [0.0, 104.52, 0.0]
+
+                        # Virtuální body pro TIP4P/TIP5P
+                        ff_instance.b['angletypes'][('WEP', 'WO', 'WEP')] = [0.0, 109.47, 0.0]
+                        ff_instance.b['angletypes'][('WEP', 'WO', 'WH')] = [0.0, 109.47, 0.0]
+                        ff_instance.b['angletypes'][('WH', 'WO', 'WEP')] = [0.0, 109.47, 0.0]
+
+                        # 2. Varianta pro modely rodiny SPC (SPC, SPCE)
+                        ff_instance.b['angletypes'][('HW', 'HW', 'OW')] = [0.0, 37.74, 0.0]
+                        ff_instance.b['angletypes'][('OW', 'HW', 'HW')] = [0.0, 37.74, 0.0]
+                        ff_instance.b['angletypes'][('HW', 'OW', 'HW')] = [0.0, 109.47, 0.0]
+                # -----------------------------------------------------
+
+
+                # Registrace instance k typu molekuly (např. 'R' nebo 'W')
                 mol['force_field_data'][mol_type] = ff_instance
                 mol['force_field_data'][ff_name] = ff_instance
 
-            # 4. Samotný výpočet AMBER topologie
+            # Aplikace aliasů před generováním (HOH -> WAT atd.)
+            for res in mol['residues']:
+                res['resn'] = resn_alias(res['resn'])
 
-            # Díky zploštěnému RTP teď AMBER_topology najde jednotku 'RU5' přímo v ff_instance.units
+            # 4. Samotný výpočet AMBER topologie
             logger.info("Running AMBER topology calculation...")
             topology_data = AMBER_topology.create_AMBER_topology(mol)
 
@@ -84,7 +121,7 @@ class TopologyService:
             return output_filename
 
         except Exception as e:
-            # Detailní logování chyby pro případ, že by šéfova knihovna na něčem zakopla
+            # Detailní logování chyby
             logger.error(f"Topology generation failed: {e}")
             logger.error(f"=== TRACEBACK ===\n{traceback.format_exc()}")
             raise

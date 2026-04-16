@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 class ForceFieldService:
     # URL na externí databázi silových polí
     EXTERNAL_URL = "https://next.ida.4sims.eu/api/force_fields/"
+
     # Lokální cache pro uložení extrahovaných souborů
     CACHE_DIR = Path("data/ff_cache")
 
