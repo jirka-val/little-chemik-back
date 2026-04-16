@@ -6,6 +6,7 @@ import traceback
 
 from app.services.pdb_service import parse_pdb_to_topology_dict
 from app.services.forcefield_service import ForceFieldService
+from app.services.water_topology_patch import apply_topology_patches
 from app.utils.adams4sims_processing_library.utils import AMBER_topology
 from app.utils.adams4sims_processing_library import FF_IDA
 from app.workspaces.manager import WorkspaceManager
@@ -42,19 +43,25 @@ class TopologyService:
             logger.info(f"Starting topology generation for workspace {workspace_id}")
 
             # 2. Mapování pro parser
-            # Ponecháváme tvoje moderní názvosloví (RU5, RA...), aby parser věděl,
-            # že jde o molekuly typu RNA ('R').
             rna_names = ["RU5", "RU3", "RU", "RA5", "RA3", "RA", "RC5", "RC3", "RC",
                          "C5", "C3", "C", "RG5", "RG3", "RG", "G5", "G3", "G"]
+            # PŘIDÁNO: Standardní jména pro vodu a ionty
+            water_names = ["HOH", "WAT", "SOL", "W", "W3", "W4", "W5"]
+            ion_names = ["NA", "Na+", "CL", "Cl-", "K", "K+", "MG", "Mg2+", "CA", "Ca2+"]
 
             ff_mapping = {}
             for mol_type, data in ff_selections.items():
                 raw_name = data.get('display_name') or data.get('ff_name') or 'unknown_ff'
                 ff_name = raw_name.replace(" ", "_")
                 ff_mapping[mol_type] = ff_name
+
                 if mol_type == 'R':
-                    for name in rna_names:
-                        ff_mapping[name] = ff_name
+                    for name in rna_names: ff_mapping[name] = ff_name
+                # PŘIDÁNO: Mapování pro W a I
+                elif mol_type == 'W':
+                    for name in water_names: ff_mapping[name] = ff_name
+                elif mol_type == 'I':
+                    for name in ion_names: ff_mapping[name] = ff_name
 
             # Rozparsování PDB do vnitřní struktury 'mol'
             mol = parse_pdb_to_topology_dict(pdb_content, ff_mapping)
@@ -76,28 +83,9 @@ class TopologyService:
                     str(ff_path / f"{ff_name}.atp")
                 )
 
-                # --- ZÁPLATA PRO RIGIDNÍ VODU (TIP3P, TIP5P, SPCE) ---
-                if mol_type == 'W':
-                    if hasattr(ff_instance, 'b') and isinstance(ff_instance.b, dict):
-                        if 'angletypes' not in ff_instance.b:
-                            ff_instance.b['angletypes'] = {}
-
-                        # 1. Varianta pro modely rodiny TIP (TIP3P, TIP4P, TIP5P)
-                        ff_instance.b['angletypes'][('WH', 'WH', 'WO')] = [0.0, 37.74, 0.0]
-                        ff_instance.b['angletypes'][('WO', 'WH', 'WH')] = [0.0, 37.74, 0.0]
-                        ff_instance.b['angletypes'][('WH', 'WO', 'WH')] = [0.0, 104.52, 0.0]
-
-                        # Virtuální body pro TIP4P/TIP5P
-                        ff_instance.b['angletypes'][('WEP', 'WO', 'WEP')] = [0.0, 109.47, 0.0]
-                        ff_instance.b['angletypes'][('WEP', 'WO', 'WH')] = [0.0, 109.47, 0.0]
-                        ff_instance.b['angletypes'][('WH', 'WO', 'WEP')] = [0.0, 109.47, 0.0]
-
-                        # 2. Varianta pro modely rodiny SPC (SPC, SPCE)
-                        ff_instance.b['angletypes'][('HW', 'HW', 'OW')] = [0.0, 37.74, 0.0]
-                        ff_instance.b['angletypes'][('OW', 'HW', 'HW')] = [0.0, 37.74, 0.0]
-                        ff_instance.b['angletypes'][('HW', 'OW', 'HW')] = [0.0, 109.47, 0.0]
-                # -----------------------------------------------------
-
+                # --- UNIVERZÁLNÍ ZÁPLATA PRO RIGIDNÍ VODU ---
+                apply_topology_patches(ff_instance, mol_type)
+                # --------------------------------------------
 
                 # Registrace instance k typu molekuly (např. 'R' nebo 'W')
                 mol['force_field_data'][mol_type] = ff_instance

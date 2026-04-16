@@ -217,7 +217,7 @@ resn_alias_dict ={
 
      #  'I1':
      # {
-       'NA':'Na+',
+      'NA':'Na+',
       'K':'K+',
       'CL':'Cl-',
      #  },
