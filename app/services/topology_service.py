@@ -6,7 +6,7 @@ import traceback
 
 from app.services.pdb_service import parse_pdb_to_topology_dict
 from app.services.forcefield_service import ForceFieldService
-from app.services.water_topology_patch import apply_topology_patches
+from app.services.topology_patches import apply_topology_patches
 from app.utils.adams4sims_processing_library.utils import AMBER_topology
 from app.utils.adams4sims_processing_library import FF_IDA
 from app.workspaces.manager import WorkspaceManager
@@ -25,7 +25,7 @@ class TopologyService:
         Main pipeline for generating AMBER topology (.prmtop) from a PDB file.
         """
         try:
-            # --- PŘIDÁNO: Uložení příchozího JSONu pro ladění (Debug) ---
+            # --- Ladění (Debug): Uložení příchozích dat ---
             workspace_dir = self.workspace_manager.get_workspace_dir(workspace_id)
             debug_json_path = workspace_dir / "received_ff_selections.json"
 
@@ -33,7 +33,7 @@ class TopologyService:
                 json.dump(ff_selections, json_file, indent=4, ensure_ascii=False)
 
             logger.info(f"Saved incoming forcefield selections to {debug_json_path}")
-            # ------------------------------------------------------------
+            # -----------------------------------------------
 
             # 1. Načtení PDB obsahu
             pdb_path = self.workspace_manager.get_file_path(workspace_id, pdb_filename)
@@ -42,10 +42,13 @@ class TopologyService:
 
             logger.info(f"Starting topology generation for workspace {workspace_id}")
 
-            # 2. Mapování pro parser
+            # 2. Definice jmen pro parser
             rna_names = ["RU5", "RU3", "RU", "RA5", "RA3", "RA", "RC5", "RC3", "RC",
                          "C5", "C3", "C", "RG5", "RG3", "RG", "G5", "G3", "G"]
-            # PŘIDÁNO: Standardní jména pro vodu a ionty
+
+            # PŘIDÁNO: Standardní jména pro DNA rezidua
+            dna_names = ["DA", "DA5", "DA3", "DC", "DC5", "DC3", "DG", "DG5", "DG3", "DT", "DT5", "DT3"]
+
             water_names = ["HOH", "WAT", "SOL", "W", "W3", "W4", "W5"]
             ion_names = ["NA", "Na+", "CL", "Cl-", "K", "K+", "MG", "Mg2+", "CA", "Ca2+"]
 
@@ -57,7 +60,8 @@ class TopologyService:
 
                 if mol_type == 'R':
                     for name in rna_names: ff_mapping[name] = ff_name
-                # PŘIDÁNO: Mapování pro W a I
+                elif mol_type == 'D':
+                    for name in dna_names: ff_mapping[name] = ff_name
                 elif mol_type == 'W':
                     for name in water_names: ff_mapping[name] = ff_name
                 elif mol_type == 'I':
@@ -66,16 +70,14 @@ class TopologyService:
             # Rozparsování PDB do vnitřní struktury 'mol'
             mol = parse_pdb_to_topology_dict(pdb_content, ff_mapping)
 
-            # 3. Načtení Force Fieldů
+            # 3. Načtení Force Fieldů a příprava instancí
             mol['force_field_data'] = {}
             for mol_type, ff_data in ff_selections.items():
                 raw_name = ff_data.get('display_name') or ff_data.get('ff_name') or 'unknown_ff'
                 ff_name = raw_name.replace(" ", "_")
 
-                # ForceFieldService teď zploští RTP a přidá residue_lib (RU5, RG...)
                 ff_path = self.ff_service.prepare_forcefield_files(ff_data)
 
-                # Vytvoření instance silového pole pomocí šéfovy knihovny
                 ff_instance = FF_IDA.ff(
                     str(ff_path / f"{ff_name}.rtp"),
                     str(ff_path / f"nonbonded_{ff_name}.itp"),
@@ -83,25 +85,58 @@ class TopologyService:
                     str(ff_path / f"{ff_name}.atp")
                 )
 
-                # --- UNIVERZÁLNÍ ZÁPLATA PRO RIGIDNÍ VODU ---
+                # Aplikace záplat (Ionty, Voda)
                 apply_topology_patches(ff_instance, mol_type)
-                # --------------------------------------------
 
-                # Registrace instance k typu molekuly (např. 'R' nebo 'W')
+                # Registrace k typu molekuly
                 mol['force_field_data'][mol_type] = ff_instance
                 mol['force_field_data'][ff_name] = ff_instance
 
-            # Aplikace aliasů před generováním (HOH -> WAT atd.)
+                # OPRAVA 1: Propojení DNA ('D') na vnitřní tag Amberu ('R')
+                if mol_type == 'D':
+                    mol['force_field_data']['R'] = ff_instance
+                elif mol_type == 'R':
+                    mol['force_field_data']['D'] = ff_instance
+
+            # --- OPRAVA 2: Terminální rezidua (5' a 3') pro DNA/RNA ---
+            # Identifikujeme začátky a konce řetězců a přejmenujeme je pro Amber
+            chains = {}
+            for res in mol['residues']:
+                c_id = res.get('chain', 'A')
+                if c_id not in chains: chains[c_id] = []
+                chains[c_id].append(res)
+
+            nucleic_bases = ["DA", "DC", "DG", "DT", "RA", "RC", "RG", "RU", "A", "G", "C", "T", "U"]
+
+            for c_id, r_list in chains.items():
+                if not r_list: continue
+                first_res = r_list[0]
+                last_res = r_list[-1]
+
+                # 5' konec (start)
+                if any(first_res['resn'] == base for base in nucleic_bases):
+                    orig = first_res['resn']
+                    first_res['resn'] = f"{orig}5"
+                    logger.info(f"Chain {c_id}: Fixed 5' terminal {orig} -> {first_res['resn']}")
+
+                # 3' konec (end)
+                if len(r_list) > 1 and any(last_res['resn'] == base for base in nucleic_bases):
+                    orig = last_res['resn']
+                    last_res['resn'] = f"{orig}3"
+                    logger.info(f"Chain {c_id}: Fixed 3' terminal {orig} -> {last_res['resn']}")
+            # ------------------------------------------------------------
+
+            # Aplikace aliasů (HOH -> WAT atd.)
             for res in mol['residues']:
                 res['resn'] = resn_alias(res['resn'])
 
-            # 4. Samotný výpočet AMBER topologie
+            # 4. Výpočet AMBER topologie
             logger.info("Running AMBER topology calculation...")
             topology_data = AMBER_topology.create_AMBER_topology(mol)
 
-            # 5. Uložení výsledného .prmtop souboru
+            # 5. Uložení .prmtop souboru
             output_filename = pdb_filename.replace(".pdb", ".prmtop")
-            output_path = self.workspace_manager.get_workspace_dir(workspace_id) / output_filename
+            output_path = workspace_dir / output_filename
 
             AMBER_topology.write_AMBER_topology(str(output_path), topology_data)
 
@@ -109,7 +144,6 @@ class TopologyService:
             return output_filename
 
         except Exception as e:
-            # Detailní logování chyby
             logger.error(f"Topology generation failed: {e}")
             logger.error(f"=== TRACEBACK ===\n{traceback.format_exc()}")
-            raise
+            raise e
