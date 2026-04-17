@@ -4,10 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor topology service to enhance water and ion handling with universal patching">
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor topology service to improve DNA residue handling and enhance debugging support">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/topology_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/topology_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/water_topology_patch.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/topology_patches.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/Dockerfile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -205,7 +205,8 @@
       <workItem from="1776070394232" duration="234000" />
       <workItem from="1776366132019" duration="1083000" />
       <workItem from="1776368853340" duration="7573000" />
-      <workItem from="1776399602919" duration="2777000" />
+      <workItem from="1776399602919" duration="3352000" />
+      <workItem from="1776404279436" duration="1086000" />
     </task>
     <task id="LOCAL-00001" summary="Init">
       <option name="closed" value="true" />
@@ -559,7 +560,15 @@
       <option name="project" value="LOCAL" />
       <updated>1776380504156</updated>
     </task>
-    <option name="localTasksCounter" value="45" />
+    <task id="LOCAL-00045" summary="refactor topology service to improve DNA residue handling and enhance debugging support">
+      <option name="closed" value="true" />
+      <created>1776403492684</created>
+      <option name="number" value="00045" />
+      <option name="presentableId" value="LOCAL-00045" />
+      <option name="project" value="LOCAL" />
+      <updated>1776403492684</updated>
+    </task>
+    <option name="localTasksCounter" value="46" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -577,7 +586,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="correct analysis of ´5 and ´3" />
     <MESSAGE value="update for front" />
     <MESSAGE value="update" />
     <MESSAGE value="TODO &#10;potřebuji vyřešit proč backend posílá na POST /api/v1/validate/preview-selection HTTP/1.1&quot; -&gt; 200 OK" />
@@ -602,7 +610,8 @@
     <MESSAGE value="refactor alias and pdb services for improved residue handling and water type recognition" />
     <MESSAGE value="refactor alias and forcefield services to enhance residue handling and add debugging support" />
     <MESSAGE value="refactor topology service to enhance water and ion handling with universal patching" />
-    <option name="LAST_COMMIT_MESSAGE" value="refactor topology service to enhance water and ion handling with universal patching" />
+    <MESSAGE value="refactor topology service to improve DNA residue handling and enhance debugging support" />
+    <option name="LAST_COMMIT_MESSAGE" value="refactor topology service to improve DNA residue handling and enhance debugging support" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/little_chemik_back$.coverage" NAME=" Coverage Results" MODIFIED="1773355688540" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
