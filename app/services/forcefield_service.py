@@ -102,8 +102,12 @@ class ForceFieldService:
     def get_matching_forcefields(self, molecule_types: List[str]) -> List[Dict[str, Any]]:
         """Stáhne seznam FF z API a vyfiltruje ty odpovídající molekule."""
         search_types = set(molecule_types)
+
         if "W" in search_types:
             search_types.update(["W3", "W4", "W5"])
+
+        if "I" in search_types:
+            search_types.update(["I1", "Im", "I", "Im+", "I+", "I-", "I1+"])
 
         try:
             headers = {"x-client-version": "0.1.0"}

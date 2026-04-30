@@ -30,7 +30,9 @@ class PDBService:
             "R": {"A", "C", "G", "U"},
             "P": {"ALA", "ARG", "ASN", "ASP", "CYS", "GLU", "GLN", "GLY", "HIS",
                   "ILE", "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL"},
-            "W": {"HOH", "WAT", "SOL"}
+            "W": {"HOH", "WAT", "SOL"},
+            "I": {"NA", "Na+", "CL", "Cl-", "K", "K+", "MG", "Mg2+", "CA", "Ca2+", "LI", "Li+", "RB", "Rb+", "CS",
+                  "Cs+", "ZN", "Zn2+", "F", "F-", "BR", "Br-", "I-"}
         }
 
         for line in pdb_content.splitlines():
