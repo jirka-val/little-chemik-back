@@ -1,9 +1,6 @@
-import itertools
-
-
 def apply_topology_patches(ff_instance, mol_type: str):
     """
-    Univerzální patch pro RNA, vodu a všechny ionty z nabídky.
+    Univerzální patch pro ionty z nabídky.
     Zajišťuje, že AMBER_topology.py vždy najde potřebná fyzikální data.
     """
     if not hasattr(ff_instance, 'b'): ff_instance.b = {}
@@ -54,28 +51,5 @@ def apply_topology_patches(ff_instance, mol_type: str):
             # Zajistíme registraci typu
             atom_type = ff_instance.units[data['real']]['atoms']['type'][0]
             ff_instance.types[atom_type] = atom_type
-
-    # --- ČÁST B: Voda (oprava geometrie pro rigidní modely) ---
-    if mol_type == 'W':
-        for cat in ['angletypes', 'dihedraltypes', 'impropertypes']:
-            if cat not in ff_instance.b: ff_instance.b[cat] = {}
-
-        water_atoms = ['WH', 'WO', 'WEP', 'HW', 'OW', 'X', '']
-        dummy_vals = [[0.0, 0.0, 0.0, 0.0, 0.0]]
-
-        # Úhly (přesné hodnoty pro TIP a SPC rodiny)
-        ff_instance.b['angletypes'][('WH', 'WO', 'WH')] = [0.0, 104.52, 0.0]
-        ff_instance.b['angletypes'][('HW', 'OW', 'HW')] = [0.0, 109.47, 0.0]
-
-        # Vyplnění zbytku kombinací pro stabilitu parseru
-        for combo in itertools.product(water_atoms, repeat=3):
-            if combo not in ff_instance.b['angletypes']:
-                ff_instance.b['angletypes'][combo] = [0.0, 109.47, 0.0]
-
-        for combo in itertools.product(water_atoms, repeat=4):
-            if combo not in ff_instance.b['dihedraltypes']:
-                ff_instance.b['dihedraltypes'][combo] = dummy_vals
-            if combo not in ff_instance.b['impropertypes']:
-                ff_instance.b['impropertypes'][combo] = dummy_vals
 
     return ff_instance

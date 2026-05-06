@@ -3,6 +3,8 @@ import os
 import tempfile
 import subprocess
 import logging
+import time
+
 from pdbfixer import PDBFixer
 from openmm.app import PDBFile
 from openmm import unit
@@ -65,15 +67,21 @@ class HydrogenationService:
                           negative_ion: str = "Cl-") -> str:
         """
         Komplexní příprava PDB souboru (vodíky, krystalové vody, solvatace, ionty).
-
         """
+        total_start = time.time()
         try:
+            logger.info("--- Zahajuji přípravu struktury ---")
+
             # 1. PROPKA pro přesnou protonaci
+            propka_start = time.time()
             pdb_content = self._apply_propka(pdb_content, ph)
+            logger.info(f"PROPKA dokončena za: {time.time() - propka_start:.2f} s")
 
             # 2. Načtení do PDBFixeru
+            load_start = time.time()
             input_stream = io.StringIO(pdb_content)
             fixer = PDBFixer(pdbfile=input_stream)
+            logger.info(f"Načtení do PDBFixeru dokončeno za: {time.time() - load_start:.2f} s")
 
             # 3. Řešení krystalových vod a ligandů
             if crystal_water_mode == "remove_all":
@@ -82,19 +90,24 @@ class HydrogenationService:
                 fixer.removeHeterogens(True)
 
             # 4. Oprava struktury
+            find_start = time.time()
             fixer.findMissingResidues()
             fixer.findMissingAtoms()
+            logger.info(f"Hledání chybějících reziduí/atomů dokončeno za: {time.time() - find_start:.2f} s")
 
-            # KLÍČOVÁ OPRAVA: PDBFixer vyžaduje reálné přidání chybějících těžkých atomů (addMissingAtoms)
-            # předtím, než se pokusí o solvataci nebo přidání vodíků.
+            add_atoms_start = time.time()
             fixer.addMissingAtoms()
+            logger.info(f"Přidání chybějících těžkých atomů dokončeno za: {time.time() - add_atoms_start:.2f} s")
 
-            # Přidání vodíků podle zadaného pH
+            add_hydrogens_start = time.time()
             fixer.addMissingHydrogens(ph)
+            logger.info(f"Přidání vodíků (pH {ph}) dokončeno za: {time.time() - add_hydrogens_start:.2f} s")
 
             # 5. SOLVATACE A IONTY
             if add_solvent:
-                logger.info(f"Přidávám solvent a ionty: {positive_ion}, {negative_ion}, síla: {ionic_strength}M")
+                logger.info(
+                    f"Zahajuji solvataci (padding: {box_padding_nm} nm, síla: {ionic_strength}M). Toto může trvat velmi dlouho...")
+                solv_start = time.time()
                 try:
                     fixer.addSolvent(
                         padding=box_padding_nm * unit.nanometers,
@@ -102,17 +115,23 @@ class HydrogenationService:
                         negativeIon=negative_ion,
                         ionicStrength=ionic_strength * unit.molar
                     )
+                    logger.info(f"Solvatace a ionty ÚSPĚŠNĚ DOKONČENY za: {time.time() - solv_start:.2f} s")
                 except Exception as solv_err:
-                    logger.error(f"Pád PDBFixeru při solvataci: {solv_err}")
+                    solv_time = time.time() - solv_start
+                    logger.error(f"Pád PDBFixeru při solvataci po {solv_time:.2f} s: {solv_err}")
                     raise ValueError(f"Nepodařilo se přidat vodní box: {solv_err}")
 
             # 6. Export zpět do PDB textu
+            write_start = time.time()
             output_stream = io.StringIO()
             PDBFile.writeFile(fixer.topology, fixer.positions, output_stream, keepIds=True)
+            logger.info(f"Zápis do StringIO dokončen za: {time.time() - write_start:.2f} s")
 
+            logger.info(
+                f"--- Příprava struktury kompletně hotova za celkový čas: {time.time() - total_start:.2f} s ---")
             return output_stream.getvalue()
 
         except Exception as e:
-            logger.error(f"Kritická chyba v HydrogenationService: {str(e)}")
-            # Vyhození chyby dál, aby ji zachytil endpoint a vrátil 500 s popisem
+            total_time = time.time() - total_start
+            logger.error(f"Kritická chyba v HydrogenationService po {total_time:.2f} s: {str(e)}")
             raise e

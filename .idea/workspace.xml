@@ -4,12 +4,12 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor Dockerfile and requirements to use Miniforge3 and streamline package installation">
-      <change afterPath="$PROJECT_DIR$/app/services/export_service.py" afterDir="false" />
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor download service to support multiple file formats and implement on-demand CRD generation">
+      <change afterPath="$PROJECT_DIR$/tests/test_performance.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/download.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/download.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/forcefield_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/forcefield_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/pdb_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/pdb_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/structure/hydrogenation.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/structure/hydrogenation.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/topology_patches.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/topology_patches.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/utils/adams4sims_processing_library/utils/AMBER_topology.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/utils/adams4sims_processing_library/utils/AMBER_topology.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -66,7 +66,7 @@
     &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
     &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
     &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;reference.settingsdialog.IDE.editor.colors.Console Font&quot;,
     &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
 }</component>
@@ -214,7 +214,12 @@
       <workItem from="1777013735455" duration="2131000" />
       <workItem from="1777282357924" duration="5000" />
       <workItem from="1777577690490" duration="2896000" />
-      <workItem from="1777580671892" duration="2735000" />
+      <workItem from="1777580671892" duration="3342000" />
+      <workItem from="1777618449210" duration="1506000" />
+      <workItem from="1777664970916" duration="4245000" />
+      <workItem from="1778106205806" duration="817000" />
+      <workItem from="1778107047333" duration="2575000" />
+      <workItem from="1778109749271" duration="395000" />
     </task>
     <task id="LOCAL-00001" summary="Init">
       <option name="closed" value="true" />
@@ -584,7 +589,15 @@
       <option name="project" value="LOCAL" />
       <updated>1776408206731</updated>
     </task>
-    <option name="localTasksCounter" value="47" />
+    <task id="LOCAL-00047" summary="refactor download service to support multiple file formats and implement on-demand CRD generation">
+      <option name="closed" value="true" />
+      <created>1777586235508</created>
+      <option name="number" value="00047" />
+      <option name="presentableId" value="LOCAL-00047" />
+      <option name="project" value="LOCAL" />
+      <updated>1777586235508</updated>
+    </task>
+    <option name="localTasksCounter" value="48" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -602,7 +615,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="update" />
     <MESSAGE value="TODO &#10;potřebuji vyřešit proč backend posílá na POST /api/v1/validate/preview-selection HTTP/1.1&quot; -&gt; 200 OK" />
     <MESSAGE value="{&#13;&#10;    &quot;error&quot;: {&#13;&#10;        &quot;message&quot;: &quot;You didn't provide an API key. You need to provide your API key in an Authorization header using Bearer auth (i.e. Authorization: Bearer YOUR_KEY), or as the password field (with blank username) if you're accessing the API from your browser and are prompted for a username and password. You can obtain an API key from https://platform.openai.com/account/api-keys.&quot;,&#13;&#10;        &quot;type&quot;: &quot;invalid_request_error&quot;,&#13;&#10;        &quot;param&quot;: null,&#13;&#10;        &quot;code&quot;: null&#13;&#10;    }&#13;&#10;}" />
     <MESSAGE value="{&#13;&#10;    &quot;error&quot;: {&#13;&#10;        &quot;message&quot;: &quot;You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.&quot;,&#13;&#10;        &quot;type&quot;: &quot;insufficient_quota&quot;,&#13;&#10;        &quot;param&quot;: null,&#13;&#10;        &quot;code&quot;: &quot;insufficient_quota&quot;&#13;&#10;    }&#13;&#10;}" />
@@ -627,7 +639,8 @@
     <MESSAGE value="refactor topology service to enhance water and ion handling with universal patching" />
     <MESSAGE value="refactor topology service to improve DNA residue handling and enhance debugging support" />
     <MESSAGE value="refactor Dockerfile and requirements to use Miniforge3 and streamline package installation" />
-    <option name="LAST_COMMIT_MESSAGE" value="refactor Dockerfile and requirements to use Miniforge3 and streamline package installation" />
+    <MESSAGE value="refactor download service to support multiple file formats and implement on-demand CRD generation" />
+    <option name="LAST_COMMIT_MESSAGE" value="refactor download service to support multiple file formats and implement on-demand CRD generation" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/little_chemik_back$.coverage" NAME=" Coverage Results" MODIFIED="1773355688540" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
