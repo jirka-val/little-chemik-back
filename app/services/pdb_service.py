@@ -43,6 +43,63 @@ class PDBService:
                         found.add(api_code)
         return list(found)
 
+    def extract_water_coordinates(self, pdb_content: str) -> list[dict]:
+        """
+        Projdede PDB soubor a pro každou molekulu vody získá souřadnice [O, H1, H2].
+        Vrací seznam slovníků obsahující identifikaci vody a její souřadnice.
+        """
+        waters = {}
+
+        for line in pdb_content.splitlines():
+            # Zajímá nás jen ATOM nebo HETATM záznam
+            if line.startswith(("ATOM", "HETATM")):
+                res_name = line[17:20].strip()
+
+                # Zjištění, zda jde o vodu
+                if res_name in ["HOH", "WAT", "SOL"]:
+                    chain_id = line[21]
+                    try:
+                        res_seq = int(line[22:26].strip())
+                    except ValueError:
+                        continue
+
+                    atom_name = line[12:16].strip()
+
+                    # PDB formát má fixní sloupce pro souřadnice
+                    try:
+                        x = float(line[30:38])
+                        y = float(line[38:46])
+                        z = float(line[46:54])
+                    except ValueError:
+                        continue
+
+                    key = (chain_id, res_seq, res_name)
+                    if key not in waters:
+                        waters[key] = {}
+
+                    # Detekce kyslíku a vodíků (názvy v PDB mohou být různé: O, OW, H1, HW1...)
+                    if atom_name.startswith("O"):
+                        waters[key]["O"] = [x, y, z]
+                    elif atom_name.startswith("H"):
+                        # Pokud ještě nemáme první vodík, uložíme jako H1, jinak jako H2
+                        if "H1" not in waters[key]:
+                            waters[key]["H1"] = [x, y, z]
+                        else:
+                            waters[key]["H2"] = [x, y, z]
+
+        valid_waters = []
+        # Vyfiltrujeme jen ty vody, které mají všechny 3 atomy (O, H, H)
+        for (chain, res_seq, res_name), atoms in waters.items():
+            if "O" in atoms and "H1" in atoms and "H2" in atoms:
+                valid_waters.append({
+                    "chain": chain,
+                    "resseq": res_seq,
+                    "res_name": res_name,
+                    "crd": [atoms["O"], atoms["H1"], atoms["H2"]]
+                })
+
+        return valid_waters
+
 
 def parse_pdb_to_topology_dict(pdb_content: str, selected_force_fields: dict = None) -> dict:
     if selected_force_fields is None:
