@@ -4,10 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor hydrogenation service to improve performance logging and streamline structure preparation">
-      <change afterPath="$PROJECT_DIR$/app/utils/water_models.py" afterDir="false" />
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor topology service to integrate water coordinate extraction and enhance extra point handling">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/topology.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/topology.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/services/pdb_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/pdb_service.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/services/topology_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/topology_service.py" afterDir="false" />
     </list>
@@ -120,8 +118,8 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-js-predefined-d6986cc7102b-5c90d61e3bab-JavaScript-PY-242.22855.92" />
-        <option value="bundled-python-sdk-b068d85d1acf-399fe30bd8c1-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-242.22855.92" />
+        <option value="bundled-js-predefined-d6986cc7102b-5c90d61e3bab-JavaScript-PY-242.26775.22" />
+        <option value="bundled-python-sdk-9f73701ac511-399fe30bd8c1-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-242.26775.22" />
       </set>
     </attachedChunks>
   </component>
@@ -219,7 +217,11 @@
       <workItem from="1777664970916" duration="4245000" />
       <workItem from="1778106205806" duration="817000" />
       <workItem from="1778107047333" duration="2575000" />
-      <workItem from="1778109749271" duration="5186000" />
+      <workItem from="1778109749271" duration="5344000" />
+      <workItem from="1778137213322" duration="4167000" />
+      <workItem from="1778171953792" duration="1505000" />
+      <workItem from="1778406417563" duration="16000" />
+      <workItem from="1778818329966" duration="3919000" />
     </task>
     <task id="LOCAL-00001" summary="Init">
       <option name="closed" value="true" />
@@ -605,7 +607,15 @@
       <option name="project" value="LOCAL" />
       <updated>1778110416033</updated>
     </task>
-    <option name="localTasksCounter" value="49" />
+    <task id="LOCAL-00049" summary="refactor topology service to integrate water coordinate extraction and enhance extra point handling">
+      <option name="closed" value="true" />
+      <created>1778115176115</created>
+      <option name="number" value="00049" />
+      <option name="presentableId" value="LOCAL-00049" />
+      <option name="project" value="LOCAL" />
+      <updated>1778115176115</updated>
+    </task>
+    <option name="localTasksCounter" value="50" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -623,7 +633,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="{&#13;&#10;    &quot;error&quot;: {&#13;&#10;        &quot;message&quot;: &quot;You didn't provide an API key. You need to provide your API key in an Authorization header using Bearer auth (i.e. Authorization: Bearer YOUR_KEY), or as the password field (with blank username) if you're accessing the API from your browser and are prompted for a username and password. You can obtain an API key from https://platform.openai.com/account/api-keys.&quot;,&#13;&#10;        &quot;type&quot;: &quot;invalid_request_error&quot;,&#13;&#10;        &quot;param&quot;: null,&#13;&#10;        &quot;code&quot;: null&#13;&#10;    }&#13;&#10;}" />
     <MESSAGE value="{&#13;&#10;    &quot;error&quot;: {&#13;&#10;        &quot;message&quot;: &quot;You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.&quot;,&#13;&#10;        &quot;type&quot;: &quot;insufficient_quota&quot;,&#13;&#10;        &quot;param&quot;: null,&#13;&#10;        &quot;code&quot;: &quot;insufficient_quota&quot;&#13;&#10;    }&#13;&#10;}" />
     <MESSAGE value="add hydrogenation service and new endpoint for adding missing hydrogens" />
     <MESSAGE value="update Dockerfile to include rdkit and libgl1 for improved compatibility" />
@@ -648,7 +657,8 @@
     <MESSAGE value="refactor Dockerfile and requirements to use Miniforge3 and streamline package installation" />
     <MESSAGE value="refactor download service to support multiple file formats and implement on-demand CRD generation" />
     <MESSAGE value="refactor hydrogenation service to improve performance logging and streamline structure preparation" />
-    <option name="LAST_COMMIT_MESSAGE" value="refactor hydrogenation service to improve performance logging and streamline structure preparation" />
+    <MESSAGE value="refactor topology service to integrate water coordinate extraction and enhance extra point handling" />
+    <option name="LAST_COMMIT_MESSAGE" value="refactor topology service to integrate water coordinate extraction and enhance extra point handling" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/little_chemik_back$.coverage" NAME=" Coverage Results" MODIFIED="1773355688540" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />

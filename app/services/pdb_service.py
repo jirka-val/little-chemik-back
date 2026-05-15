@@ -4,6 +4,9 @@ import logging
 from app.core.config import settings
 from pathlib import Path
 
+# --- NOVÝ IMPORT ---
+from app.utils.water_models import water_extra_points
+
 logger = logging.getLogger(__name__)
 
 
@@ -100,6 +103,108 @@ class PDBService:
 
         return valid_waters
 
+    # --- NOVÁ FUNKCE PRO OPRAVU A VSTŘIKOVÁNÍ EP ---
+    def reorder_and_inject_eps(self, pdb_content: str, ff_water_instance) -> str:
+        """
+        1. Rozdělí PDB na solut, ionty a vodu.
+        2. Spočítá a rovnou vloží Extra Points k vodám pomocí water_models.
+        3. Získá čisté PDB seřazené jako: Solut -> Ionty -> Voda (O, H1, H2, EP...).
+        4. Přečísluje atomy.
+        """
+        solute_lines = []
+        ion_lines = []
+        waters = {}
+
+        # Rozšířený seznam iontů podle mappingu
+        ion_resnames = {"NA", "Na+", "CL", "Cl-", "K", "K+", "MG", "Mg2+", "CA", "Ca2+", "LI", "Li+", "RB", "Rb+", "CS",
+                        "Cs+", "ZN", "Zn2+", "F", "F-", "BR", "Br-", "I", "I-"}
+
+        # 1. ČTENÍ A ROZTŘÍDĚNÍ
+        for line in pdb_content.splitlines():
+            if line.startswith(("ATOM", "HETATM")):
+                resname = line[17:20].strip()
+                chain = line[21]
+                try:
+                    resid = int(line[22:26].strip())
+                except ValueError:
+                    continue
+
+                res_key = (chain, resid, resname)
+
+                if resname in ["HOH", "WAT", "SOL"]:
+                    if res_key not in waters:
+                        waters[res_key] = []
+                    waters[res_key].append(line)
+                elif resname in ion_resnames:
+                    ion_lines.append(line)
+                else:
+                    solute_lines.append(line)
+            elif line.startswith("CRYST1"):
+                # Udržíme si informace o boxu na začátku
+                solute_lines.insert(0, line)
+
+        # Pomocné funkce pro parsování a formátování uvnitř metody
+        def extract_coords(l: str) -> list[float]:
+            return [float(l[30:38]), float(l[38:46]), float(l[46:54])]
+
+        def format_ep_line(a_id: int, ep_n: str, r_n: str, c: str, r_id: int, crd: list[float]) -> str:
+            x, y, z = crd
+            return f"HETATM{a_id:>5} {ep_n:<4} {r_n:>3} {c}{r_id:>4}    {x:>8.3f}{y:>8.3f}{z:>8.3f}  1.00  0.00          {ep_n[0]:>2}"
+
+        # 2. ZÁPIS A GENEROVÁNÍ EPs S NOVÝM ČÍSLOVÁNÍM
+        new_lines = []
+        atom_id = 1
+
+        # Zápis solutu
+        for line in solute_lines:
+            if line.startswith("CRYST1"):
+                new_lines.append(line)
+            else:
+                new_lines.append(f"{line[:6]}{atom_id:>5}{line[11:]}")
+                atom_id += 1
+
+        # Zápis iontů (ionty jsou nyní před vodou)
+        for line in ion_lines:
+            new_lines.append(f"{line[:6]}{atom_id:>5}{line[11:]}")
+            atom_id += 1
+
+        # Zápis vod a výpočet EPs
+        for (chain, resid, resname), atom_lines in waters.items():
+            water_crd = []
+            o_crd, h1_crd, h2_crd = None, None, None
+
+            for line in atom_lines:
+                atom_name = line[12:16].strip()
+                crd = extract_coords(line)
+
+                if atom_name.startswith("O"):
+                    o_crd = crd
+                elif atom_name.startswith("H"):
+                    if not h1_crd:
+                        h1_crd = crd
+                    else:
+                        h2_crd = crd
+
+                new_lines.append(f"{line[:6]}{atom_id:>5}{line[11:]}")
+                atom_id += 1
+
+            # Jakmile máme atomy vody zapsané, spočítáme EP, pokud máme kompletní molekulu
+            if o_crd and h1_crd and h2_crd and ff_water_instance:
+                try:
+                    eps = water_extra_points(ff_water_instance, [o_crd, h1_crd, h2_crd])
+                    for i, ep_crd in enumerate(eps):
+                        ep_name = f"EP{i + 1}"
+                        ep_line = format_ep_line(atom_id, ep_name, resname, chain, resid, ep_crd)
+                        new_lines.append(ep_line)
+                        atom_id += 1
+                except Exception as e:
+                    logger.warning(f"Nepodařilo se přidat EP pro vodu {chain}{resid}: {e}")
+
+        new_lines.append("END")
+        return "\n".join(new_lines) + "\n"
+
+
+# --- ZBYTEK SOUBORU ZŮSTÁVÁ BEZE ZMĚNY ---
 
 def parse_pdb_to_topology_dict(pdb_content: str, selected_force_fields: dict = None) -> dict:
     if selected_force_fields is None:
@@ -123,10 +228,6 @@ def parse_pdb_to_topology_dict(pdb_content: str, selected_force_fields: dict = N
                 res_seq = int(line[22:26])
             except ValueError:
                 continue
-
-            # ZDE BYLO IGNOROVÁNÍ VODY - NYNÍ ODSTRANĚNO
-            # if res_name in ['HOH', 'WAT', 'SOL']:
-            #     continue
 
             res_key = (chain_id, res_seq)
 
