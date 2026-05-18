@@ -103,17 +103,103 @@ class PDBService:
 
         return valid_waters
 
-    # --- NOVÁ FUNKCE PRO OPRAVU A VSTŘIKOVÁNÍ EP ---
+    def parse_and_format_pdb_line(self, line: str, new_serial: int) -> str:
+        """
+        Rozebere původní rozházený řádek ATOM/HETATM a sestaví jej znovu
+        podle přísné specifikace PDB v3.3 se stoprocentním zarovnáním sloupců.
+        """
+        record_type = line[0:6].strip()
+        if not record_type:
+            record_type = "ATOM"
+
+        name = line[12:16]  # Pozice 13-16 (včetně přesných mezer pro atom)
+        alt_loc = line[16:17]  # Pozice 17 (Alternate location indicator)
+        res_name = line[17:20]  # Pozice 18-20 (Residue name)
+        chain = line[21:22]  # Pozice 22 (Chain identifier)
+        res_seq = line[22:26]  # Pozice 23-26 (Residue sequence number)
+        i_code = line[26:27]  # Pozice 27 (Code for insertion of residues)
+
+        # Bezpečné naparsování souřadnic
+        try:
+            x = float(line[30:38])
+            y = float(line[38:46])
+            z = float(line[46:54])
+        except ValueError:
+            x, y, z = 0.0, 0.0, 0.0
+
+        # Bezpečné naparsování Occupancy a Temp factor s fallbacky
+        try:
+            occ = float(line[54:60]) if len(line) >= 60 and line[54:60].strip() else 1.00
+        except ValueError:
+            occ = 1.00
+
+        try:
+            temp = float(line[60:66]) if len(line) >= 66 and line[60:66].strip() else 0.00
+        except ValueError:
+            temp = 0.00
+
+        # Detekce elementu (sloupce 77-78) s inteligentním fallbackem z názvu atomu
+        element = line[76:78].strip() if len(line) >= 78 else ""
+        if not element:
+            clean_name = name.strip()
+            if clean_name:
+                if len(clean_name) > 1 and clean_name[:2].upper() in ["MG", "CL", "NA", "ZN", "FE", "CA"]:
+                    element = clean_name[:2].upper()
+                else:
+                    element = clean_name[0].upper()
+
+        # Sestavení řádku přesně na fixní pozice znaků
+        return (
+            f"{record_type:<6}"
+            f"{new_serial:>5} "
+            f"{name:<4}"
+            f"{alt_loc:1}"
+            f"{res_name:>3} "
+            f"{chain:1}"
+            f"{res_seq:>4}"
+            f"{i_code:1}   "
+            f"{x:>8.3f}"
+            f"{y:>8.3f}"
+            f"{z:>8.3f}"
+            f"{occ:>6.2f}"
+            f"{temp:>6.2f}"
+            f"          "
+            f"{element:>2}"
+        )
+
     def reorder_and_inject_eps(self, pdb_content: str, ff_water_instance) -> str:
         """
         1. Rozdělí PDB na solut, ionty a vodu.
         2. Spočítá a rovnou vloží Extra Points k vodám pomocí water_models.
         3. Získá čisté PDB seřazené jako: Solut -> Ionty -> Voda (O, H1, H2, EP...).
-        4. Přečísluje atomy.
+        4. Kompletně přečistí, zarovná a přečísluje všechny řádky podle PDB specifikace.
+        5. Využívá přesná jména EP vytažená dynamicky z force fieldu.
         """
         solute_lines = []
         ion_lines = []
         waters = {}
+
+        # --- NOVÉ: ŠÉFOVA EXTRAKCE JMEN EXTRA POINTŮ ---
+        # Vytáhneme správná jména EP z force fieldu hned na začátku
+        ep_names_from_ff = []
+        if ff_water_instance:
+            try:
+                # Bezpečnější verze Pavlova kódu (předchází KeyErrorům)
+                wat_unit = ff_water_instance.units.get('WAT', {})
+                if 'atoms' in wat_unit:
+                    names = wat_unit['atoms'].get('name', [])
+                    types = wat_unit['atoms'].get('type', [])
+
+                    for a_name, a_type in zip(names, types):
+                        if a_type == 'EPW':
+                            ep_names_from_ff.append(a_name)
+            except Exception as e:
+                logger.warning(f"Nepodařilo se dynamicky načíst jména EP z force fieldu: {e}")
+
+        # Pojistka, kdyby force field neobsahoval typ 'EPW' nebo se parsování nepovedlo
+        if not ep_names_from_ff:
+            ep_names_from_ff = ["EPW", "EPW2"]
+        # -----------------------------------------------
 
         # Rozšířený seznam iontů podle mappingu
         ion_resnames = {"NA", "Na+", "CL", "Cl-", "K", "K+", "MG", "Mg2+", "CA", "Ca2+", "LI", "Li+", "RB", "Rb+", "CS",
@@ -143,15 +229,34 @@ class PDBService:
                 # Udržíme si informace o boxu na začátku
                 solute_lines.insert(0, line)
 
-        # Pomocné funkce pro parsování a formátování uvnitř metody
+        # Pomocné funkce uvnitř metody
         def extract_coords(l: str) -> list[float]:
             return [float(l[30:38]), float(l[38:46]), float(l[46:54])]
 
         def format_ep_line(a_id: int, ep_n: str, r_n: str, c: str, r_id: int, crd: list[float]) -> str:
             x, y, z = crd
-            return f"HETATM{a_id:>5} {ep_n:<4} {r_n:>3} {c}{r_id:>4}    {x:>8.3f}{y:>8.3f}{z:>8.3f}  1.00  0.00          {ep_n[0]:>2}"
+            # Chytřejší detekce elementu: Pokud jméno začíná na EP (např. EPW), element bude E.
+            element = "E" if ep_n.upper().startswith("EP") else ep_n[0]
 
-        # 2. ZÁPIS A GENEROVÁNÍ EPs S NOVÝM ČÍSLOVÁNÍM
+            return (
+                f"HETATM"
+                f"{a_id:>5} "
+                f"{ep_n:<4}"
+                f" "
+                f"{r_n:>3} "
+                f"{c:1}"
+                f"{r_id:>4}"
+                f"    "  # Odsazení na pozici souřadnic
+                f"{x:>8.3f}"
+                f"{y:>8.3f}"
+                f"{z:>8.3f}"
+                f"{1.00:>6.2f}"
+                f"{0.00:>6.2f}"
+                f"          "
+                f"{element:>2}"
+            )
+
+        # 2. ZÁPIS A GENEROVÁNÍ EPs S NOVÝM ČÍSLOVÁNÍM A ZAROVNÁNÍM
         new_lines = []
         atom_id = 1
 
@@ -160,19 +265,21 @@ class PDBService:
             if line.startswith("CRYST1"):
                 new_lines.append(line)
             else:
-                new_lines.append(f"{line[:6]}{atom_id:>5}{line[11:]}")
+                formatted_line = self.parse_and_format_pdb_line(line, atom_id)
+                new_lines.append(formatted_line)
                 atom_id += 1
 
         # Zápis iontů (ionty jsou nyní před vodou)
         for line in ion_lines:
-            new_lines.append(f"{line[:6]}{atom_id:>5}{line[11:]}")
+            formatted_line = self.parse_and_format_pdb_line(line, atom_id)
+            new_lines.append(formatted_line)
             atom_id += 1
 
         # Zápis vod a výpočet EPs
         for (chain, resid, resname), atom_lines in waters.items():
-            water_crd = []
             o_crd, h1_crd, h2_crd = None, None, None
 
+            # Nejdříve zapíšeme standardní atomy dané vody (O, H1, H2)
             for line in atom_lines:
                 atom_name = line[12:16].strip()
                 crd = extract_coords(line)
@@ -185,15 +292,18 @@ class PDBService:
                     else:
                         h2_crd = crd
 
-                new_lines.append(f"{line[:6]}{atom_id:>5}{line[11:]}")
+                formatted_line = self.parse_and_format_pdb_line(line, atom_id)
+                new_lines.append(formatted_line)
                 atom_id += 1
 
-            # Jakmile máme atomy vody zapsané, spočítáme EP, pokud máme kompletní molekulu
+            # Jakmile máme atomy konkrétní vody zapsané, spočítáme a ihned přilepíme její EP
             if o_crd and h1_crd and h2_crd and ff_water_instance:
                 try:
                     eps = water_extra_points(ff_water_instance, [o_crd, h1_crd, h2_crd])
                     for i, ep_crd in enumerate(eps):
-                        ep_name = f"EP{i + 1}"
+                        # Pokud force field vrátí 2 názvy (např. LP1, LP2) a my generujeme 2 body, spáruje je to.
+                        ep_name = ep_names_from_ff[i] if i < len(ep_names_from_ff) else f"EP{i + 1}"
+
                         ep_line = format_ep_line(atom_id, ep_name, resname, chain, resid, ep_crd)
                         new_lines.append(ep_line)
                         atom_id += 1
@@ -202,6 +312,11 @@ class PDBService:
 
         new_lines.append("END")
         return "\n".join(new_lines) + "\n"
+
+
+# =========================================================================
+# VOLNÉ (GLOBÁLNÍ) FUNKCE PRO ZPRACOVÁNÍ PDB
+# =========================================================================
 
 def parse_pdb_to_topology_dict(pdb_content: str, selected_force_fields: dict = None) -> dict:
     if selected_force_fields is None:

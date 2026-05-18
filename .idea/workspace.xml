@@ -4,11 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor pdb and topology services to reorder PDB content and inject extra points for water molecules">
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor download service to add filename parameter for explicit file downloads and enhance error handling">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/download.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/download.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/services/pdb_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/pdb_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/topology_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/topology_service.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -224,15 +222,8 @@
       <workItem from="1778406417563" duration="16000" />
       <workItem from="1778818329966" duration="10762000" />
       <workItem from="1778905782495" duration="136000" />
-      <workItem from="1779093702792" duration="758000" />
-    </task>
-    <task id="LOCAL-00002" summary="...">
-      <option name="closed" value="true" />
-      <created>1764844324285</created>
-      <option name="number" value="00002" />
-      <option name="presentableId" value="LOCAL-00002" />
-      <option name="project" value="LOCAL" />
-      <updated>1764844324285</updated>
+      <workItem from="1779093702792" duration="1266000" />
+      <workItem from="1779120264596" duration="3717000" />
     </task>
     <task id="LOCAL-00003" summary="...">
       <option name="closed" value="true" />
@@ -618,7 +609,15 @@
       <option name="project" value="LOCAL" />
       <updated>1778823273558</updated>
     </task>
-    <option name="localTasksCounter" value="51" />
+    <task id="LOCAL-00051" summary="refactor download service to add filename parameter for explicit file downloads and enhance error handling">
+      <option name="closed" value="true" />
+      <created>1779094475235</created>
+      <option name="number" value="00051" />
+      <option name="presentableId" value="LOCAL-00051" />
+      <option name="project" value="LOCAL" />
+      <updated>1779094475235</updated>
+    </task>
+    <option name="localTasksCounter" value="52" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -636,7 +635,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="add hydrogenation service and new endpoint for adding missing hydrogens" />
     <MESSAGE value="update Dockerfile to include rdkit and libgl1 for improved compatibility" />
     <MESSAGE value="add download endpoint and garbage collector for workspace management" />
     <MESSAGE value="add unit tests for molecule upload, download, and hydrogenation endpoints" />
@@ -661,7 +659,8 @@
     <MESSAGE value="refactor hydrogenation service to improve performance logging and streamline structure preparation" />
     <MESSAGE value="refactor topology service to integrate water coordinate extraction and enhance extra point handling" />
     <MESSAGE value="refactor pdb and topology services to reorder PDB content and inject extra points for water molecules" />
-    <option name="LAST_COMMIT_MESSAGE" value="refactor pdb and topology services to reorder PDB content and inject extra points for water molecules" />
+    <MESSAGE value="refactor download service to add filename parameter for explicit file downloads and enhance error handling" />
+    <option name="LAST_COMMIT_MESSAGE" value="refactor download service to add filename parameter for explicit file downloads and enhance error handling" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/little_chemik_back$.coverage" NAME=" Coverage Results" MODIFIED="1773355688540" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
