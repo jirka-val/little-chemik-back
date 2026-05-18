@@ -107,33 +107,6 @@ class TopologyService:
             mol = parse_pdb_to_topology_dict(fixed_pdb_content, ff_mapping)
             mol['force_field_data'] = preloaded_ff_data
 
-            # --- OPRAVA 2: Terminální rezidua (5' a 3') pro DNA/RNA ---
-            chains = {}
-            for res in mol['residues']:
-                c_id = res.get('chain', 'A')
-                if c_id not in chains: chains[c_id] = []
-                chains[c_id].append(res)
-
-            nucleic_bases = ["DA", "DC", "DG", "DT", "RA", "RC", "RG", "RU", "A", "G", "C", "T", "U"]
-
-            for c_id, r_list in chains.items():
-                if not r_list: continue
-                first_res = r_list[0]
-                last_res = r_list[-1]
-
-                # 5' konec (start)
-                if any(first_res['resn'] == base for base in nucleic_bases):
-                    orig = first_res['resn']
-                    first_res['resn'] = f"{orig}5"
-                    logger.info(f"Chain {c_id}: Fixed 5' terminal {orig} -> {first_res['resn']}")
-
-                # 3' konec (end)
-                if len(r_list) > 1 and any(last_res['resn'] == base for base in nucleic_bases):
-                    orig = last_res['resn']
-                    last_res['resn'] = f"{orig}3"
-                    logger.info(f"Chain {c_id}: Fixed 3' terminal {orig} -> {last_res['resn']}")
-            # ------------------------------------------------------------
-
             # Aplikace aliasů (HOH -> WAT atd.)
             for res in mol['residues']:
                 res['resn'] = resn_alias(res['resn'])

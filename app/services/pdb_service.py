@@ -203,9 +203,6 @@ class PDBService:
         new_lines.append("END")
         return "\n".join(new_lines) + "\n"
 
-
-# --- ZBYTEK SOUBORU ZŮSTÁVÁ BEZE ZMĚNY ---
-
 def parse_pdb_to_topology_dict(pdb_content: str, selected_force_fields: dict = None) -> dict:
     if selected_force_fields is None:
         selected_force_fields = {"R": "OL3"}
@@ -239,27 +236,40 @@ def parse_pdb_to_topology_dict(pdb_content: str, selected_force_fields: dict = N
 
     final_residues = []
 
+    # Seznam běžných iontů pro lepší klasifikaci
+    ion_resnames = {"NA", "Na+", "CL", "Cl-", "K", "K+", "MG", "Mg2+", "CA", "Ca2+", "LI", "Li+", "RB", "Rb+", "CS",
+                    "Cs+", "ZN", "Zn2+", "F", "F-", "BR", "Br-", "I", "I-"}
+
     for chain_id, res_list in chains.items():
-        chain_length = len(res_list)
+        # 1. Zjistíme, kde přesně začíná a končí Nukleová kyselina
+        nuc_indices = []
+        for idx, name in enumerate(res_list):
+            # Detekce RNA/DNA
+            if (len(name) == 1 and name in ['A', 'C', 'G', 'U', 'T']) or name.startswith('R') or name.startswith('D'):
+                nuc_indices.append(idx)
+
+        first_nuc = nuc_indices[0] if nuc_indices else -1
+        last_nuc = nuc_indices[-1] if nuc_indices else -1
 
         for i, res_name in enumerate(res_list):
-            # Výchozí typ je R (RNA)
-            mol_type = "R"
+            mol_type = "R"  # Výchozí
 
-            # Pokud je to voda, změníme typ molekuly na W
             if res_name in ['HOH', 'WAT', 'SOL']:
                 mol_type = "W"
+            elif res_name in ion_resnames:
+                mol_type = "I"
 
-            is_nucleotide = len(res_name) == 1 and res_name in ['A', 'C', 'G', 'U'] or res_name.startswith('R')
-
+            is_nucleotide = i in nuc_indices
             base_name = res_name
+
             if is_nucleotide and len(base_name) == 1:
                 base_name = 'R' + base_name
 
             if is_nucleotide:
-                if i == 0 and not base_name.endswith('5'):
+                # Přiřadíme 5' a 3' konce bezpečně POUZE na první a poslední nukleotid!
+                if i == first_nuc and not base_name.endswith('5'):
                     final_resn = base_name + "5"
-                elif i == chain_length - 1 and not base_name.endswith('3'):
+                elif i == last_nuc and not base_name.endswith('3'):
                     final_resn = base_name + "3"
                 else:
                     final_resn = base_name
@@ -268,7 +278,8 @@ def parse_pdb_to_topology_dict(pdb_content: str, selected_force_fields: dict = N
 
             final_residues.append({
                 "resn": final_resn,
-                "mol_type": mol_type
+                "mol_type": mol_type,
+                "chain": chain_id  # Předáme dál informaci o řetězci
             })
 
     return {

@@ -4,8 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor topology service to integrate water coordinate extraction and enhance extra point handling">
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor pdb and topology services to reorder PDB content and inject extra points for water molecules">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/download.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/download.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/services/pdb_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/pdb_service.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/services/topology_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/topology_service.py" afterDir="false" />
     </list>
@@ -221,15 +222,9 @@
       <workItem from="1778137213322" duration="4167000" />
       <workItem from="1778171953792" duration="1505000" />
       <workItem from="1778406417563" duration="16000" />
-      <workItem from="1778818329966" duration="3919000" />
-    </task>
-    <task id="LOCAL-00001" summary="Init">
-      <option name="closed" value="true" />
-      <created>1764844207025</created>
-      <option name="number" value="00001" />
-      <option name="presentableId" value="LOCAL-00001" />
-      <option name="project" value="LOCAL" />
-      <updated>1764844207025</updated>
+      <workItem from="1778818329966" duration="10762000" />
+      <workItem from="1778905782495" duration="136000" />
+      <workItem from="1779093702792" duration="758000" />
     </task>
     <task id="LOCAL-00002" summary="...">
       <option name="closed" value="true" />
@@ -615,7 +610,15 @@
       <option name="project" value="LOCAL" />
       <updated>1778115176115</updated>
     </task>
-    <option name="localTasksCounter" value="50" />
+    <task id="LOCAL-00050" summary="refactor pdb and topology services to reorder PDB content and inject extra points for water molecules">
+      <option name="closed" value="true" />
+      <created>1778823273558</created>
+      <option name="number" value="00050" />
+      <option name="presentableId" value="LOCAL-00050" />
+      <option name="project" value="LOCAL" />
+      <updated>1778823273558</updated>
+    </task>
+    <option name="localTasksCounter" value="51" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -633,7 +636,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="{&#13;&#10;    &quot;error&quot;: {&#13;&#10;        &quot;message&quot;: &quot;You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.&quot;,&#13;&#10;        &quot;type&quot;: &quot;insufficient_quota&quot;,&#13;&#10;        &quot;param&quot;: null,&#13;&#10;        &quot;code&quot;: &quot;insufficient_quota&quot;&#13;&#10;    }&#13;&#10;}" />
     <MESSAGE value="add hydrogenation service and new endpoint for adding missing hydrogens" />
     <MESSAGE value="update Dockerfile to include rdkit and libgl1 for improved compatibility" />
     <MESSAGE value="add download endpoint and garbage collector for workspace management" />
@@ -658,7 +660,8 @@
     <MESSAGE value="refactor download service to support multiple file formats and implement on-demand CRD generation" />
     <MESSAGE value="refactor hydrogenation service to improve performance logging and streamline structure preparation" />
     <MESSAGE value="refactor topology service to integrate water coordinate extraction and enhance extra point handling" />
-    <option name="LAST_COMMIT_MESSAGE" value="refactor topology service to integrate water coordinate extraction and enhance extra point handling" />
+    <MESSAGE value="refactor pdb and topology services to reorder PDB content and inject extra points for water molecules" />
+    <option name="LAST_COMMIT_MESSAGE" value="refactor pdb and topology services to reorder PDB content and inject extra points for water molecules" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/little_chemik_back$.coverage" NAME=" Coverage Results" MODIFIED="1773355688540" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
