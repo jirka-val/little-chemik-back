@@ -31,11 +31,13 @@ class PDBService:
         mapping = {
             "D": {"DA", "DC", "DG", "DT"},
             "R": {"A", "C", "G", "U"},
-            "P": {"ALA", "ARG", "ASN", "ASP", "CYS", "GLU", "GLN", "GLY", "HIS",
-                  "ILE", "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL"},
+            "P": {"ALA", "ARG", "ASN", "ASP", "CYS", "GLU", "GLN", "GLY", "HIS", "ILE", "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL"},
             "W": {"HOH", "WAT", "SOL"},
-            "I": {"NA", "Na+", "CL", "Cl-", "K", "K+", "MG", "Mg2+", "CA", "Ca2+", "LI", "Li+", "RB", "Rb+", "CS",
-                  "Cs+", "ZN", "Zn2+", "F", "F-", "BR", "Br-", "I-"}
+            # TADY JE ZMĚNA: Ionty rovnou rozdělíme podle toho, jak je zná tvoje DB
+            "I1": {"NA", "NA+", "K", "K+", "CL", "CL-"},
+            "I1+": {"LI", "LI+", "RB", "RB+", "CS", "CS+", "F", "F-", "BR", "BR-", "I", "I-"},
+            "Im": {"MG", "MG2+"},
+            "Im+": {"CA", "CA2+", "ZN", "ZN2+", "CU", "FE"}
         }
 
         for line in pdb_content.splitlines():

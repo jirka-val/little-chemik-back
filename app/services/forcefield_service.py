@@ -106,8 +106,8 @@ class ForceFieldService:
         if "W" in search_types:
             search_types.update(["W3", "W4", "W5"])
 
-        if "I" in search_types:
-            search_types.update(["I1", "Im", "I", "Im+", "I+", "I-", "I1+"])
+        #if "I" in search_types:
+        #    search_types.update(["I1", "Im", "I", "Im+", "I+", "I-", "I1+"])
 
         try:
             headers = {"x-client-version": "0.1.0"}
