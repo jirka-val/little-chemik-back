@@ -4,7 +4,6 @@ import tempfile
 import subprocess
 import logging
 import time
-import math
 
 from pdbfixer import PDBFixer
 from openmm.app import PDBFile
@@ -57,48 +56,6 @@ class HydrogenationService:
             add_solvent=False
         )
 
-    def _fix_cryst1_for_octahedron(self, pdb_content: str, fixer) -> str:
-        """
-        Opraví CRYST1 řádek pro truncated octahedron.
-        OpenMM totiž zapisuje špatné úhly pro octahedron, fixujeme to zde.
-        """
-        lines = pdb_content.split('\n')
-        new_lines = []
-        
-        try:
-            box_vectors = fixer.topology.getPeriodicBoxVectors()
-            if box_vectors is not None:
-                # Vypočítej délky a úhly z vektorů
-                a_vec, b_vec, c_vec = box_vectors
-                
-                # Délky
-                a = float(a_vec[0].value_in_unit(unit.angstroms))
-                b = float(b_vec[1].value_in_unit(unit.angstroms))
-                c = float(c_vec[2].value_in_unit(unit.angstroms))
-                
-                # Úhly pro truncated octahedron: alpha=beta=gamma=109.47122063°
-                alpha = 109.47122063
-                beta = 109.47122063
-                gamma = 109.47122063
-                
-                # Vytvořit správný CRYST1 řádek
-                cryst1_line = f"CRYST1{a:9.3f}{b:9.3f}{c:9.3f}{alpha:7.2f}{beta:7.2f}{gamma:7.2f} P 1           1"
-                
-                # Nahradit starý CRYST1 řádek novým
-                for i, line in enumerate(lines):
-                    if line.startswith("CRYST1"):
-                        new_lines.append(cryst1_line)
-                    else:
-                        new_lines.append(line)
-                
-                logger.info(f"CRYST1 korektně nastaven: a={a:.3f}, b={b:.3f}, c={c:.3f}, α=β=γ=109.47°")
-                return '\n'.join(new_lines)
-        except Exception as e:
-            logger.warning(f"Nepodařilo se zkorrektovat CRYST1: {e}, použiji původní řádek")
-            return pdb_content
-        
-        return pdb_content
-
     def prepare_structure(self,
                           pdb_content: str,
                           ph: float = 7.0,
@@ -148,15 +105,12 @@ class HydrogenationService:
             logger.info(f"Přidání vodíků (pH {ph}) dokončeno za: {time.time() - add_hydrogens_start:.2f} s")
 
             # 5. SOLVATACE A IONTY
-            valid_shapes = {"cube", "octahedron"}
-            # Normalizace: "truncated octahedron" → "octahedron"
-            normalized_shape = box_shape.lower().replace("truncated ", "").strip()
-            shape = normalized_shape if normalized_shape in valid_shapes else "cube"
-            
-            logger.info(f"Box shape vstup: '{box_shape}' → normalizováno na: '{shape}'")
-            
             if add_solvent:
+
+                valid_shapes = {"cube", "octahedron"}
+                shape = box_shape if box_shape in valid_shapes else "cube"
                 logger.info(f"Zahajuji solvataci (tvar: {shape})")
+
                 logger.info(
                     f"Zahajuji solvataci (padding: {box_padding_nm} nm, tvar: {box_shape}, síla: {ionic_strength}M). Toto může trvat velmi dlouho...")
                 solv_start = time.time()
@@ -178,17 +132,11 @@ class HydrogenationService:
             write_start = time.time()
             output_stream = io.StringIO()
             PDBFile.writeFile(fixer.topology, fixer.positions, output_stream, keepIds=True)
-            pdb_output = output_stream.getvalue()
             logger.info(f"Zápis do StringIO dokončen za: {time.time() - write_start:.2f} s")
-
-            # 7. OPRAVA CRYST1 pro truncated octahedron
-            if add_solvent and shape == "octahedron":
-                pdb_output = self._fix_cryst1_for_octahedron(pdb_output, fixer)
-                logger.info("CRYST1 řádek opraven pro truncated octahedron")
 
             logger.info(
                 f"--- Příprava struktury kompletně hotova za celkový čas: {time.time() - total_start:.2f} s ---")
-            return pdb_output
+            return output_stream.getvalue()
 
         except Exception as e:
             total_time = time.time() - total_start

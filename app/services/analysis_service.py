@@ -193,13 +193,19 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
             is_main = any(r[1] == resseq and r[3] == resname for r in main_chain)
 
             if fill_gaps and is_main and prev_resseq is not None and resseq > prev_resseq + 1:
+                # OPRAVA: Zkontroluj, zda GAP je OPRAVDU prázdný nebo tam jen je neznámé reziduum
                 for missing_seq in range(prev_resseq + 1, resseq):
-                    global_pos += 1
-                    tokens.append({
-                        "position": global_pos, "chain": ch, "resseq": None, "icode": None,
-                        "pdb_resname": "0", "is_gap": True, "group": None, "ff_resname": None,
-                        "known": False, "atoms": [], "missing_atoms": []
-                    })
+                    # Hledej, zda existuje JAKÉKOLI reziduum se sekvencí missing_seq v PDB
+                    residue_exists_in_pdb = any(r[1] == missing_seq and r[0] == ch for r in residues)
+                    
+                    # Jen pokud OPRAVDU chybí v PDB -> vytvoř GAP token
+                    if not residue_exists_in_pdb:
+                        global_pos += 1
+                        tokens.append({
+                            "position": global_pos, "chain": ch, "resseq": None, "icode": None,
+                            "pdb_resname": "0", "is_gap": True, "group": None, "ff_resname": None,
+                            "known": False, "atoms": [], "missing_atoms": []
+                        })
 
             global_pos += 1
             group = _infer_group(resname, conv)
