@@ -38,14 +38,20 @@ class TopologyService:
                 except ValueError:
                     continue
             elif line.startswith("CRYST1"):
-                try:
-                    # Extrakce rozměrů boxu (pokud existuje solvatace)
-                    box_x = float(line[6:15])
-                    box_y = float(line[15:24])
-                    box_z = float(line[24:33])
-                    box_dims = [box_x, box_y, box_z, 90.0, 90.0, 90.0]
-                except ValueError:
-                    pass
+                    try:
+                        # Extrakce rozměrů boxu
+                        box_x = float(line[6:15])
+                        box_y = float(line[15:24])
+                        box_z = float(line[24:33])
+                        # Extrakce úhlů!
+                        alpha = float(line[33:40])
+                        beta = float(line[40:47])
+                        gamma = float(line[47:54])
+
+                        # Nyní posíláme reálné úhly, nikoliv 90.0, 90.0, 90.0
+                        box_dims = [box_x, box_y, box_z, alpha, beta, gamma]
+                    except ValueError:
+                        pass
 
         num_atoms = len(coords) // 3
 

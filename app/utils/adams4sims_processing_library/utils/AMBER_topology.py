@@ -1151,7 +1151,14 @@ def create_AMBER_topology(mol):
     if ifbox == 1:
         top['SOLVENT_POINTERS'] = [iptres, len(atoms_in_mol), nspsol]
         top['ATOMS_PER_MOLECULE'] = atoms_in_mol
-        top['BOX_DIMENSIONS'] = [90.0, mol['box'][0], mol['box'][1], mol['box'][2]]
+
+        # PŮVODNÍ KÓD: top['BOX_DIMENSIONS'] = [90.0, mol['box'][0], mol['box'][1], mol['box'][2]]
+
+        # OPRAVENÝ KÓD:
+        # Zkontrolujeme, jestli mol['box'] obsahuje i úhel (tj. má 4 nebo více prvků)
+        # Pokud ne, fallbackneme na 90.0 pro zpětnou kompatibilitu s klasickou kostkou.
+        angle_beta = mol['box'][3] if len(mol['box']) > 3 else 90.0
+        top['BOX_DIMENSIONS'] = [angle_beta, mol['box'][0], mol['box'][1], mol['box'][2]]
 
     # pointers
     top['POINTERS'][0] = natom

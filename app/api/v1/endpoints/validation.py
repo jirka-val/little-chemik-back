@@ -44,6 +44,7 @@ class PreparationRequest(BaseModel):
     ionic_strength: float = Field(0.15, description="Salt concentration (M). The system is automatically neutralized.")
     positive_ion: Literal["Na+", "K+", "Li+", "Cs+", "Rb+"] = Field("Na+")
     negative_ion: Literal["Cl-", "F-", "Br-", "I-"] = Field("Cl-")
+    box_shape: Literal["cube", "octahedron", "truncated octahedron"] = Field("cube")
 
 
 # --- Endpoints ---
@@ -175,6 +176,7 @@ async def prepare_molecule(request: PreparationRequest):
             crystal_water_mode=request.crystal_water_mode,
             add_solvent=request.add_solvent,
             box_padding_nm=request.box_padding_nm,
+            box_shape=request.box_shape,
             ionic_strength=request.ionic_strength,
             positive_ion=request.positive_ion,
             negative_ion=request.negative_ion
