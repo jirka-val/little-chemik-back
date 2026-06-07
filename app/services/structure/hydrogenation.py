@@ -60,8 +60,9 @@ class HydrogenationService:
                           pdb_content: str,
                           ph: float = 7.0,
                           crystal_water_mode: str = "remove_all",
-                          add_solvent: bool = False,
+                          add_solvent: bool = True,
                           box_padding_nm: float = 1.0,
+                          box_shape: str = "octahedron",
                           ionic_strength: float = 0.15,
                           positive_ion: str = "Na+",
                           negative_ion: str = "Cl-") -> str:
@@ -106,11 +107,12 @@ class HydrogenationService:
             # 5. SOLVATACE A IONTY
             if add_solvent:
                 logger.info(
-                    f"Zahajuji solvataci (padding: {box_padding_nm} nm, síla: {ionic_strength}M). Toto může trvat velmi dlouho...")
+                    f"Zahajuji solvataci (padding: {box_padding_nm} nm, tvar: {box_shape}, síla: {ionic_strength}M). Toto může trvat velmi dlouho...")
                 solv_start = time.time()
                 try:
                     fixer.addSolvent(
                         padding=box_padding_nm * unit.nanometers,
+                        boxShape=box_shape,  # <--- PŘIDÁNO ZDE
                         positiveIon=positive_ion,
                         negativeIon=negative_ion,
                         ionicStrength=ionic_strength * unit.molar

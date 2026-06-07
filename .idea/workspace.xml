@@ -4,10 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor pdb service to enhance PDB line parsing and formatting, and improve extra point extraction from force field">
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor forcefield and pdb services to improve ion categorization and enhance PDB content mapping">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/forcefield_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/forcefield_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/pdb_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/pdb_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/download.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/download.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/structure/hydrogenation.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/structure/hydrogenation.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/topology_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/topology_service.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -226,15 +227,14 @@
       <workItem from="1779093702792" duration="1266000" />
       <workItem from="1779120264596" duration="4539000" />
       <workItem from="1779346611153" duration="951000" />
-      <workItem from="1779901192581" duration="2817000" />
-    </task>
-    <task id="LOCAL-00004" summary="test">
-      <option name="closed" value="true" />
-      <created>1767393348077</created>
-      <option name="number" value="00004" />
-      <option name="presentableId" value="LOCAL-00004" />
-      <option name="project" value="LOCAL" />
-      <updated>1767393348077</updated>
+      <workItem from="1779901192581" duration="8407000" />
+      <workItem from="1779954762651" duration="715000" />
+      <workItem from="1779983089891" duration="658000" />
+      <workItem from="1779998850479" duration="131000" />
+      <workItem from="1780079830272" duration="165000" />
+      <workItem from="1780297220268" duration="3839000" />
+      <workItem from="1780565493290" duration="177000" />
+      <workItem from="1780842174652" duration="2758000" />
     </task>
     <task id="LOCAL-00005" summary="test">
       <option name="closed" value="true" />
@@ -620,7 +620,15 @@
       <option name="project" value="LOCAL" />
       <updated>1779125631052</updated>
     </task>
-    <option name="localTasksCounter" value="53" />
+    <task id="LOCAL-00053" summary="refactor forcefield and pdb services to improve ion categorization and enhance PDB content mapping">
+      <option name="closed" value="true" />
+      <created>1779904815278</created>
+      <option name="number" value="00053" />
+      <option name="presentableId" value="LOCAL-00053" />
+      <option name="project" value="LOCAL" />
+      <updated>1779904815278</updated>
+    </task>
+    <option name="localTasksCounter" value="54" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -638,7 +646,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="add download endpoint and garbage collector for workspace management" />
     <MESSAGE value="add unit tests for molecule upload, download, and hydrogenation endpoints" />
     <MESSAGE value="update validation endpoints to enforce workspace management and improve error handling" />
     <MESSAGE value="refactor analysis service for improved residue handling and connectivity checks" />
@@ -663,7 +670,8 @@
     <MESSAGE value="refactor pdb and topology services to reorder PDB content and inject extra points for water molecules" />
     <MESSAGE value="refactor download service to add filename parameter for explicit file downloads and enhance error handling" />
     <MESSAGE value="refactor pdb service to enhance PDB line parsing and formatting, and improve extra point extraction from force field" />
-    <option name="LAST_COMMIT_MESSAGE" value="refactor pdb service to enhance PDB line parsing and formatting, and improve extra point extraction from force field" />
+    <MESSAGE value="refactor forcefield and pdb services to improve ion categorization and enhance PDB content mapping" />
+    <option name="LAST_COMMIT_MESSAGE" value="refactor forcefield and pdb services to improve ion categorization and enhance PDB content mapping" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/little_chemik_back$.coverage" NAME=" Coverage Results" MODIFIED="1773355688540" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />

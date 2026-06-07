@@ -21,6 +21,49 @@ class TopologyService:
         self.workspace_manager = WorkspaceManager()
         self.pdb_service = PDBService()
 
+    def _generate_amber_crd(self, pdb_content: str, output_path: Path):
+        """Vygeneruje standardní AMBER .crd (coordinate) soubor z PDB obsahu."""
+        coords = []
+        box_dims = []
+
+        # 1. Parsování souřadnic a boxu z PDB
+        for line in pdb_content.splitlines():
+            if line.startswith("ATOM") or line.startswith("HETATM"):
+                try:
+                    # PDB formát má pevné pozice znaků pro souřadnice
+                    x = float(line[30:38])
+                    y = float(line[38:46])
+                    z = float(line[46:54])
+                    coords.extend([x, y, z])
+                except ValueError:
+                    continue
+            elif line.startswith("CRYST1"):
+                try:
+                    # Extrakce rozměrů boxu (pokud existuje solvatace)
+                    box_x = float(line[6:15])
+                    box_y = float(line[15:24])
+                    box_z = float(line[24:33])
+                    box_dims = [box_x, box_y, box_z, 90.0, 90.0, 90.0]
+                except ValueError:
+                    pass
+
+        num_atoms = len(coords) // 3
+
+        # 2. Zápis do AMBER CRD formátu
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(f"{num_atoms:6d}\n")  # Počet atomů (na 6 znaků)
+
+            # AMBER CRD má vždy 6 souřadnic na řádek, formát %12.7f
+            for i in range(0, len(coords), 6):
+                chunk = coords[i:i + 6]
+                line_str = "".join([f"{val:12.7f}" for val in chunk])
+                f.write(line_str + "\n")
+
+            # Pokud máme box (např. po solvataci), zapíšeme ho na konec
+            if box_dims:
+                box_str = "".join([f"{val:12.7f}" for val in box_dims])
+                f.write(box_str + "\n")
+
     def generate_topology(self, workspace_id: str, pdb_filename: str, ff_selections: Dict[str, Any]) -> Dict[str, str]:
         """
         Main pipeline for generating AMBER topology (.prmtop) and updated PDB from a PDB file.
@@ -60,9 +103,9 @@ class TopologyService:
                     for name in rna_names: ff_mapping[name] = ff_name
                 elif mol_type == 'D':
                     for name in dna_names: ff_mapping[name] = ff_name
-                elif mol_type == 'W':
+                elif mol_type.startswith('W'):
                     for name in water_names: ff_mapping[name] = ff_name
-                elif mol_type == 'I':
+                elif mol_type.startswith('I'):
                     for name in ion_names: ff_mapping[name] = ff_name
 
             # 3. PŘEDNAČTENÍ SILOVÝCH POLÍ (Potřebujeme je pro výpočet Extra Points)
@@ -89,14 +132,15 @@ class TopologyService:
                 preloaded_ff_data[mol_type] = ff_instance
                 preloaded_ff_data[ff_name] = ff_instance
 
-                # OPRAVA 1: Propojení DNA ('D') na vnitřní tag Amberu ('R')
                 if mol_type == 'D':
                     preloaded_ff_data['R'] = ff_instance
                 elif mol_type == 'R':
                     preloaded_ff_data['D'] = ff_instance
 
-                # Pokud je to voda, uložíme si ji bokem pro parser
-                if mol_type == 'W':
+                if mol_type.startswith('I'):
+                    preloaded_ff_data['I'] = ff_instance
+
+                if mol_type.startswith('W'):
                     water_ff_instance = ff_instance
 
             # 4. OPRAVA PDB (Srovnání iontů a vstříknutí EP)
@@ -121,17 +165,20 @@ class TopologyService:
             prmtop_path = workspace_dir / prmtop_filename
             AMBER_topology.write_AMBER_topology(str(prmtop_path), topology_data)
 
-            # B) Uložení opraveného PDB (Souřadnice)
-            # Přepíšeme pouze ten původní soubor ve workspace,
-            # aby frontend (Molstar) hned viděl ty správné atomy a Extra Pointy.
+            # B) Uložení opraveného PDB (Souřadnice pro Molstar)
             original_pdb_path = workspace_dir / pdb_filename
             with open(original_pdb_path, "w", encoding="utf-8") as f:
                 f.write(fixed_pdb_content)
 
+            # C) PŘIDÁNO: Uložení AMBER .crd (Čisté AMBER souřadnice pro export)
+            crd_filename = pdb_filename.replace(".pdb", ".crd")
+            crd_path = workspace_dir / crd_filename
+            self._generate_amber_crd(fixed_pdb_content, crd_path)
+
             logger.info(f"Topology successfully saved to {prmtop_path}")
             logger.info(f"PDB coordinates updated at {original_pdb_path}")
+            logger.info(f"AMBER CRD successfully saved to {crd_path}")
 
-            # Vracíme slovník - coordinates_file teď odkazuje na ten samý soubor (structure.pdb)
             return {
                 "topology_file": prmtop_filename,
                 "coordinates_file": pdb_filename
