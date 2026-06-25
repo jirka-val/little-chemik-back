@@ -4,19 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor topology and hydrogenation services to enhance box dimension handling and fix CRYST1 formatting for octahedron">
-      <change afterPath="$PROJECT_DIR$/.idea/.name" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/AICommit.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/copilot.data.migration.ask2agent.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/copilotDiffState.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/api/v1/endpoints/editor.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/services/editor_service.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/test_gap_fix.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/test_real_gap.py" afterDir="false" />
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor analysis service and add editor endpoints for residue and atom modifications">
+      <change beforePath="$PROJECT_DIR$/.idea/copilotDiffState.xml" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/api.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/analysis_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/analysis_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/structure/hydrogenation.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/structure/hydrogenation.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/analysis.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -83,11 +74,11 @@
 }</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\DevProjects\littleChemik\little-chemik-back\tests" />
       <recent name="C:\DevProjects\littleChemik\little-chemik-back\app\workspaces" />
       <recent name="C:\DevProjects\littleChemik\little-chemik-back\app\services" />
       <recent name="C:\DevProjects\littleChemik\little-chemik-back\data\forcefields\TIP3P" />
       <recent name="C:\DevProjects\littleChemik\little-chemik-back\data\forcefields\FF99BSC0" />
-      <recent name="C:\DevProjects\littleChemik\little-chemik-back\data\forcefields\OL3CP_gHBfix21_NBfix-0BPh" />
     </key>
   </component>
   <component name="RunManager" selected="Python tests.Python tests for test_api.test_10_3dvz_rna_variants_and_atoms_detection">
@@ -249,15 +240,22 @@
       <workItem from="1780842174652" duration="7620000" />
       <workItem from="1780865886668" duration="3501000" />
       <workItem from="1780870173991" duration="65000" />
-      <workItem from="1780870394922" duration="2363000" />
-    </task>
-    <task id="LOCAL-00007" summary="Refactoring">
-      <option name="closed" value="true" />
-      <created>1767803428058</created>
-      <option name="number" value="00007" />
-      <option name="presentableId" value="LOCAL-00007" />
-      <option name="project" value="LOCAL" />
-      <updated>1767803428058</updated>
+      <workItem from="1780870394922" duration="2747000" />
+      <workItem from="1780915778045" duration="16000" />
+      <workItem from="1781086475971" duration="803000" />
+      <workItem from="1781247188809" duration="2027000" />
+      <workItem from="1781466344160" duration="273000" />
+      <workItem from="1781781563857" duration="4352000" />
+      <workItem from="1781812837566" duration="1474000" />
+      <workItem from="1781851456018" duration="1203000" />
+      <workItem from="1782126796906" duration="1540000" />
+      <workItem from="1782148606165" duration="3723000" />
+      <workItem from="1782204754422" duration="988000" />
+      <workItem from="1782253492359" duration="842000" />
+      <workItem from="1782288809362" duration="4140000" />
+      <workItem from="1782370649137" duration="5186000" />
+      <workItem from="1782376482912" duration="554000" />
+      <workItem from="1782386274688" duration="1007000" />
     </task>
     <task id="LOCAL-00008" summary="Refactoring">
       <option name="closed" value="true" />
@@ -643,7 +641,15 @@
       <option name="project" value="LOCAL" />
       <updated>1780853052095</updated>
     </task>
-    <option name="localTasksCounter" value="56" />
+    <task id="LOCAL-00056" summary="refactor analysis service and add editor endpoints for residue and atom modifications">
+      <option name="closed" value="true" />
+      <created>1780875238263</created>
+      <option name="number" value="00056" />
+      <option name="presentableId" value="LOCAL-00056" />
+      <option name="project" value="LOCAL" />
+      <updated>1780875238263</updated>
+    </task>
+    <option name="localTasksCounter" value="57" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -661,7 +667,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="refactor analysis service for improved residue handling and connectivity checks" />
     <MESSAGE value="enhance hydrogenation service with optimization option and improve residue handling in analysis service" />
     <MESSAGE value="refactor molecule upload and download endpoints for improved error handling and logging" />
     <MESSAGE value="refactor hydrogenation service for enhanced structure preparation and add new endpoint for advanced molecule preparation" />
@@ -686,7 +691,8 @@
     <MESSAGE value="refactor forcefield and pdb services to improve ion categorization and enhance PDB content mapping" />
     <MESSAGE value="refactor download service to implement a new export endpoint for multiple file downloads and enhance ZIP file handling" />
     <MESSAGE value="refactor topology and hydrogenation services to enhance box dimension handling and fix CRYST1 formatting for octahedron" />
-    <option name="LAST_COMMIT_MESSAGE" value="refactor topology and hydrogenation services to enhance box dimension handling and fix CRYST1 formatting for octahedron" />
+    <MESSAGE value="refactor analysis service and add editor endpoints for residue and atom modifications" />
+    <option name="LAST_COMMIT_MESSAGE" value="refactor analysis service and add editor endpoints for residue and atom modifications" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/little_chemik_back$.coverage" NAME=" Coverage Results" MODIFIED="1773355688540" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
