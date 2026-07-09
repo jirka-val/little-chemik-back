@@ -1,15 +1,24 @@
 import logging
 import aiofiles
+import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 
-from app.workspaces.manager import workspace_manager
-from app.services.analysis_service import build_sequence_tokens
+from pydantic import BaseModel
+from typing import Dict
 
-import httpx
+
+from app.workspaces.manager import workspace_manager
+from app.services.analysis_service import build_sequence_tokens, analyze_pdb_altlocs, clean_pdb_altlocs
 
 logger = logging.getLogger("api")
 router = APIRouter()
+
+
+# --- PŘIDANÝ MODEL PRO PŘIJETÍ DAT Z FRONTENDU ---
+class AltLocSelectionRequest(BaseModel):
+    selection: Dict[str, str]
+# -------------------------------------------------
 
 
 @router.get("/sequence/{workspace_id}", summary="Analýza sekvence molekuly")
@@ -57,6 +66,7 @@ async def analyze_sequence(workspace_id: str, chain: str | None = None, fill_gap
             detail="Internal server error while processing the molecule sequence."
         )
 
+
 @router.get("/analyze-pdb/{pdb_code}", summary="Vzdálená analýza PDB z RCSB bez workspace")
 async def analyze_remote_pdb(pdb_code: str, chain: str | None = None, fill_gaps: bool = True):
     """
@@ -67,7 +77,6 @@ async def analyze_remote_pdb(pdb_code: str, chain: str | None = None, fill_gaps:
     logger.info(f"Remote PDB analysis requested for code: {pdb_code} (chain: {chain}, fill_gaps: {fill_gaps})")
 
     # 1. Stažení PDB souboru z RCSB přes asynchronního klienta
-    # Používáme oficiální URL adresu pro download, kterou máte v projektu
     rcsb_url = f"https://files.rcsb.org/download/{pdb_code}.pdb"
 
     async with httpx.AsyncClient() as client:
@@ -88,7 +97,7 @@ async def analyze_remote_pdb(pdb_code: str, chain: str | None = None, fill_gaps:
             logger.exception(f"Síťová chyba při stahování molekuly {pdb_code}: {str(e)}")
             raise HTTPException(status_code=503, detail="RCSB databáze je momentálně nedostupná.")
 
-    # 2. Spuštění CPU-náročné analýzy tokenů ve vedlejším vlákně (stejně jako u workspace)
+    # 2. Spuštění CPU-náročné analýzy tokenů ve vedlejším vlákně
     try:
         sequence_data = await run_in_threadpool(
             build_sequence_tokens,
@@ -99,7 +108,6 @@ async def analyze_remote_pdb(pdb_code: str, chain: str | None = None, fill_gaps:
 
         logger.info(f"Remote analysis for PDB {pdb_code} successfully completed.")
 
-        # Vracíme přesně ty klíče, které šéfův skript očekává v response.json()
         return {
             "pdb_text": pdb_text,
             "missing_atoms": sequence_data
@@ -111,3 +119,78 @@ async def analyze_remote_pdb(pdb_code: str, chain: str | None = None, fill_gaps:
             status_code=500,
             detail="Interní chyba serveru při analýze molekulární sekvence."
         )
+
+
+@router.get("/altlocs/{workspace_id}", summary="Analýza alternativních pozic (AltLocs)")
+async def analyze_altlocs(workspace_id: str):
+    """
+    Zkontroluje PDB soubor ve workspace a vrátí JSON s nalezenými
+    alternativními pozicemi, jejich obsazeností (occupancy) a B-faktory.
+    """
+    logger.info(f"AltLoc analysis requested for workspace: {workspace_id}")
+
+    if not workspace_manager.workspace_exists(workspace_id):
+        logger.error(f"Workspace {workspace_id} not found.")
+        raise HTTPException(status_code=404, detail="Workspace not found. Have you uploaded a file?")
+
+    try:
+        file_path = workspace_manager.get_file_path(workspace_id, "structure.pdb")
+
+        async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+            pdb_text = await f.read()
+
+        altloc_data = await run_in_threadpool(
+            analyze_pdb_altlocs,
+            pdb_text=pdb_text
+        )
+
+        logger.info(f"AltLoc analysis for workspace {workspace_id} successfully completed.")
+
+        return altloc_data
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error processing AltLocs for workspace {workspace_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error while analyzing AltLocs."
+        )
+
+
+# --- PŘIDANÝ KONCOVÝ ENDPOINT PRO VYČIŠTĚNÍ PDB ---
+@router.post("/clean-altlocs/{workspace_id}", summary="Aplikuje výběr AltLocs a vyčistí PDB")
+async def apply_clean_altlocs(workspace_id: str, payload: AltLocSelectionRequest):
+    """
+    Přijme od frontendu zvolené konformace (např. {"A_45_TYR": "A"}),
+    smaže z PDB souboru nevybrané atomy a soubor přepíše.
+    """
+    logger.info(f"Cleaning AltLocs for workspace: {workspace_id}")
+
+    if not workspace_manager.workspace_exists(workspace_id):
+        raise HTTPException(status_code=404, detail="Workspace not found.")
+
+    try:
+        file_path = workspace_manager.get_file_path(workspace_id, "structure.pdb")
+
+        # Načtení starého PDB
+        async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+            pdb_text = await f.read()
+
+        # Vyčištění přes naši novou funkci (Fáze 4)
+        cleaned_pdb_text = await run_in_threadpool(
+            clean_pdb_altlocs,
+            pdb_text=pdb_text,
+            user_selection=payload.selection
+        )
+
+        # Přepsání starého PDB tím čistým
+        async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
+            await f.write(cleaned_pdb_text)
+
+        logger.info(f"AltLocs cleaned successfully for workspace {workspace_id}.")
+        return {"status": "success", "message": "Structure cleaned successfully."}
+
+    except Exception as e:
+        logger.exception(f"Error cleaning AltLocs for workspace {workspace_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error cleaning structure.")

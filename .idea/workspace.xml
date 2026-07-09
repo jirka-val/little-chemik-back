@@ -4,10 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor analysis service and add editor endpoints for residue and atom modifications">
-      <change beforePath="$PROJECT_DIR$/.idea/copilotDiffState.xml" beforeDir="false" />
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="for testing reconstruction">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/analysis.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/analysis_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/analysis_service.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -255,15 +255,8 @@
       <workItem from="1782288809362" duration="4140000" />
       <workItem from="1782370649137" duration="5186000" />
       <workItem from="1782376482912" duration="554000" />
-      <workItem from="1782386274688" duration="1007000" />
-    </task>
-    <task id="LOCAL-00008" summary="Refactoring">
-      <option name="closed" value="true" />
-      <created>1767803894124</created>
-      <option name="number" value="00008" />
-      <option name="presentableId" value="LOCAL-00008" />
-      <option name="project" value="LOCAL" />
-      <updated>1767803894124</updated>
+      <workItem from="1782386274688" duration="2759000" />
+      <workItem from="1783607545753" duration="6784000" />
     </task>
     <task id="LOCAL-00009" summary="Refactoring">
       <option name="closed" value="true" />
@@ -649,7 +642,15 @@
       <option name="project" value="LOCAL" />
       <updated>1780875238263</updated>
     </task>
-    <option name="localTasksCounter" value="57" />
+    <task id="LOCAL-00057" summary="for testing reconstruction">
+      <option name="closed" value="true" />
+      <created>1782388357877</created>
+      <option name="number" value="00057" />
+      <option name="presentableId" value="LOCAL-00057" />
+      <option name="project" value="LOCAL" />
+      <updated>1782388357877</updated>
+    </task>
+    <option name="localTasksCounter" value="58" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -667,7 +668,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="enhance hydrogenation service with optimization option and improve residue handling in analysis service" />
     <MESSAGE value="refactor molecule upload and download endpoints for improved error handling and logging" />
     <MESSAGE value="refactor hydrogenation service for enhanced structure preparation and add new endpoint for advanced molecule preparation" />
     <MESSAGE value="add forcefields endpoint and enhance analysis service for improved residue detection" />
@@ -692,7 +692,8 @@
     <MESSAGE value="refactor download service to implement a new export endpoint for multiple file downloads and enhance ZIP file handling" />
     <MESSAGE value="refactor topology and hydrogenation services to enhance box dimension handling and fix CRYST1 formatting for octahedron" />
     <MESSAGE value="refactor analysis service and add editor endpoints for residue and atom modifications" />
-    <option name="LAST_COMMIT_MESSAGE" value="refactor analysis service and add editor endpoints for residue and atom modifications" />
+    <MESSAGE value="for testing reconstruction" />
+    <option name="LAST_COMMIT_MESSAGE" value="for testing reconstruction" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/little_chemik_back$.coverage" NAME=" Coverage Results" MODIFIED="1773355688540" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />

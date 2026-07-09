@@ -313,3 +313,111 @@ def _check_connectivity_integrity(group: Optional[str], ff_name: str, atoms: Lis
         "is_broken": len(components) > 1,
         "components": components
     }
+
+
+def analyze_pdb_altlocs(pdb_text: str) -> Dict[str, Any]:
+    """
+    PROJDE PDB SOUBOR A IDENTIFIKUJE VŠECHNY ALTERNATIVNÍ POZICE (ALTLOCS),
+    JEJICH OBSAZENOST A B-FAKTOR. VRACÍ STRUKTUROVANÝ DICT (JSON) PRO FRONTEND.
+    """
+    altloc_data = {}
+
+    # Projdeme soubor řádek po řádku
+    for line in pdb_text.splitlines():
+        if line.startswith("ATOM") or line.startswith("HETATM"):
+            # Index 16 je sloupec 17 v PDB (AltLoc)
+            alt_loc = line[16]
+
+            # Pokud to není mezera, našli jsme alternativní pozici
+            if alt_loc != ' ':
+                chain = line[21].strip() or "?"
+                resseq_raw = line[22:26].strip()
+                resname = line[17:20].strip()
+
+                try:
+                    resseq = int(resseq_raw)
+                except ValueError:
+                    continue
+
+                # Sloupce 55-60 (index 54:60) pro Occupancy
+                try:
+                    occupancy = float(line[54:60].strip())
+                except ValueError:
+                    occupancy = 1.0
+
+                # Sloupce 61-66 (index 60:66) pro B-faktor
+                try:
+                    b_factor = float(line[60:66].strip())
+                except ValueError:
+                    b_factor = 0.0
+
+                # Unikátní klíč pro konkrétní aminokyselinu (např. 'A', 45, 'TYR')
+                key = (chain, resseq, resname)
+
+                if key not in altloc_data:
+                    altloc_data[key] = {}
+
+                # Pokud jsme tento konkrétní AltLoc (např. 'A') u tohoto zbytku ještě neuložili
+                if alt_loc not in altloc_data[key]:
+                    altloc_data[key][alt_loc] = {
+                        "occupancy": round(occupancy * 100, 1),  # Převod na hezká procenta (např. 70.0)
+                        "bFactor": b_factor
+                    }
+
+    # Nyní to přetavíme do krásného pole pro Frontend
+    result_residues = []
+    for (chain, resseq, resname), alt_locs in altloc_data.items():
+        # Přidáme jen ty, které mají reálně nějaké alternativní pozice
+        if len(alt_locs) > 0:
+            result_residues.append({
+                "chain": chain,
+                "resseq": resseq,
+                "resname": resname,
+                "altLocs": alt_locs
+            })
+
+    # Seřadíme podle řetězce a čísla zbytku, ať je to na frontendu v tabulce popořadě
+    result_residues.sort(key=lambda x: (x["chain"], x["resseq"]))
+
+    return {
+        "hasAltLocs": len(result_residues) > 0,
+        "residues": result_residues
+    }
+
+
+def clean_pdb_altlocs(pdb_text: str, user_selection: dict) -> str:
+    """
+    PROJDE PDB SOUBOR A SMAŽE VŠECHNY ALTERNATIVNÍ ATOMY,
+    KTERÉ UŽIVATEL NEVYBRAL. VYBRANÝM ATOMŮM ODSTRANÍ ALTLOC INDIKÁTOR.
+    """
+    cleaned_lines = []
+
+    for line in pdb_text.splitlines():
+        if line.startswith("ATOM") or line.startswith("HETATM"):
+            alt_loc = line[16]
+
+            # Pokud má atom alternativní pozici
+            if alt_loc != ' ':
+                chain = line[21].strip() or "?"
+                resseq_raw = line[22:26].strip()
+                resname = line[17:20].strip()
+
+                # Vygenerujeme stejný unikátní klíč, jaký nám posílá frontend (např. "A_45_TYR")
+                unique_key = f"{chain}_{resseq_raw}_{resname}"
+
+                # Pokud uživatel pro tento zbytek provedl volbu
+                if unique_key in user_selection:
+                    chosen_altloc = user_selection[unique_key]
+
+                    # Pokud se AltLoc atomu neshoduje s volbou uživatele -> Smazat řádek
+                    if alt_loc != chosen_altloc:
+                        continue
+                    else:
+                        # Pokud je to ten správný atom, nahradíme jeho AltLoc znak ('A'/'B')
+                        # za obyčejnou mezeru, aby si další softwary nemyslely, že je to chyba
+                        line = line[:16] + ' ' + line[17:]
+
+        # Přidáme řádek do nového čistého souboru
+        cleaned_lines.append(line)
+
+    return '\n'.join(cleaned_lines)
