@@ -181,7 +181,6 @@ class PDBService:
         ion_lines = []
         waters = {}
 
-        # --- NOVÉ: ŠÉFOVA EXTRAKCE JMEN EXTRA POINTŮ ---
         # Vytáhneme správná jména EP z force fieldu hned na začátku
         ep_names_from_ff = []
         if ff_water_instance:

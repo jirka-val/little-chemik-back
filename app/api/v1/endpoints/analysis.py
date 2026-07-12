@@ -158,7 +158,6 @@ async def analyze_altlocs(workspace_id: str):
         )
 
 
-# --- PŘIDANÝ KONCOVÝ ENDPOINT PRO VYČIŠTĚNÍ PDB ---
 @router.post("/clean-altlocs/{workspace_id}", summary="Aplikuje výběr AltLocs a vyčistí PDB")
 async def apply_clean_altlocs(workspace_id: str, payload: AltLocSelectionRequest):
     """

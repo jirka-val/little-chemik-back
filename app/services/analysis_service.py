@@ -319,6 +319,8 @@ def analyze_pdb_altlocs(pdb_text: str) -> Dict[str, Any]:
     """
     PROJDE PDB SOUBOR A IDENTIFIKUJE VŠECHNY ALTERNATIVNÍ POZICE (ALTLOCS),
     JEJICH OBSAZENOST A B-FAKTOR. VRACÍ STRUKTUROVANÝ DICT (JSON) PRO FRONTEND.
+    NAVÍC ANALYZUJE KONEKTIVITU (BLOKY NA SEBE NAVAZUJÍCÍCH AMINOKYSELIN)
+    A DOPORUČUJE NEJLEPŠÍ TRASU PRO ZACHOVÁNÍ PEPTIDOVÉ VAZBY.
     """
     altloc_data = {}
 
@@ -351,23 +353,21 @@ def analyze_pdb_altlocs(pdb_text: str) -> Dict[str, Any]:
                 except ValueError:
                     b_factor = 0.0
 
-                # Unikátní klíč pro konkrétní aminokyselinu (např. 'A', 45, 'TYR')
+                # Unikátní klíč pro konkrétní aminokyselinu
                 key = (chain, resseq, resname)
 
                 if key not in altloc_data:
                     altloc_data[key] = {}
 
-                # Pokud jsme tento konkrétní AltLoc (např. 'A') u tohoto zbytku ještě neuložili
                 if alt_loc not in altloc_data[key]:
                     altloc_data[key][alt_loc] = {
-                        "occupancy": round(occupancy * 100, 1),  # Převod na hezká procenta (např. 70.0)
+                        "occupancy": round(occupancy * 100, 1),
                         "bFactor": b_factor
                     }
 
-    # Nyní to přetavíme do krásného pole pro Frontend
+    # Nyní to přetavíme do pole pro Frontend
     result_residues = []
     for (chain, resseq, resname), alt_locs in altloc_data.items():
-        # Přidáme jen ty, které mají reálně nějaké alternativní pozice
         if len(alt_locs) > 0:
             result_residues.append({
                 "chain": chain,
@@ -376,8 +376,69 @@ def analyze_pdb_altlocs(pdb_text: str) -> Dict[str, Any]:
                 "altLocs": alt_locs
             })
 
-    # Seřadíme podle řetězce a čísla zbytku, ať je to na frontendu v tabulce popořadě
+    # Seřadíme podle řetězce a čísla zbytku
     result_residues.sort(key=lambda x: (x["chain"], x["resseq"]))
+
+    if result_residues:
+        blocks = []
+        current_block = [result_residues[0]]
+
+        # 1. Seskládáme rezidua do bloků (pokud po sobě následují v číslování)
+        for i in range(1, len(result_residues)):
+            prev_res = current_block[-1]
+            curr_res = result_residues[i]
+
+            if curr_res["chain"] == prev_res["chain"] and curr_res["resseq"] == prev_res["resseq"] + 1:
+                current_block.append(curr_res)
+            else:
+                blocks.append(current_block)
+                current_block = [curr_res]
+
+        blocks.append(current_block)
+
+        # 2. Pro každý blok určíme vítěznou trasu
+        for block in blocks:
+            paths_stats = {}
+
+            # Nasbíráme součty z celého bloku
+            for res in block:
+                for alt, info in res["altLocs"].items():
+                    if alt not in paths_stats:
+                        paths_stats[alt] = {"occ": 0.0, "bfact": 0.0, "count": 0}
+                    paths_stats[alt]["occ"] += info["occupancy"]
+                    paths_stats[alt]["bfact"] += info["bFactor"]
+                    paths_stats[alt]["count"] += 1
+
+            best_alt = None
+            best_occ = -1.0
+            best_bfact = float('inf')
+
+            # Spočítáme průměry a vybereme vítěze pro daný řetězec
+            for alt, stats in paths_stats.items():
+                avg_occ = stats["occ"] / stats["count"]
+                avg_bfact = stats["bfact"] / stats["count"]
+
+                # Vyhrává vyšší occupancy. Pokud je 50 na 50 (remíza), vyhrává nižší B-faktor!
+                if avg_occ > best_occ:
+                    best_occ = avg_occ
+                    best_bfact = avg_bfact
+                    best_alt = alt
+                elif avg_occ == best_occ:
+                    if avg_bfact < best_bfact:
+                        best_bfact = avg_bfact
+                        best_alt = alt
+
+            # 3. Zapíšeme vítěznou volbu do dat pro frontend
+            for res in block:
+                # Ošetření: zkontrolujeme, zda tuto trasu reziduum reálně obsahuje
+                if best_alt in res["altLocs"]:
+                    res["recommended_alt"] = best_alt
+                else:
+                    # Fallback na lokální maximum, pokud by vítězná trasa u tohoto rezidua nebyla
+                    local_best = max(res["altLocs"].keys(),
+                                     key=lambda k: (res["altLocs"][k]["occupancy"], -res["altLocs"][k]["bFactor"]))
+                    res["recommended_alt"] = local_best
+    # -------------------------------------------------------------------
 
     return {
         "hasAltLocs": len(result_residues) > 0,
