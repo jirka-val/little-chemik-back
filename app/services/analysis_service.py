@@ -448,16 +448,18 @@ def analyze_pdb_altlocs(pdb_text: str) -> Dict[str, Any]:
 
 def clean_pdb_altlocs(pdb_text: str, user_selection: dict) -> str:
     """
-    PROJDE PDB SOUBOR A SMAŽE VŠECHNY ALTERNATIVNÍ ATOMY,
-    KTERÉ UŽIVATEL NEVYBRAL. VYBRANÝM ATOMŮM ODSTRANÍ ALTLOC INDIKÁTOR.
+    PROJDE PDB SOUBOR A SMAŽE VŠECHNY ALTERNATIVNÍ ATOMY I JEJICH ANISOU ZÁZNAMY,
+    KTERÉ UŽIVATEL NEVYBRAL. VYBRANÝM ATOMŮM ODSTRANÍ ALTLOC INDIKÁTOR
+    A NASTAVÍ OBSAZENOST (OCCUPANCY) ZPĚT NA 1.00.
     """
     cleaned_lines = []
 
     for line in pdb_text.splitlines():
-        if line.startswith("ATOM") or line.startswith("HETATM"):
+        # OPRAVA 1: Přidali jsme kontrolu i pro ANISOU řádky
+        if line.startswith("ATOM") or line.startswith("HETATM") or line.startswith("ANISOU"):
             alt_loc = line[16]
 
-            # Pokud má atom alternativní pozici
+            # Pokud má atom/anisou alternativní pozici
             if alt_loc != ' ':
                 chain = line[21].strip() or "?"
                 resseq_raw = line[22:26].strip()
@@ -470,15 +472,21 @@ def clean_pdb_altlocs(pdb_text: str, user_selection: dict) -> str:
                 if unique_key in user_selection:
                     chosen_altloc = user_selection[unique_key]
 
-                    # Pokud se AltLoc atomu neshoduje s volbou uživatele -> Smazat řádek
+                    # Pokud se AltLoc atomu neshoduje s volbou uživatele -> Smazat řádek (nepřidá se do cleaned_lines)
                     if alt_loc != chosen_altloc:
                         continue
                     else:
-                        # Pokud je to ten správný atom, nahradíme jeho AltLoc znak ('A'/'B')
-                        # za obyčejnou mezeru, aby si další softwary nemyslely, že je to chyba
+                        # Pokud je to ten správný atom/anisou, nahradíme jeho AltLoc znak ('A'/'B') za mezeru
                         line = line[:16] + ' ' + line[17:]
 
-        # Přidáme řádek do nového čistého souboru
+                        # OPRAVA 2: Pokud jde o ATOM/HETATM, musíme vrátit obsazenost (Occupancy) na 1.00
+                        # (ANISOU řádky pole Occupancy nemají, proto ta podmínka)
+                        if line.startswith("ATOM") or line.startswith("HETATM"):
+                            if len(line) >= 60:
+                                # Obsazenost je v PDB formátu přesně na pozicích 55-60 (index 54:60)
+                                line = line[:54] + "  1.00" + line[60:]
+
+        # Přidáme upravený (nebo nedotčený) řádek do nového čistého souboru
         cleaned_lines.append(line)
 
     return '\n'.join(cleaned_lines)

@@ -70,9 +70,10 @@ async def analyze_sequence(workspace_id: str, chain: str | None = None, fill_gap
 @router.get("/analyze-pdb/{pdb_code}", summary="Vzdálená analýza PDB z RCSB bez workspace")
 async def analyze_remote_pdb(pdb_code: str, chain: str | None = None, fill_gaps: bool = True):
     """
-    Endpoint pro externí skripty (např. pro šéfa).
-    Stáhne PDB soubor přímo z RCSB podle kódu, asynchronně ho přečte
-    a v dedikovaném vlákně vrátí jeho surový text a analýzu chybějících atomů.
+    Endpoint pro externí skripty.
+    Stáhne PDB soubor přímo z RCSB podle kódu, asynchronně ho přečte,
+    AUTOMATICKY VYČISTÍ ALTERNATIVNÍ POZICE (AltLocs)
+    a v dedikovaném vlákně vrátí jeho čistý text a analýzu chybějících atomů.
     """
     logger.info(f"Remote PDB analysis requested for code: {pdb_code} (chain: {chain}, fill_gaps: {fill_gaps})")
 
@@ -97,7 +98,38 @@ async def analyze_remote_pdb(pdb_code: str, chain: str | None = None, fill_gaps:
             logger.exception(f"Síťová chyba při stahování molekuly {pdb_code}: {str(e)}")
             raise HTTPException(status_code=503, detail="RCSB databáze je momentálně nedostupná.")
 
-    # 2. Spuštění CPU-náročné analýzy tokenů ve vedlejším vlákně
+    # ==============================================================================
+    try:
+        # Najdeme všechny alternativní pozice v souboru
+        altlocs_data = await run_in_threadpool(analyze_pdb_altlocs, pdb_text)
+
+        if altlocs_data:
+            # Sestavíme slovník pro automatický výběr (např. {"A_2647_U": "A"})
+            auto_selection = {}
+            for alt_item in altlocs_data:
+                # Použijeme unikátní klíč, který vrací tvá analýza
+                key = alt_item.get("unique_key") or alt_item.get("id") or alt_item.get("key")
+
+                # Vezmeme 'recommended', pokud chybí, vezmeme první dostupnou variantu
+                chosen_variant = alt_item.get("recommended")
+                if not chosen_variant and "variants" in alt_item:
+                    chosen_variant = alt_item["variants"][0]
+
+                if key and chosen_variant:
+                    auto_selection[key] = chosen_variant
+
+            if auto_selection:
+                logger.info(f"Auto-resolving AltLocs pro {pdb_code}: {auto_selection}")
+                # ZDE SE PDB TEXT DEFINITIVNĚ VYČISTÍ (naší opravenou funkcí z dřívějška)
+                pdb_text = await run_in_threadpool(clean_pdb_altlocs, pdb_text, auto_selection)
+
+    except Exception as e:
+        logger.warning(f"Chyba při automatickém čištění AltLocs pro {pdb_code}: {str(e)}")
+        # Záměrně nevyhazujeme HTTPException. Pokud by čištění náhodou selhalo,
+        # API poběží dál se surovým textem, aby úplně nespadlo.
+    # ==============================================================================
+
+    # 2. Spuštění CPU-náročné analýzy tokenů ve vedlejším vlákně (nyní nad ČISTÝM pdb_text)
     try:
         sequence_data = await run_in_threadpool(
             build_sequence_tokens,
@@ -109,7 +141,7 @@ async def analyze_remote_pdb(pdb_code: str, chain: str | None = None, fill_gaps:
         logger.info(f"Remote analysis for PDB {pdb_code} successfully completed.")
 
         return {
-            "pdb_text": pdb_text,
+            "pdb_text": pdb_text,  # TOTO VRÁTÍ ŠÉFOVI UŽ VYČIŠTĚNÉ PDB!
             "missing_atoms": sequence_data
         }
 

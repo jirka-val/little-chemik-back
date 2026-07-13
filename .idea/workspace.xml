@@ -4,11 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor analysis service to add endpoints for AltLoc analysis and cleaning">
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor analysis service to enhance AltLoc analysis and recommend optimal peptide paths">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/analysis.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/services/analysis_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/analysis_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/pdb_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/pdb_service.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -261,15 +260,8 @@
       <workItem from="1783622889110" duration="483000" />
       <workItem from="1783634571939" duration="2437000" />
       <workItem from="1783666628193" duration="4553000" />
-      <workItem from="1783893678151" duration="2307000" />
-    </task>
-    <task id="LOCAL-00010" summary="Refactoring">
-      <option name="closed" value="true" />
-      <created>1767807032342</created>
-      <option name="number" value="00010" />
-      <option name="presentableId" value="LOCAL-00010" />
-      <option name="project" value="LOCAL" />
-      <updated>1767807032342</updated>
+      <workItem from="1783893678151" duration="2924000" />
+      <workItem from="1783972337551" duration="1502000" />
     </task>
     <task id="LOCAL-00011" summary="Refactoring">
       <option name="closed" value="true" />
@@ -655,7 +647,15 @@
       <option name="project" value="LOCAL" />
       <updated>1783622947884</updated>
     </task>
-    <option name="localTasksCounter" value="59" />
+    <task id="LOCAL-00059" summary="refactor analysis service to enhance AltLoc analysis and recommend optimal peptide paths">
+      <option name="closed" value="true" />
+      <created>1783899181926</created>
+      <option name="number" value="00059" />
+      <option name="presentableId" value="LOCAL-00059" />
+      <option name="project" value="LOCAL" />
+      <updated>1783899181927</updated>
+    </task>
+    <option name="localTasksCounter" value="60" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -673,7 +673,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="refactor hydrogenation service for enhanced structure preparation and add new endpoint for advanced molecule preparation" />
     <MESSAGE value="add forcefields endpoint and enhance analysis service for improved residue detection" />
     <MESSAGE value="refactor hydrogenation service for improved error handling and logging, and enhance forcefield compatibility" />
     <MESSAGE value="refactor analysis, download, forcefields, and molecules endpoints for improved asynchronous handling and error logging" />
@@ -698,7 +697,8 @@
     <MESSAGE value="refactor analysis service and add editor endpoints for residue and atom modifications" />
     <MESSAGE value="for testing reconstruction" />
     <MESSAGE value="refactor analysis service to add endpoints for AltLoc analysis and cleaning" />
-    <option name="LAST_COMMIT_MESSAGE" value="refactor analysis service to add endpoints for AltLoc analysis and cleaning" />
+    <MESSAGE value="refactor analysis service to enhance AltLoc analysis and recommend optimal peptide paths" />
+    <option name="LAST_COMMIT_MESSAGE" value="refactor analysis service to enhance AltLoc analysis and recommend optimal peptide paths" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/little_chemik_back$.coverage" NAME=" Coverage Results" MODIFIED="1773355688540" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />
