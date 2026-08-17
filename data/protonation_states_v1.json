@@ -1,0 +1,237 @@
+{
+  "protonation_families": [
+    {
+      "members": [
+        [
+          {
+            "mol_type": "P",
+            "resn": "HIP"
+          }
+        ],
+        [
+          {
+            "mol_type": "P",
+            "resn": "HIE"
+          },
+          {
+            "mol_type": "P",
+            "resn": "HID"
+          }
+        ]
+      ],
+      "pKa": [
+        6.0
+      ],
+      "variable_sites": {
+        "ND1": {
+          "HIP": {
+            "acceptor": false,
+            "donor_hydrogens": [
+              "HD1"
+            ]
+          },
+          "HIE": {
+            "acceptor": true,
+            "donor_hydrogens": []
+          },
+          "HID": {
+            "acceptor": false,
+            "donor_hydrogens": [
+              "HD1"
+            ]
+          }
+        },
+        "NE2": {
+          "HIP": {
+            "acceptor": false,
+            "donor_hydrogens": [
+              "HE2"
+            ]
+          },
+          "HIE": {
+            "acceptor": false,
+            "donor_hydrogens": [
+              "HE2"
+            ]
+          },
+          "HID": {
+            "acceptor": true,
+            "donor_hydrogens": []
+          }
+        }
+      }
+    },
+    {
+      "members": [
+        [
+          {
+            "mol_type": "P",
+            "resn": "NHIP"
+          }
+        ],
+        [
+          {
+            "mol_type": "P",
+            "resn": "NHIE"
+          },
+          {
+            "mol_type": "P",
+            "resn": "NHID"
+          }
+        ]
+      ],
+      "pKa": [
+        6.0
+      ],
+      "variable_sites": {
+        "ND1": {
+          "NHIP": {
+            "acceptor": false,
+            "donor_hydrogens": [
+              "HD1"
+            ]
+          },
+          "NHIE": {
+            "acceptor": true,
+            "donor_hydrogens": []
+          },
+          "NHID": {
+            "acceptor": false,
+            "donor_hydrogens": [
+              "HD1"
+            ]
+          }
+        },
+        "NE2": {
+          "NHIP": {
+            "acceptor": false,
+            "donor_hydrogens": [
+              "HE2"
+            ]
+          },
+          "NHIE": {
+            "acceptor": false,
+            "donor_hydrogens": [
+              "HE2"
+            ]
+          },
+          "NHID": {
+            "acceptor": true,
+            "donor_hydrogens": []
+          }
+        }
+      }
+    },
+    {
+      "members": [
+        [
+          {
+            "mol_type": "P",
+            "resn": "CHIP"
+          }
+        ],
+        [
+          {
+            "mol_type": "P",
+            "resn": "CHIE"
+          },
+          {
+            "mol_type": "P",
+            "resn": "CHID"
+          }
+        ]
+      ],
+      "pKa": [
+        6.0
+      ],
+      "variable_sites": {
+        "ND1": {
+          "CHIP": {
+            "acceptor": false,
+            "donor_hydrogens": [
+              "HD1"
+            ]
+          },
+          "CHIE": {
+            "acceptor": true,
+            "donor_hydrogens": []
+          },
+          "CHID": {
+            "acceptor": false,
+            "donor_hydrogens": [
+              "HD1"
+            ]
+          }
+        },
+        "NE2": {
+          "CHIP": {
+            "acceptor": false,
+            "donor_hydrogens": [
+              "HE2"
+            ]
+          },
+          "CHIE": {
+            "acceptor": false,
+            "donor_hydrogens": [
+              "HE2"
+            ]
+          },
+          "CHID": {
+            "acceptor": true,
+            "donor_hydrogens": []
+          }
+        }
+      }
+    }
+  ],
+  "covalent_state_pairs": {
+    "CYS": {
+      "unbound": {
+        "mol_type": "P",
+        "resn": "CYS"
+      },
+      "bound": {
+        "mol_type": "P",
+        "resn": "CYX"
+      },
+      "bond_atom": "SG",
+      "partners": [
+        "CYS",
+        "NCYS",
+        "CCYS"
+      ]
+    },
+    "NCYS": {
+      "unbound": {
+        "mol_type": "P",
+        "resn": "NCYS"
+      },
+      "bound": {
+        "mol_type": "P",
+        "resn": "NCYX"
+      },
+      "bond_atom": "SG",
+      "partners": [
+        "CYS",
+        "NCYS",
+        "CCYS"
+      ]
+    },
+    "CCYS": {
+      "unbound": {
+        "mol_type": "P",
+        "resn": "CCYS"
+      },
+      "bound": {
+        "mol_type": "P",
+        "resn": "CCYX"
+      },
+      "bond_atom": "SG",
+      "partners": [
+        "CYS",
+        "NCYS",
+        "CCYS"
+      ]
+    }
+  }
+}
