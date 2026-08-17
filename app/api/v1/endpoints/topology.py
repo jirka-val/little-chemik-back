@@ -1,12 +1,13 @@
 import logging
 import zipfile
 import io
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse  # Změněno z FileResponse
 from pydantic import BaseModel
 from typing import Dict, Any
 import os
 
+from app.core.exceptions import InternalError
 from app.services.topology_service import TopologyService
 from app.workspaces.manager import workspace_manager
 
@@ -22,8 +23,7 @@ class TopologyRequest(BaseModel):
 
 @router.post("/{workspace_id}/generate")
 async def generate_topology(workspace_id: str, request: TopologyRequest):
-    if not workspace_manager.workspace_exists(workspace_id):
-        raise HTTPException(status_code=404, detail="Workspace not found")
+    workspace_manager.require_workspace(workspace_id)
 
     try:
         # 1. Vygenerujeme soubory na disk (vrátí dict s názvy)
@@ -43,4 +43,4 @@ async def generate_topology(workspace_id: str, request: TopologyRequest):
         }
     except Exception as e:
         logger.error(f"Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise InternalError(str(e))

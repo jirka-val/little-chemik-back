@@ -4,10 +4,26 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor analysis service to improve AltLoc data extraction and automate selection of recommended variants">
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor analysis service to enhance structure preparation and automate model selection with symmetry handling">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/analysis.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/download.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/download.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/editor.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/editor.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/forcefields.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/forcefields.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/topology.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/topology.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/validation.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/validation.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/core/exceptions.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/core/exceptions.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/services/analysis_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/analysis_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/forcefield_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/forcefield_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/pdb_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/pdb_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/topology_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/topology_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/workspaces/manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/workspaces/manager.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_api.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_gap_fix.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_main.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_performance.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_real_gap.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -264,15 +280,12 @@
       <workItem from="1783972337551" duration="3787000" />
       <workItem from="1784793673358" duration="620000" />
       <workItem from="1785019007150" duration="419000" />
-      <workItem from="1785333602792" duration="4377000" />
-    </task>
-    <task id="LOCAL-00013" summary="optimize backend for production and scientific dependencies">
-      <option name="closed" value="true" />
-      <created>1767830061330</created>
-      <option name="number" value="00013" />
-      <option name="presentableId" value="LOCAL-00013" />
-      <option name="project" value="LOCAL" />
-      <updated>1767830061330</updated>
+      <workItem from="1785333602792" duration="4418000" />
+      <workItem from="1785483830516" duration="2474000" />
+      <workItem from="1786030356553" duration="8000" />
+      <workItem from="1786718099939" duration="3009000" />
+      <workItem from="1786888695620" duration="3432000" />
+      <workItem from="1786922687455" duration="1275000" />
     </task>
     <task id="LOCAL-00014" summary="improving validation">
       <option name="closed" value="true" />
@@ -658,7 +671,15 @@
       <option name="project" value="LOCAL" />
       <updated>1783975934207</updated>
     </task>
-    <option name="localTasksCounter" value="62" />
+    <task id="LOCAL-00062" summary="refactor analysis service to enhance structure preparation and automate model selection with symmetry handling">
+      <option name="closed" value="true" />
+      <created>1785338522319</created>
+      <option name="number" value="00062" />
+      <option name="presentableId" value="LOCAL-00062" />
+      <option name="project" value="LOCAL" />
+      <updated>1785338522319</updated>
+    </task>
+    <option name="localTasksCounter" value="63" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -676,7 +697,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="refactor analysis, download, forcefields, and molecules endpoints for improved asynchronous handling and error logging" />
     <MESSAGE value="refactor analysis service import path for improved module organization" />
     <MESSAGE value="refactor import paths for improved module organization and add topology generation endpoint" />
     <MESSAGE value="refactor forcefield service to improve file preparation and add residue removal endpoint" />
@@ -701,7 +721,8 @@
     <MESSAGE value="refactor analysis service to enhance AltLoc analysis and recommend optimal peptide paths" />
     <MESSAGE value="refactor analysis service to enhance AltLoc handling and automate cleaning of alternative positions" />
     <MESSAGE value="refactor analysis service to improve AltLoc data extraction and automate selection of recommended variants" />
-    <option name="LAST_COMMIT_MESSAGE" value="refactor analysis service to improve AltLoc data extraction and automate selection of recommended variants" />
+    <MESSAGE value="refactor analysis service to enhance structure preparation and automate model selection with symmetry handling" />
+    <option name="LAST_COMMIT_MESSAGE" value="refactor analysis service to enhance structure preparation and automate model selection with symmetry handling" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/little_chemik_back$.coverage" NAME=" Coverage Results" MODIFIED="1773355688540" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />

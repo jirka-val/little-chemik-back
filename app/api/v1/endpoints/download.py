@@ -2,10 +2,11 @@ import io
 import zipfile
 import logging
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.workspaces.manager import workspace_manager
 
 logger = logging.getLogger(__name__)
@@ -36,9 +37,7 @@ async def export_workspace_files(workspace_id: str, req: DownloadRequest):
     Tento endpoint přijímá JSON z frontendu, kde uživatel vybral,
     které soubory chce stáhnout a zda je chce zabalit do ZIPu.
     """
-    if not workspace_manager.workspace_exists(workspace_id):
-        logger.warning(f"Download attempt for non-existent workspace: {workspace_id}")
-        raise HTTPException(status_code=404, detail="Workspace not found")
+    workspace_manager.require_workspace(workspace_id)
 
     files_to_pack = []
 
@@ -54,8 +53,7 @@ async def export_workspace_files(workspace_id: str, req: DownloadRequest):
     valid_files = [f for f in files_to_pack if f.exists()]
 
     if not valid_files:
-        raise HTTPException(status_code=404,
-                            detail="Žádný z vybraných souborů nebyl ve workspace nalezen. Byla už vygenerována topologie?")
+        raise NotFoundError("Žádný z vybraných souborů nebyl ve workspace nalezen. Byla už vygenerována topologie?")
 
     # Pokud uživatel chce ZIP, NEBO vybral více souborů (přes HTTP nelze poslat více souborů najednou bez ZIPu)
     if req.as_zip or len(valid_files) > 1:
@@ -105,17 +103,16 @@ async def download_workspace_single_file(
     Tento endpoint zachováváme, protože frontendové knihovny (jako Molstar)
     potřebují jednoduchou GET URL, aby si mohly zobrazit strukturu.
     """
-    if not workspace_manager.workspace_exists(workspace_id):
-        raise HTTPException(status_code=404, detail="Workspace not found")
+    workspace_manager.require_workspace(workspace_id)
 
     if format not in FILE_MAPPING:
-        raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
+        raise BadRequestError(f"Unsupported format: {format}")
 
     file_config = FILE_MAPPING[format]
     file_path = workspace_manager.get_file_path(workspace_id, file_config["filename"])
 
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail=f"File {file_config['filename']} not found.")
+        raise NotFoundError(f"File {file_config['filename']} not found.")
 
     logger.info(f"Serving {format.upper()} file via GET for workspace: {workspace_id}")
     return FileResponse(

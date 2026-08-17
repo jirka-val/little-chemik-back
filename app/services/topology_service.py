@@ -1,7 +1,7 @@
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import traceback
 
 from app.services.pdb_service import PDBService, parse_pdb_to_topology_dict
@@ -69,6 +69,25 @@ class TopologyService:
             if box_dims:
                 box_str = "".join([f"{val:12.7f}" for val in box_dims])
                 f.write(box_str + "\n")
+
+    def _load_forge_meta(self, workspace_dir: Path, pdb_filename: str) -> Optional[Dict[str, Any]]:
+        """
+        Načte sidecar structure.forge_meta.json (pokud existuje), který vedle sebe
+        zapisuje ForgeStructureService po /prepare. Nese autoritativní ff_resname/group
+        po state-assignmentu, takže parse_pdb_to_topology_dict nemusí hádat proteinové
+        terminální varianty (CGLU/NPHE) ze 3znakového PDB jména. Chybí-li (workspace
+        nikdy neprošel novou službou - raw upload, RCSB fetch bez /prepare), vrací None
+        a volající spadne zpět na dnešní heuristiku beze změny.
+        """
+        meta_path = workspace_dir / pdb_filename.replace(".pdb", ".forge_meta.json")
+        if not meta_path.exists():
+            return None
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to read forge_meta sidecar {meta_path}: {e}")
+            return None
 
     def generate_topology(self, workspace_id: str, pdb_filename: str, ff_selections: Dict[str, Any]) -> Dict[str, str]:
         """
@@ -154,7 +173,8 @@ class TopologyService:
             fixed_pdb_content = self.pdb_service.reorder_and_inject_eps(pdb_content, water_ff_instance)
 
             # 5. ROZPARSOVÁNÍ UŽ OPRAVENÉHO PDB DO TOPOLOGIE
-            mol = parse_pdb_to_topology_dict(fixed_pdb_content, ff_mapping)
+            forge_meta = self._load_forge_meta(workspace_dir, pdb_filename)
+            mol = parse_pdb_to_topology_dict(fixed_pdb_content, ff_mapping, forge_meta=forge_meta)
             mol['force_field_data'] = preloaded_ff_data
 
             # Aplikace aliasů (HOH -> WAT atd.)

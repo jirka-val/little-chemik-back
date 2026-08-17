@@ -1,12 +1,13 @@
 import logging
 import aiofiles
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.concurrency import run_in_threadpool
 
 from pydantic import BaseModel
 from typing import Dict, Any
 
+from app.core.exceptions import ExternalServiceError, InternalError, RemoteMoleculeNotFoundError
 from app.workspaces.manager import workspace_manager
 # ZMĚNA 1: Importujeme novou funkci process_structure místo původní clean_pdb_altlocs
 from app.services.analysis_service import build_sequence_tokens, analyze_pdb_altlocs, process_structure
@@ -31,9 +32,7 @@ async def analyze_sequence(workspace_id: str, chain: str | None = None, fill_gap
     """
     logger.info(f"Sequence analysis requested for workspace: {workspace_id} (chain: {chain}, fill_gaps: {fill_gaps})")
 
-    if not workspace_manager.workspace_exists(workspace_id):
-        logger.error(f"Workspace {workspace_id} not found.")
-        raise HTTPException(status_code=404, detail="Workspace not found. Have you uploaded a file?")
+    workspace_manager.require_workspace(workspace_id)
 
     try:
         file_path = workspace_manager.get_file_path(workspace_id, "structure.pdb")
@@ -55,14 +54,9 @@ async def analyze_sequence(workspace_id: str, chain: str | None = None, fill_gap
             "sequence": sequence_data
         }
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.exception(f"Error processing sequence for workspace {workspace_id}: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Internal server error while processing the molecule sequence."
-        )
+        raise InternalError("Internal server error while processing the molecule sequence.")
 
 
 @router.get("/analyze-pdb/{pdb_code}", summary="Vzdálená analýza PDB z RCSB bez workspace")
@@ -83,17 +77,17 @@ async def analyze_remote_pdb(pdb_code: str, chain: str | None = None, fill_gaps:
 
             if response.status_code == 404:
                 logger.error(f"PDB kód {pdb_code} nebyl v RCSB databázi nalezen.")
-                raise HTTPException(status_code=404, detail=f"Molekula s kódem {pdb_code} neexistuje v RCSB databázi.")
+                raise RemoteMoleculeNotFoundError(pdb_code)
 
             elif response.status_code != 200:
                 logger.error(f"RCSB vrátilo neočekávaný stav: {response.status_code}")
-                raise HTTPException(status_code=502, detail="Chyba při komunikaci s RCSB databází.")
+                raise ExternalServiceError("Chyba při komunikaci s RCSB databází.", status_code=502)
 
             pdb_text = response.text
 
         except httpx.RequestError as e:
             logger.exception(f"Síťová chyba při stahování molekuly {pdb_code}: {str(e)}")
-            raise HTTPException(status_code=503, detail="RCSB databáze je momentálně nedostupná.")
+            raise ExternalServiceError("RCSB databáze je momentálně nedostupná.", status_code=503)
 
         # Auto-příprava struktury pro vzdálené PDB
         try:
@@ -144,10 +138,7 @@ async def analyze_remote_pdb(pdb_code: str, chain: str | None = None, fill_gaps:
 
     except Exception as e:
         logger.exception(f"Chyba při zpracování sekvence pro vzdálené PDB {pdb_code}: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Interní chyba serveru při analýze molekulární sekvence."
-        )
+        raise InternalError("Interní chyba serveru při analýze molekulární sekvence.")
 
 
 @router.get("/altlocs/{workspace_id}", summary="Analýza struktury (Modely, Symetrie, AltLocs)")
@@ -160,9 +151,7 @@ async def analyze_altlocs(workspace_id: str):
     """
     logger.info(f"Structure prep analysis requested for workspace: {workspace_id}")
 
-    if not workspace_manager.workspace_exists(workspace_id):
-        logger.error(f"Workspace {workspace_id} not found.")
-        raise HTTPException(status_code=404, detail="Workspace not found. Have you uploaded a file?")
+    workspace_manager.require_workspace(workspace_id)
 
     try:
         file_path = workspace_manager.get_file_path(workspace_id, "structure.pdb")
@@ -179,14 +168,9 @@ async def analyze_altlocs(workspace_id: str):
 
         return altloc_data
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.exception(f"Error processing structure prep analysis for workspace {workspace_id}: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Internal server error while analyzing structure."
-        )
+        raise InternalError("Internal server error while analyzing structure.")
 
 
 @router.post("/clean-altlocs/{workspace_id}", summary="Aplikuje výběr Modelu, Symetrie a AltLocs")
@@ -202,8 +186,7 @@ async def apply_clean_altlocs(workspace_id: str, payload: StructurePrepRequest):
     logger.info(
         f"Preparing structure for workspace: {workspace_id} (Model: {payload.model}, Symmetry: {payload.apply_symmetry})")
 
-    if not workspace_manager.workspace_exists(workspace_id):
-        raise HTTPException(status_code=404, detail="Workspace not found.")
+    workspace_manager.require_workspace(workspace_id)
 
     try:
         file_path = workspace_manager.get_file_path(workspace_id, "structure.pdb")
@@ -230,4 +213,4 @@ async def apply_clean_altlocs(workspace_id: str, payload: StructurePrepRequest):
 
     except Exception as e:
         logger.exception(f"Error preparing structure for workspace {workspace_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail="Error preparing structure.")
+        raise InternalError("Error preparing structure.")

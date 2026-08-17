@@ -319,7 +319,16 @@ class PDBService:
 # VOLNÉ (GLOBÁLNÍ) FUNKCE PRO ZPRACOVÁNÍ PDB
 # =========================================================================
 
-def parse_pdb_to_topology_dict(pdb_content: str, selected_force_fields: dict = None) -> dict:
+# FORGE builder skupiny (viz app/builder/INTEGRATION_CONTRACT.md) na zjednodušené
+# mol_type kódy, které tahle funkce a zbytek TopologyService dnes používají.
+_FORGE_GROUP_TO_MOL_TYPE = {
+    "P": "P", "R": "R", "D": "D",
+    "W3": "W", "W4": "W", "W5": "W",
+    "I1": "I", "I1+": "I", "Im": "I", "Im+": "I",
+}
+
+
+def parse_pdb_to_topology_dict(pdb_content: str, selected_force_fields: dict = None, forge_meta: dict = None) -> dict:
     if selected_force_fields is None:
         selected_force_fields = {"R": "OL3"}
 
@@ -348,7 +357,7 @@ def parse_pdb_to_topology_dict(pdb_content: str, selected_force_fields: dict = N
                 seen_residues.add(res_key)
                 if chain_id not in chains:
                     chains[chain_id] = []
-                chains[chain_id].append(res_name)
+                chains[chain_id].append((res_seq, res_name))
 
     final_residues = []
 
@@ -359,7 +368,7 @@ def parse_pdb_to_topology_dict(pdb_content: str, selected_force_fields: dict = N
     for chain_id, res_list in chains.items():
         # 1. Zjistíme, kde přesně začíná a končí Nukleová kyselina
         nuc_indices = []
-        for idx, name in enumerate(res_list):
+        for idx, (res_seq, name) in enumerate(res_list):
             # Detekce RNA/DNA
             if (len(name) == 1 and name in ['A', 'C', 'G', 'U', 'T']) or name.startswith('R') or name.startswith('D'):
                 nuc_indices.append(idx)
@@ -367,7 +376,24 @@ def parse_pdb_to_topology_dict(pdb_content: str, selected_force_fields: dict = N
         first_nuc = nuc_indices[0] if nuc_indices else -1
         last_nuc = nuc_indices[-1] if nuc_indices else -1
 
-        for i, res_name in enumerate(res_list):
+        for i, (res_seq, res_name) in enumerate(res_list):
+            # PŘEDNOST: pokud existuje FORGE sidecar metadata pro tohle reziduum
+            # (structure.forge_meta.json vedle structure.pdb), použij jeho
+            # autoritativní ff_resname/group místo hádání ze 3znakového PDB jména.
+            # Bez tohohle by proteinové terminální varianty na okraji sekvenční
+            # díry (CGLU/NPHE - do 3 sloupců PDB se nevejdou, builder je zapisuje
+            # jako obyčejné GLU/PHE) vypadaly jako běžná prostřední rezidua a
+            # AMBER_topology by mezi nimi tiše vytvořil vazbu přes chybějící úsek.
+            meta_entry = forge_meta.get(f"{chain_id}:{res_seq}:") if forge_meta else None
+
+            if meta_entry:
+                final_residues.append({
+                    "resn": meta_entry["ff_resname"],
+                    "mol_type": _FORGE_GROUP_TO_MOL_TYPE.get(meta_entry.get("group"), "R"),
+                    "chain": chain_id
+                })
+                continue
+
             mol_type = "R"  # Výchozí
 
             if res_name in ['HOH', 'WAT', 'SOL']:

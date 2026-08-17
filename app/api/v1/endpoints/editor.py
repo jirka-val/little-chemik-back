@@ -1,10 +1,11 @@
 # app/api/v1/endpoints/editor.py
 import logging
 import aiofiles
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
+from app.core.exceptions import InternalError
 from app.services.editor_service import StructureEditorService
 from app.workspaces.manager import workspace_manager
 
@@ -48,6 +49,8 @@ class RemoveAtomRequest(BaseModel):
 
 async def _process_editor_action(workspace_id: str, action_func, *args):
     """Načte PDB, provede úpravu a uloží ho zpět."""
+    workspace_manager.require_workspace(workspace_id)
+
     try:
         pdb_path = workspace_manager.get_file_path(workspace_id)
 
@@ -69,7 +72,7 @@ async def _process_editor_action(workspace_id: str, action_func, *args):
 
     except Exception as e:
         logger.error(f"Editor action failed for workspace {workspace_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail={"error": str(e)})
+        raise InternalError(str(e))
 
 
 # --- Endpointy ---

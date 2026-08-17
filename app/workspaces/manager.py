@@ -4,6 +4,8 @@ import shutil
 from pathlib import Path
 from fastapi import UploadFile
 
+from app.core.exceptions import WorkspaceNotFoundError
+
 # Složka pro dočasné pracovní prostory
 WORKSPACE_DIR = os.path.join(os.getcwd(), "temp_workspaces")
 
@@ -50,6 +52,16 @@ class WorkspaceManager:
     def workspace_exists(self, workspace_id: str) -> bool:
         """Ověří, zda adresář workspace existuje."""
         return os.path.exists(os.path.join(WORKSPACE_DIR, workspace_id))
+
+    def require_workspace(self, workspace_id: str) -> None:
+        """
+        Vyhodí WorkspaceNotFoundError (jednotná 404 obálka), pokud workspace
+        neexistuje. Nahrazuje opakované
+        `if not workspace_manager.workspace_exists(...): raise HTTPException(404, ...)`
+        rozeseté po endpointech vlastními, mírně odlišnými texty chyby.
+        """
+        if not self.workspace_exists(workspace_id):
+            raise WorkspaceNotFoundError()
 
 
 # Singleton instance

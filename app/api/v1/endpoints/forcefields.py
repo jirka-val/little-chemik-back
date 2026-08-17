@@ -1,8 +1,9 @@
 import logging
 import aiofiles
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.concurrency import run_in_threadpool
 
+from app.core.exceptions import InternalError
 from app.services.pdb_service import PDBService
 from app.services.forcefield_service import ForceFieldService
 from app.workspaces.manager import workspace_manager
@@ -20,12 +21,9 @@ async def get_my_forcefields(workspace_id: str):
     Asynchronně načte PDB soubor a v dedikovaném vlákně zanalyzuje
     chemické složení (typ reziduí) pro detekci kompatibilních forcefieldů.
     """
-    try:
-        # Existuje ten workspace?
-        if not workspace_manager.workspace_exists(workspace_id):
-            logger.warning(f"Workspace {workspace_id} not found.")
-            raise HTTPException(status_code=404, detail="Molecule file not found on the server.")
+    workspace_manager.require_workspace(workspace_id)
 
+    try:
         # Načteme PDB ze souboru ASYNCHRONNĚ
         path = workspace_manager.get_file_path(workspace_id)
         async with aiofiles.open(path, "r", encoding="utf-8") as f:
@@ -36,6 +34,14 @@ async def get_my_forcefields(workspace_id: str):
             pdb_service.get_molecule_types,
             pdb_content
         )
+
+        # "Ions" nabízíme vždy, i když struktura sama žádné krystalové ionty
+        # neobsahuje - "Add Water Box & Ions" (Hydrogens tab) umí přidat
+        # neutralizační/solné ionty (Na+/Cl-...) bez ohledu na to, jestli
+        # tam nějaké původně byly, a builder pro ně potřebuje LJ parametry
+        # vybrané předem, ne až jako reakci na pád v /prepare.
+        if "I" not in types:
+            types.append("I")
 
         # Spárujeme ty správné FF
         ffs = await run_in_threadpool(
@@ -48,11 +54,6 @@ async def get_my_forcefields(workspace_id: str):
             "forcefields": ffs
         }
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.exception(f"Error fetching forcefields for workspace {workspace_id}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal server error while fetching forcefields: {str(e)}"
-        )
+        raise InternalError(f"Internal server error while fetching forcefields: {str(e)}")

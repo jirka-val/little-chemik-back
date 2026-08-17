@@ -12,12 +12,20 @@ class ForceFieldService:
     # URL na externí databázi silových polí
     EXTERNAL_URL = "https://next.ida.4sims.eu/api/force_fields/"
 
-    # Lokální cache pro uložení extrahovaných souborů
+    # Lokální cache pro uložení extrahovaných souborů (formát konzumovaný FF_IDA/TopologyService)
     CACHE_DIR = Path("data/ff_cache")
+
+    # Druhý pohled na stejná data, v adresářové/souborové konvenci, kterou čeká
+    # app/builder (SolvationVdwParameters.from_force_field_root): adresáře
+    # pojmenované "{ff_name}_{mol_type}" a soubory obsahující "residue_lib"/
+    # "forcefield" v názvu. Obsahově jde o stejné UMFFF soubory, jen zdvojené
+    # pod jinými jmény, aby builder mohl žít vedle TopologyService beze změny.
+    FORGE_CACHE_DIR = Path("data/ff_cache_forge")
 
     def __init__(self):
         try:
             self.CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            self.FORGE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
         except Exception as e:
             logger.error(f"Failed to create cache directory {self.CACHE_DIR}: {e}")
 
@@ -38,13 +46,16 @@ class ForceFieldService:
             # Pokud dekódování selže, předpokládáme, že je to už čistý text
             return content
 
+    def _ff_name(self, ff_data: Dict[str, Any]) -> str:
+        raw_name = ff_data.get('display_name') or ff_data.get('ff_name') or 'unknown_ff'
+        return raw_name.replace(" ", "_")
+
     def prepare_forcefield_files(self, ff_data: Dict[str, Any]) -> Path:
         """
         Extrahuje, zploští a uloží soubory silového pole na disk.
         Spojuje hlavní RTP soubor s knihovnou reziduí a nahrazuje #include ostrými daty.
         """
-        raw_name = ff_data.get('display_name') or ff_data.get('ff_name') or 'unknown_ff'
-        ff_name = raw_name.replace(" ", "_")
+        ff_name = self._ff_name(ff_data)
         target_dir = self.CACHE_DIR / ff_name
         target_dir.mkdir(parents=True, exist_ok=True)
 
@@ -99,6 +110,39 @@ class ForceFieldService:
         logger.info(f"Force field {ff_name} successfully prepared and saved to disk.")
         return target_dir
 
+    def prepare_forge_force_field_directory(self, ff_data: Dict[str, Any], mol_type: str) -> Path:
+        """
+        Zajistí, že pro dané silové pole existuje i druhá kopie souborů v layoutu,
+        který čeká app/builder (SolvationVdwParameters.from_force_field_root):
+        adresář "{ff_name}_{mol_type}" obsahující soubory s "residue_lib"/
+        "nonbonded"/"bonded"/"forcefield" v názvu.
+
+        Obsahově je to stejný UMFFF formát, jaký už produkuje prepare_forcefield_files()
+        (potvrzeno na existujících cache souborech) - jde jen o duplicitní zápis pod
+        jinými jmény, aby TopologyService/FF_IDA a builder mohly číst tu samou
+        vyexportovanou FF data nezávisle na sobě.
+        """
+        base_dir = self.prepare_forcefield_files(ff_data)
+        ff_name = self._ff_name(ff_data)
+
+        target_dir = self.FORGE_CACHE_DIR / f"{ff_name}_{mol_type}"
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        rtp_path = base_dir / f"{ff_name}.rtp"
+        nb_path = base_dir / f"nonbonded_{ff_name}.itp"
+        b_path = base_dir / f"bonded_{ff_name}.itp"
+
+        # Celý flattened .rtp obsahuje jak [ defaults ] (fudgeLJ/fudgeQQ), tak
+        # sekce [ resname ] s [ atoms ]/[ bonds ] - vyhovuje tedy zároveň roli
+        # "residue_lib" i "forcefield" souboru, jen pod dvěma různými jmény.
+        shutil.copyfile(rtp_path, target_dir / f"residue_lib_{ff_name}.rtp")
+        shutil.copyfile(rtp_path, target_dir / f"forcefield_{ff_name}.itp")
+        shutil.copyfile(nb_path, target_dir / f"nonbonded_{ff_name}.itp")
+        shutil.copyfile(b_path, target_dir / f"bonded_{ff_name}.itp")
+
+        logger.info(f"Forge-compatible force field view ready: {target_dir}")
+        return target_dir
+
     def get_matching_forcefields(self, molecule_types: List[str]) -> List[Dict[str, Any]]:
         """Stáhne seznam FF z API a vyfiltruje ty odpovídající molekule."""
         search_types = set(molecule_types)
@@ -106,8 +150,8 @@ class ForceFieldService:
         if "W" in search_types:
             search_types.update(["W3", "W4", "W5"])
 
-        #if "I" in search_types:
-        #    search_types.update(["I1", "Im", "I", "Im+", "I+", "I-", "I1+"])
+        if "I" in search_types:
+            search_types.update(["I1", "I1+", "Im", "Im+"])
 
         try:
             headers = {"x-client-version": "0.1.0"}
@@ -128,11 +172,12 @@ class ForceFieldService:
             return []
 
     def clear_cache(self):
-        """Vymaže celou složku ff_cache."""
-        if self.CACHE_DIR.exists():
-            try:
-                shutil.rmtree(self.CACHE_DIR)
-                self.CACHE_DIR.mkdir()
-                logger.info("Force field cache cleared successfully.")
-            except Exception as e:
-                logger.error(f"Failed to clear force field cache: {e}")
+        """Vymaže celou složku ff_cache i její builder-kompatibilní zrcadlo."""
+        for cache_dir in (self.CACHE_DIR, self.FORGE_CACHE_DIR):
+            if cache_dir.exists():
+                try:
+                    shutil.rmtree(cache_dir)
+                    cache_dir.mkdir()
+                    logger.info(f"Force field cache cleared successfully: {cache_dir}")
+                except Exception as e:
+                    logger.error(f"Failed to clear force field cache {cache_dir}: {e}")

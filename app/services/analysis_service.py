@@ -148,6 +148,33 @@ def _pick_variant(group: Optional[str], pdb_resname: str, atoms: List[str], conv
     return search_group, False, search_group
 
 
+def _reterminate_as_gap_end(token: Dict[str, Any], conv: Dict, warnings: List[str], next_chain: str, next_resseq: int) -> None:
+    """
+    Přepíše už zapsaný token (poslední residuum PŘED sekvenční dírou v hlavním řetězci)
+    na jeho umělou terminální variantu (C-konec pro protein / 3'-konec pro RNA-DNA).
+
+    Bez tohoto kroku by ff_resname zůstal ve "středové" variantě, která v konverzním
+    slovníku očekává navazující sousední residuum - a downstream builder (app/builder)
+    by pak mohl přes chybějící úsek vytvořit nesmyslnou vazbu. Builder sám gap
+    nedostavuje (viz INTEGRATION_CONTRACT.md), takže tohle rozhodnutí musí padnout tady.
+    """
+    group = token["group"]
+    new_ff_resname, new_known, _ = _pick_variant(group, token["pdb_resname"], token["atoms"], conv, "3")
+    token["ff_resname"] = new_ff_resname
+    token["known"] = new_known
+    token["missing_atoms"] = _check_missing_atoms(group, new_ff_resname, token["atoms"], conv)
+    conn_info = _check_connectivity_integrity(group, new_ff_resname, token["atoms"], conv)
+    token["is_broken"] = conn_info["is_broken"]
+    token["connectivity_parts"] = conn_info["components"]
+    token["terminus_reason"] = "gap"
+
+    label = "C-terminus" if group == "P" else "3'-terminus"
+    warnings.append(
+        f"{token['chain']}:{token['resseq']} ({token['pdb_resname']}) treated as artificial {label} "
+        f"— sequence gap before {next_chain}:{next_resseq}."
+    )
+
+
 def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps: bool = True):
     """
     SESTAVUJE KOMPLETNÍ SEZNAM TOKENS PRO DANÝ ŘETĚZEC, PROVÁDÍ ANALÝZU VARIANT A DETEKCI CHYBĚJÍCÍCH ČÁSTÍ STRUKTURY.
@@ -188,18 +215,22 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
         last_main_seq = main_chain[-1][1] if main_chain else None
         processed_ordered = main_chain + ligands
         prev_resseq = None
+        prev_main_token = None
 
         for ch, resseq, icode, resname, atoms in processed_ordered:
             is_main = any(r[1] == resseq and r[3] == resname for r in main_chain)
+            after_gap = False
 
             if fill_gaps and is_main and prev_resseq is not None and resseq > prev_resseq + 1:
                 # OPRAVA: Zkontroluj, zda GAP je OPRAVDU prázdný nebo tam jen je neznámé reziduum
+                gap_found = False
                 for missing_seq in range(prev_resseq + 1, resseq):
                     # Hledej, zda existuje JAKÉKOLI reziduum se sekvencí missing_seq v PDB
                     residue_exists_in_pdb = any(r[1] == missing_seq and r[0] == ch for r in residues)
-                    
+
                     # Jen pokud OPRAVDU chybí v PDB -> vytvoř GAP token
                     if not residue_exists_in_pdb:
+                        gap_found = True
                         global_pos += 1
                         tokens.append({
                             "position": global_pos, "chain": ch, "resseq": None, "icode": None,
@@ -207,15 +238,28 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
                             "known": False, "atoms": [], "missing_atoms": []
                         })
 
+                if gap_found:
+                    # Residuum před dírou i residuum za dírou se stávají uměle
+                    # terminálními, ať se přes chybějící úsek nepočítá žádná vazba.
+                    after_gap = True
+                    if prev_main_token is not None:
+                        _reterminate_as_gap_end(prev_main_token, conv, warnings, ch, resseq)
+
             global_pos += 1
             group = _infer_group(resname, conv)
 
             terminal = ""
+            terminus_reason = None
             if is_main:
-                if resseq == first_main_seq:
+                if after_gap:
                     terminal = "5"
+                    terminus_reason = "gap"
+                elif resseq == first_main_seq:
+                    terminal = "5"
+                    terminus_reason = "chain_end"
                 elif resseq == last_main_seq:
                     terminal = "3"
+                    terminus_reason = "chain_end"
 
             ff_resname, known, search_group = _pick_variant(group, resname, atoms, conv, terminal)
             missing_atoms = _check_missing_atoms(group, ff_resname, atoms, conv)
@@ -225,9 +269,16 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
             elif missing_atoms:
                 warnings.append(f"Incomplete residue '{resname}' at {ch}:{resseq}: Missing {missing_atoms}")
 
+            if after_gap:
+                label = "N-terminus" if group == "P" else "5'-terminus"
+                warnings.append(
+                    f"{ch}:{resseq} ({resname}) treated as artificial {label} "
+                    f"— sequence gap before this residue."
+                )
+
             conn_info = _check_connectivity_integrity(group, ff_resname, atoms, conv)
 
-            tokens.append({
+            token = {
                 "position": global_pos,
                 "chain": ch,
                 "resseq": resseq,
@@ -240,11 +291,14 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
                 "atoms": atoms,
                 "missing_atoms": missing_atoms,
                 "is_broken": conn_info["is_broken"],
-                "connectivity_parts": conn_info["components"]
-            })
+                "connectivity_parts": conn_info["components"],
+                "terminus_reason": terminus_reason
+            }
+            tokens.append(token)
 
             if is_main:
                 prev_resseq = resseq
+                prev_main_token = token
 
     return {
         "chains": {
