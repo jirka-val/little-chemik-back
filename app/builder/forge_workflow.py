@@ -13,10 +13,10 @@ from typing import Any, Mapping, Optional, Sequence
 
 from forge_molecule_builder import (
     BuildPlan,
-    FreeRotorSearchSettings,
     execute_build_plan_until_missing_dof,
     plan_build_steps,
 )
+from forge_molecule_mm import FreeRotorSearchSettings
 from forge_molecule_ions import (
     CrystalIonCleanupReport,
     IonAdditionReport,
@@ -198,4 +198,3 @@ def run_forge_workflow(
         solvation=solvation_report,
         ion_addition=ion_report,
     )
-

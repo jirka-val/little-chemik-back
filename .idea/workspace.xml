@@ -4,26 +4,21 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor analysis service to enhance structure preparation and automate model selection with symmetry handling">
+    <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor analysis service to improve error handling and streamline workspace validation plus new builder">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/analysis.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/api.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/api.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/download.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/download.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/editor.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/editor.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/forcefields.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/forcefields.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/topology.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/topology.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/validation.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/validation.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/core/exceptions.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/core/exceptions.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/builder/INTEGRATION_CONTRACT.md" beforeDir="false" afterPath="$PROJECT_DIR$/app/builder/INTEGRATION_CONTRACT.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/builder/MANIFEST.sha256" beforeDir="false" afterPath="$PROJECT_DIR$/app/builder/MANIFEST.sha256" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/builder/VERSION" beforeDir="false" afterPath="$PROJECT_DIR$/app/builder/VERSION" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/builder/forge_molecule_builder.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/builder/forge_molecule_builder.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/builder/forge_molecule_ions.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/builder/forge_molecule_ions.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/builder/forge_molecule_solvation.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/builder/forge_molecule_solvation.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/builder/forge_workflow.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/builder/forge_workflow.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/services/analysis_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/analysis_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/forcefield_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/forcefield_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/pdb_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/pdb_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/topology_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/topology_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/workspaces/manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/workspaces/manager.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_api.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_gap_fix.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_main.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_performance.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_real_gap.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/structure/forge_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/structure/forge_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -58,7 +53,7 @@
 }</component>
   <component name="GithubPullRequestsUISettings">{
   &quot;selectedUrlAndAccountId&quot;: {
-    &quot;url&quot;: &quot;https://github.com/jirka-val/test_molecular-modification.git&quot;,
+    &quot;url&quot;: &quot;https://github.com/jirka-val/little-chemik-back.git&quot;,
     &quot;accountId&quot;: &quot;04a88ed3-073b-40e8-8f59-8117b2d0574c&quot;
   }
 }</component>
@@ -286,14 +281,9 @@
       <workItem from="1786718099939" duration="3009000" />
       <workItem from="1786888695620" duration="3432000" />
       <workItem from="1786922687455" duration="1275000" />
-    </task>
-    <task id="LOCAL-00014" summary="improving validation">
-      <option name="closed" value="true" />
-      <created>1769116485536</created>
-      <option name="number" value="00014" />
-      <option name="presentableId" value="LOCAL-00014" />
-      <option name="project" value="LOCAL" />
-      <updated>1769116485536</updated>
+      <workItem from="1786951498779" duration="3798000" />
+      <workItem from="1787050599387" duration="6305000" />
+      <workItem from="1787261297848" duration="2093000" />
     </task>
     <task id="LOCAL-00015" summary="New validation">
       <option name="closed" value="true" />
@@ -679,7 +669,15 @@
       <option name="project" value="LOCAL" />
       <updated>1785338522319</updated>
     </task>
-    <option name="localTasksCounter" value="63" />
+    <task id="LOCAL-00063" summary="refactor analysis service to improve error handling and streamline workspace validation plus new builder">
+      <option name="closed" value="true" />
+      <created>1786951557049</created>
+      <option name="number" value="00063" />
+      <option name="presentableId" value="LOCAL-00063" />
+      <option name="project" value="LOCAL" />
+      <updated>1786951557049</updated>
+    </task>
+    <option name="localTasksCounter" value="64" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -697,7 +695,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="refactor analysis service import path for improved module organization" />
     <MESSAGE value="refactor import paths for improved module organization and add topology generation endpoint" />
     <MESSAGE value="refactor forcefield service to improve file preparation and add residue removal endpoint" />
     <MESSAGE value="refactor topology endpoint to enable file download and improve error handling" />
@@ -722,7 +719,8 @@
     <MESSAGE value="refactor analysis service to enhance AltLoc handling and automate cleaning of alternative positions" />
     <MESSAGE value="refactor analysis service to improve AltLoc data extraction and automate selection of recommended variants" />
     <MESSAGE value="refactor analysis service to enhance structure preparation and automate model selection with symmetry handling" />
-    <option name="LAST_COMMIT_MESSAGE" value="refactor analysis service to enhance structure preparation and automate model selection with symmetry handling" />
+    <MESSAGE value="refactor analysis service to improve error handling and streamline workspace validation plus new builder" />
+    <option name="LAST_COMMIT_MESSAGE" value="refactor analysis service to improve error handling and streamline workspace validation plus new builder" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/little_chemik_back$.coverage" NAME=" Coverage Results" MODIFIED="1773355688540" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tests" />

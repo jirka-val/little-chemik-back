@@ -79,6 +79,19 @@ def _infer_group(resname: str, conv: Dict) -> Optional[str]:
             if resname in conv[category] or aliased in conv[category]:
                 return category
 
+    # Generické "HIS" je jediné standardní reziduum, jehož nevyřešený PDB
+    # název NENÍ sám o sobě klíčem v converting_dictionary.json (jen jeho
+    # HID/HIE/HIP tautomerní varianty jsou) - viz INTEGRATION_CONTRACT.md
+    # invarianta #5. Bez týhle výjimky by výše uvedená smyčka pro "HIS"
+    # nikdy nenašla kategorii, reziduum by nespadlo do main_chain a builder
+    # by ho dostal jako nesouvisející HETATM (potvrzeno pádem na reálném
+    # 1JJ2: "Passthrough atom HIS:N ... lacks converting identity") - i když
+    # _pick_variant/_get_res_def níže samo o sobě HID/HIE/HIP podle vodíků
+    # správně dohledá, tenhle chybějící "group" je to, co reziduum vyřazuje
+    # z hlavního řetězce.
+    if resname == "HIS" or aliased == "HIS":
+        return "P"
+
     if resname.startswith("D"):
         return "D"
     if resname in {"A", "C", "G", "U"} or resname.startswith("R"):
@@ -148,10 +161,162 @@ def _pick_variant(group: Optional[str], pdb_resname: str, atoms: List[str], conv
     return search_group, False, search_group
 
 
-def _reterminate_as_gap_end(token: Dict[str, Any], conv: Dict, warnings: List[str], next_chain: str, next_resseq: int) -> None:
+_BREAK_REASON_LABEL = {
+    "gap": "sequence gap",
+    "ter": "explicit chain break (TER record)",
+    "geometry": "chemically implausible inter-residue distance",
+}
+
+# Boundary atoms that must be within bonding distance of the corresponding
+# atom on the neighbour for the two residues to plausibly be covalently
+# linked. Protein: previous C -> next N. Nucleic: previous O3' -> next P.
+_BOUNDARY_ATOM_NAMES = {"P": ("C", "N"), "R": ("O3'", "P"), "D": ("O3'", "P")}
+_BOND_DISTANCE_LIMIT_ANGSTROM = {"P": 1.9, "R": 2.1, "D": 2.1}
+
+# Heavy (non-hydrogen) atoms a terminal variant is *expected* to still be
+# missing purely because of the capping itself (e.g. the extra carboxylate
+# oxygen on a protein C-terminus) - not a sign of an unbuildable gap.
+_TERMINAL_EXTRA_HEAVY_ATOMS = {"P": {"OXT"}, "R": set(), "D": set()}
+
+# The single backbone atom a residue right before a gap must still have for
+# the builder's interactive side-chain completion (app/builder - see
+# INTEGRATION_CONTRACT.md "residue_local_open_branch") to have any anchor to
+# build from at all - same reference atoms as _BOUNDARY_ATOM_NAMES' "prev"
+# side. Missing *this* atom means the residue genuinely has no usable
+# connection point and must still be excluded (see _reterminate_as_gap_end).
+# Missing anything else (e.g. a protein side chain past CB, or a nucleic base)
+# is exactly what the interactive builder can now resolve, so it must no
+# longer trigger exclusion by itself.
+_GAP_BOUNDARY_ANCHOR_ATOM = {"P": "C", "R": "O3'", "D": "O3'"}
+
+
+def _parse_remark465(pdb_text: str) -> Dict[Tuple[str, int, str], str]:
     """
-    Přepíše už zapsaný token (poslední residuum PŘED sekvenční dírou v hlavním řetězci)
-    na jeho umělou terminální variantu (C-konec pro protein / 3'-konec pro RNA-DNA).
+    Autoritativní seznam reziduí, která nebyla v experimentu lokalizována,
+    přímo z hlavičky PDB (REMARK 465) - viz INTEGRATION_CONTRACT.md, kde je
+    tohle první z vyjmenovaných důkazů pro detekci polymerní mezery. Používá
+    se k obohacení gap warningů o skutečné identity chybějících reziduí,
+    místo pouhého odvození z díry v číslování.
+    """
+    missing: Dict[Tuple[str, int, str], str] = {}
+    for line in pdb_text.splitlines():
+        if not line.startswith("REMARK 465"):
+            continue
+        tokens = line[10:].split()
+        if len(tokens) < 3:
+            continue
+        resname, chain, seq_tok = tokens[-3], tokens[-2], tokens[-1]
+        if len(chain) != 1:
+            continue
+        icode = ""
+        if seq_tok and seq_tok[-1].isalpha():
+            icode = seq_tok[-1]
+            seq_tok = seq_tok[:-1]
+        if not seq_tok.lstrip("-").isdigit():
+            continue
+        missing[(chain, int(seq_tok), icode)] = resname
+    return missing
+
+
+def _parse_ter_chain_breaks(pdb_text: str) -> Set[Tuple[str, int, str]]:
+    """
+    Vrátí (chain, resseq, icode) posledního rezidua PŘED každým TER záznamem,
+    který není posledním výskytem daného řetězce v souboru - tedy řetězec
+    pokračuje dalšími ATOM/HETATM záznamy i po tomto TER, což signalizuje
+    fyzický zlom polymeru uprostřed jednoho PDB chain ID (viz
+    INTEGRATION_CONTRACT.md - "explicit TER or equivalent structure
+    metadata"). Neparsujeme vlastní sloupce TER záznamu (bývají nespolehlivé
+    u hetero-ukončených řetězců) - řetězec a reziduum, které TER uzavírá,
+    odvozujeme z posledního předchozího ATOM/HETATM záznamu.
+    """
+    lines = pdb_text.splitlines()
+    last_atom: Optional[Tuple[str, int, str]] = None
+    ter_events: List[Tuple[str, int, str, int]] = []
+
+    for idx, line in enumerate(lines):
+        if line.startswith("ATOM") or line.startswith("HETATM"):
+            ch = (line[21] or "").strip() or "?"
+            resseq_raw = line[22:26].strip()
+            icode = (line[26] or " ").strip()
+            if not resseq_raw:
+                continue
+            try:
+                resseq = int(resseq_raw)
+            except ValueError:
+                continue
+            last_atom = (ch, resseq, icode)
+        elif line.startswith("TER") and last_atom is not None:
+            ter_events.append((*last_atom, idx))
+
+    breaks: Set[Tuple[str, int, str]] = set()
+    for ch, resseq, icode, ter_idx in ter_events:
+        for line in lines[ter_idx + 1:]:
+            if (line.startswith("ATOM") or line.startswith("HETATM")) and (line[21] or "").strip() == ch:
+                breaks.add((ch, resseq, icode))
+                break
+    return breaks
+
+
+def _parse_boundary_atom_coords(pdb_text: str) -> Dict[Tuple[str, int, str, str], Tuple[float, float, float]]:
+    """
+    Souřadnice jen pro atomy, které tvoří kostru meziresiduové vazby (protein
+    C/N, nukleové kyseliny O3'/P) - použito výhradně pro kontrolu chemicky
+    nemožné meziresiduové vzdálenosti (INTEGRATION_CONTRACT.md). Netáhneme si
+    sem souřadnice všech atomů, ať je to levné i na velkých strukturách.
+    """
+    wanted_names = {"C", "N", "O3'", "P"}
+    coords: Dict[Tuple[str, int, str, str], Tuple[float, float, float]] = {}
+    for line in pdb_text.splitlines():
+        if not line.startswith("ATOM"):
+            continue
+        resname = line[17:20].strip()
+        atom_name = name_alias(resname, line[12:16].strip())
+        if atom_name not in wanted_names:
+            continue
+        ch = (line[21] or "").strip() or "?"
+        resseq_raw = line[22:26].strip()
+        icode = (line[26] or " ").strip()
+        if not resseq_raw:
+            continue
+        try:
+            resseq = int(resseq_raw)
+            x, y, z = float(line[30:38]), float(line[38:46]), float(line[46:54])
+        except ValueError:
+            continue
+        coords[(ch, resseq, icode, atom_name)] = (x, y, z)
+    return coords
+
+
+def _is_chemically_impossible_bond(
+    group: Optional[str],
+    prev_key: Tuple[str, int, str],
+    curr_key: Tuple[str, int, str],
+    coords: Dict[Tuple[str, int, str, str], Tuple[float, float, float]],
+) -> bool:
+    if group not in _BOUNDARY_ATOM_NAMES:
+        return False
+    prev_atom, curr_atom = _BOUNDARY_ATOM_NAMES[group]
+    p = coords.get(prev_key + (prev_atom,))
+    c = coords.get(curr_key + (curr_atom,))
+    if p is None or c is None:
+        return False
+    dist = ((p[0] - c[0]) ** 2 + (p[1] - c[1]) ** 2 + (p[2] - c[2]) ** 2) ** 0.5
+    return dist > _BOND_DISTANCE_LIMIT_ANGSTROM[group]
+
+
+def _reterminate_as_gap_end(
+    token: Dict[str, Any],
+    conv: Dict,
+    warnings: List[str],
+    next_chain: str,
+    next_resseq: int,
+    break_reason: str = "gap",
+    missing_residue_labels: Optional[List[str]] = None,
+) -> None:
+    """
+    Přepíše už zapsaný token (poslední residuum PŘED přerušením řetězce v
+    hlavním řetězci) na jeho umělou terminální variantu (C-konec pro protein /
+    3'-konec pro RNA-DNA).
 
     Bez tohoto kroku by ff_resname zůstal ve "středové" variantě, která v konverzním
     slovníku očekává navazující sousední residuum - a downstream builder (app/builder)
@@ -166,13 +331,46 @@ def _reterminate_as_gap_end(token: Dict[str, Any], conv: Dict, warnings: List[st
     conn_info = _check_connectivity_integrity(group, new_ff_resname, token["atoms"], conv)
     token["is_broken"] = conn_info["is_broken"]
     token["connectivity_parts"] = conn_info["components"]
-    token["terminus_reason"] = "gap"
+    token["terminus_reason"] = break_reason
 
     label = "C-terminus" if group == "P" else "3'-terminus"
+    reason_text = _BREAK_REASON_LABEL.get(break_reason, break_reason)
+    detail = f" ({', '.join(missing_residue_labels)} missing per REMARK 465)" if missing_residue_labels else ""
     warnings.append(
         f"{token['chain']}:{token['resseq']} ({token['pdb_resname']}) treated as artificial {label} "
-        f"— sequence gap before {next_chain}:{next_resseq}."
+        f"— {reason_text} before {next_chain}:{next_resseq}{detail}."
     )
+
+    # Terminal capping only ever ADDS hydrogens (extra NH3+/OH/carboxylate H)
+    # or, for a protein C-terminus, the single OXT heavy atom - it never
+    # requires rebuilding a side chain or base from scratch. A residue that's
+    # still missing OTHER heavy atoms here was already incomplete in the
+    # source structure - but that is no longer automatically unbuildable: the
+    # builder's interactive side-chain completion (see
+    # app/builder/INTEGRATION_CONTRACT.md, "residue_local_open_branch") can
+    # safely resolve a single missing side-chain/base branch through the GUI,
+    # as long as the residue still has its own backbone connection point
+    # (_GAP_BOUNDARY_ANCHOR_ATOM - same C/O3' reference atom used above for
+    # the boundary bond-distance check). Only exclude the residue when even
+    # that anchor is gone - there is then genuinely nothing for the builder to
+    # attach anything to, regardless of GUI support.
+    allowed_extra = _TERMINAL_EXTRA_HEAVY_ATOMS.get(group, set())
+    heavy_missing = [a for a in token["missing_atoms"] if a[:1] != "H" and a not in allowed_extra]
+    anchor_atom = _GAP_BOUNDARY_ANCHOR_ATOM.get(group)
+    token["gap_boundary_incomplete"] = bool(anchor_atom) and anchor_atom in heavy_missing
+    if token["gap_boundary_incomplete"]:
+        warnings.append(
+            f"{token['chain']}:{token['resseq']} ({token['pdb_resname']}) is missing its own backbone "
+            f"anchor atom ({anchor_atom}) even as an artificial {label} — the builder has nothing to "
+            f"attach to here. If that happens, consider excluding this residue from the model and "
+            f"shifting the terminus to the previous main-chain residue instead."
+        )
+    elif heavy_missing:
+        warnings.append(
+            f"{token['chain']}:{token['resseq']} ({token['pdb_resname']}) is still missing heavy atoms "
+            f"{heavy_missing} even as an artificial {label} — the backbone anchor is present, so the "
+            f"builder will offer this as an interactive side-chain completion instead of failing outright."
+        )
 
 
 def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps: bool = True):
@@ -193,6 +391,13 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
         if ch_id not in chains_dict:
             chains_dict[ch_id] = []
         chains_dict[ch_id].append(r)
+
+    # Doplňkové důkazy o přerušení polymeru, které nejsou vidět jen z díry v
+    # číslování reziduí - viz INTEGRATION_CONTRACT.md "Required gap and
+    # terminality policy". Parsují se jednou za celý soubor, ne per-chain.
+    remark465 = _parse_remark465(pdb_text) if fill_gaps else {}
+    ter_breaks = _parse_ter_chain_breaks(pdb_text) if fill_gaps else set()
+    boundary_coords = _parse_boundary_atom_coords(pdb_text) if fill_gaps else {}
 
     tokens = []
     warnings = []
@@ -215,45 +420,107 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
         last_main_seq = main_chain[-1][1] if main_chain else None
         processed_ordered = main_chain + ligands
         prev_resseq = None
+        prev_icode = ""
         prev_main_token = None
+        # Historie doposud přidaných hlavních (main-chain) tokenů tohoto
+        # řetězce - umožňuje při kaskádovém vylučování neúplných okrajových
+        # reziduí (viz níže) sáhnout i za bezprostředně předchozí reziduum.
+        main_chain_history: List[Dict[str, Any]] = []
 
         for ch, resseq, icode, resname, atoms in processed_ordered:
             is_main = any(r[1] == resseq and r[3] == resname for r in main_chain)
             after_gap = False
+            break_reason = None
+            group = _infer_group(resname, conv)
 
-            if fill_gaps and is_main and prev_resseq is not None and resseq > prev_resseq + 1:
-                # OPRAVA: Zkontroluj, zda GAP je OPRAVDU prázdný nebo tam jen je neznámé reziduum
+            if fill_gaps and is_main and prev_resseq is not None:
                 gap_found = False
-                for missing_seq in range(prev_resseq + 1, resseq):
-                    # Hledej, zda existuje JAKÉKOLI reziduum se sekvencí missing_seq v PDB
-                    residue_exists_in_pdb = any(r[1] == missing_seq and r[0] == ch for r in residues)
+                gap_labels: List[str] = []
 
-                    # Jen pokud OPRAVDU chybí v PDB -> vytvoř GAP token
-                    if not residue_exists_in_pdb:
+                if resseq > prev_resseq + 1:
+                    # OPRAVA: Zkontroluj, zda GAP je OPRAVDU prázdný nebo tam jen je neznámé reziduum
+                    for missing_seq in range(prev_resseq + 1, resseq):
+                        # Hledej, zda existuje JAKÉKOLI reziduum se sekvencí missing_seq v PDB
+                        residue_exists_in_pdb = any(r[1] == missing_seq and r[0] == ch for r in residues)
+
+                        # Jen pokud OPRAVDU chybí v PDB -> vytvoř GAP token
+                        if not residue_exists_in_pdb:
+                            gap_found = True
+                            missing_resname = remark465.get((ch, missing_seq, ""), "?")
+                            gap_labels.append(f"{missing_resname}{missing_seq}")
+                            global_pos += 1
+                            tokens.append({
+                                "position": global_pos, "chain": ch, "resseq": None, "icode": None,
+                                "pdb_resname": "0", "is_gap": True, "group": None, "ff_resname": None,
+                                "known": False, "atoms": [], "missing_atoms": []
+                            })
+                    break_reason = "gap"
+                else:
+                    # Číslování je souvislé, ale řetězec může být přesto fyzicky
+                    # přerušený - explicitní TER uprostřed řetězce nebo chemicky
+                    # nemožná meziresiduová vzdálenost (další dva důkazy jmenované
+                    # v INTEGRATION_CONTRACT.md vedle díry v číslování).
+                    prev_key = (ch, prev_resseq, prev_icode)
+                    curr_key = (ch, resseq, icode or "")
+                    prev_group = prev_main_token["group"] if prev_main_token else group
+                    if prev_key in ter_breaks:
                         gap_found = True
-                        global_pos += 1
-                        tokens.append({
-                            "position": global_pos, "chain": ch, "resseq": None, "icode": None,
-                            "pdb_resname": "0", "is_gap": True, "group": None, "ff_resname": None,
-                            "known": False, "atoms": [], "missing_atoms": []
-                        })
+                        break_reason = "ter"
+                    elif _is_chemically_impossible_bond(prev_group, prev_key, curr_key, boundary_coords):
+                        gap_found = True
+                        break_reason = "geometry"
 
                 if gap_found:
-                    # Residuum před dírou i residuum za dírou se stávají uměle
-                    # terminálními, ať se přes chybějící úsek nepočítá žádná vazba.
+                    # Residuum před přerušením i residuum za ním se stávají uměle
+                    # terminálními, ať se přes chybějící/přerušený úsek nepočítá
+                    # žádná vazba.
                     after_gap = True
-                    if prev_main_token is not None:
-                        _reterminate_as_gap_end(prev_main_token, conv, warnings, ch, resseq)
+                    excluded_here: List[Dict[str, Any]] = []
+                    # Pokud reziduum bezprostředně před přerušením zůstane
+                    # neúplné (chybí těžké atomy) i po přeznačení na
+                    # terminální variantu, builder ho stejně nikdy nedostaví
+                    # (nemá kotvu pro vnitřní dihedral) - ponechat ho v
+                    # modelu by z čistého přerušení udělalo neřešitelný
+                    # missing_dof pád. Takové reziduum se z modelu vyřadí a
+                    # terminalita se zkusí o krok blíž k začátku řetězce -
+                    # opakovaně, dokud nenarazíme na použitelné reziduum.
+                    while main_chain_history:
+                        candidate = main_chain_history[-1]
+                        _reterminate_as_gap_end(
+                            candidate, conv, warnings, ch, resseq,
+                            break_reason=break_reason, missing_residue_labels=gap_labels or None,
+                        )
+                        if not candidate["gap_boundary_incomplete"]:
+                            break
+                        excluded_here.append(candidate)
+                        for idx, existing in enumerate(tokens):
+                            if existing is candidate:
+                                del tokens[idx]
+                                break
+                        main_chain_history.pop()
+
+                    if excluded_here:
+                        names = ", ".join(
+                            f"{c['chain']}:{c['resseq']} ({c['pdb_resname']})" for c in excluded_here
+                        )
+                        warnings.append(
+                            f"Excluded {names} from the model — still missing heavy atoms even as an "
+                            f"artificial terminus, so the terminus was shifted further back."
+                        )
+                        if not main_chain_history:
+                            warnings.append(
+                                f"{ch}: entire leading segment before {ch}:{resseq} was excluded — no "
+                                f"heavy-atom-complete residue remained to anchor a terminus."
+                            )
 
             global_pos += 1
-            group = _infer_group(resname, conv)
 
             terminal = ""
             terminus_reason = None
             if is_main:
                 if after_gap:
                     terminal = "5"
-                    terminus_reason = "gap"
+                    terminus_reason = break_reason
                 elif resseq == first_main_seq:
                     terminal = "5"
                     terminus_reason = "chain_end"
@@ -271,9 +538,10 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
 
             if after_gap:
                 label = "N-terminus" if group == "P" else "5'-terminus"
+                reason_text = _BREAK_REASON_LABEL.get(break_reason, break_reason)
                 warnings.append(
                     f"{ch}:{resseq} ({resname}) treated as artificial {label} "
-                    f"— sequence gap before this residue."
+                    f"— {reason_text} before this residue."
                 )
 
             conn_info = _check_connectivity_integrity(group, ff_resname, atoms, conv)
@@ -298,7 +566,9 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
 
             if is_main:
                 prev_resseq = resseq
+                prev_icode = icode or ""
                 prev_main_token = token
+                main_chain_history.append(token)
 
     return {
         "chains": {
@@ -717,3 +987,97 @@ def process_structure(pdb_text: str, target_model: int, apply_symmetry: bool, se
 
     final_lines.append("END")
     return "\n".join(final_lines)
+
+
+_POLYMER_GROUP_LABELS = {"P": "protein", "R": "RNA", "D": "DNA"}
+
+
+def required_ff_groups(
+    pdb_text: str,
+    add_solvent_and_ions: bool = True,
+    salts: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Zjistí, jaké FORGE mol_type skupiny (P/R/D/W/I1/I1+/Im/Im+) tahle
+    konkrétní struktura reálně potřebuje, ať se to dá zkontrolovat proti
+    ff_selections ještě PŘED spuštěním (drahého, u velkých struktur i
+    několikaminutového) buildeu - viz forge_service.prepare_structure.
+
+    Jediný zdroj pravdy je converting_dictionary.json (stejný, jaký uvnitř
+    používá i builder), ne samostatný hardcoded seznam iontů - takových už
+    v repu byly tři nezávislé kopie (pdb_service.get_molecule_types,
+    validation._MONOVALENT_ION_MOL_TYPE, forge_service._KNOWN_ION_RESNAMES)
+    a právě jejich vzájemná neshoda (žádná neznala "Im") byla přímou
+    příčinou pádu "KeyError: Ion parameters missing for Im:Mg2+" na 1JJ2 -
+    uživatel vybral I1+ místo Im a nikde nebylo vidět, že Im je potřeba.
+
+    Ionty "Im"/"Im+" jsou v konverzním slovníku pojmenované matoucně -
+    navzdory "m" v názvu jde o DVOJMOCNÉ KATIONTY (Im obsahuje Mg2+), ne o
+    aniony. Nespoléhat na název, vždy číst přímo ze slovníku.
+    """
+    conv = load_converting_dictionary()
+    result: Dict[str, Dict[str, Any]] = {}
+
+    sequence_data = build_sequence_tokens(pdb_text, chain=None, fill_gaps=True)
+    polymer_examples: Dict[str, List[str]] = {}
+    for chain_data in sequence_data.get("chains", {}).values():
+        for token in chain_data.get("tokens", []):
+            group = token.get("group")
+            if group in _POLYMER_GROUP_LABELS and not token.get("is_gap"):
+                examples = polymer_examples.setdefault(group, [])
+                name = token.get("pdb_resname")
+                if name and name not in examples and len(examples) < 5:
+                    examples.append(name)
+
+    for group, examples in polymer_examples.items():
+        result[group] = {
+            "reason": f"{_POLYMER_GROUP_LABELS[group]} residues present (e.g. {', '.join(examples)})",
+        }
+
+    if add_solvent_and_ions:
+        result["W"] = {"reason": "solvation requested (add_solvent_and_ions=True)"}
+
+        ion_mol_type = {}
+        for mol_type in ("I1", "I1+", "Im", "Im+"):
+            for resname in conv.get(mol_type, {}):
+                ion_mol_type[resname] = mol_type
+
+        ion_counts: Dict[str, int] = {}
+        for line in pdb_text.splitlines():
+            if not line.startswith("HETATM"):
+                continue
+            resname = line[17:20].strip()
+            # Konverzní slovník vede ionty pod jejich kanonickým FF názvem
+            # (Mg2+, Na+, ...), ne pod raw PDB zkratkou (MG, NA, ...) -
+            # stejný alias krok jako u polymerních reziduí v _infer_group.
+            canonical = resn_alias(resname)
+            if canonical in ion_mol_type:
+                ion_counts[canonical] = ion_counts.get(canonical, 0) + 1
+            elif resname in ion_mol_type:
+                ion_counts[resname] = ion_counts.get(resname, 0) + 1
+
+        by_group: Dict[str, List[str]] = {}
+        for resname, count in ion_counts.items():
+            by_group.setdefault(ion_mol_type[resname], []).append(f"{resname} (x{count})")
+
+        salt_mol_types: Set[str] = set()
+        if salts:
+            for spec in salts:
+                for side in ("cation", "anion"):
+                    mol_type = (spec.get(side) or {}).get("mol_type")
+                    if mol_type:
+                        salt_mol_types.add(mol_type)
+        else:
+            # Prázdný/chybějící seznam solí = jen výchozí neutralizace
+            # K+/Cl- (viz INTEGRATION_CONTRACT.md "Salt input") - ta vždy
+            # potřebuje I1, i když struktura sama žádné krystalové ionty
+            # nemá.
+            salt_mol_types.add("I1")
+
+        for mol_type in salt_mol_types:
+            by_group.setdefault(mol_type, []).append("default/requested neutralization or salt")
+
+        for mol_type, reasons in by_group.items():
+            result[mol_type] = {"reason": f"ions: {', '.join(reasons)}"}
+
+    return result

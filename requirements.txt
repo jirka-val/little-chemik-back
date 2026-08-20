@@ -2,6 +2,7 @@ fastapi
 uvicorn[standard]
 pydantic
 pandas
+numpy>=1.24
 pydantic-settings
 httpx
 python-multipart

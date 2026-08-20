@@ -19,7 +19,7 @@ from typing import Any, Dict, Iterable, Iterator, Mapping, Optional, Sequence, T
 
 import numpy as np
 
-from forge_molecule_builder import MMParameterProvider
+from forge_molecule_mm import MMParameterProvider
 from forge_molecule_parser import (
     Atom,
     Chain,

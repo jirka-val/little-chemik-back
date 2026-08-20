@@ -1,9 +1,11 @@
 import io
+import re
 import zipfile
 import logging
 from pathlib import Path
+from typing import Optional
 from fastapi import APIRouter, Query
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, FileResponse, PlainTextResponse
 from pydantic import BaseModel
 
 from app.core.exceptions import BadRequestError, NotFoundError
@@ -12,6 +14,33 @@ from app.workspaces.manager import workspace_manager
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Bezpečný "holý" název souboru pro explicitní ?filename= override níže -
+# workspace_manager.get_file_path() dělá jen workspace_dir / filename beze
+# sanitizace, takže tohle je jediná obrana proti path traversal (../..),
+# jakmile filename poprvé přišel z query stringu (dřív šel jen přes pevný
+# FILE_MAPPING, kde uživatelský vstup do cesty vůbec nevstupoval).
+_SAFE_FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*\.pdb$")
+
+# Rezidua objemového rozpouštědla, která interaktivní 3D viewer (Molstar)
+# nepotřebuje vidět atom po atomu - viz "light" parametr níže.
+_BULK_SOLVENT_RESNAMES = {"WAT", "HOH", "SOL"}
+
+
+def _strip_bulk_solvent(pdb_text: str) -> str:
+    """
+    Odstraní ATOM/HETATM záznamy objemové vody (WAT/HOH/SOL) z PDB textu.
+    Používá se výhradně pro odlehčené načtení do interaktivního 3D vieweru u
+    velkých solvatovaných struktur (u 1JJ2 to bylo ~780 000 z ~925 000 atomů,
+    přes 84 % celého souboru) - ne pro export/stažení, kde uživatel čekává
+    kompletní data. Ionty a krystalové ligandy zůstávají beze změny.
+    """
+    kept = []
+    for line in pdb_text.splitlines():
+        if line.startswith(("ATOM", "HETATM")) and line[17:20].strip() in _BULK_SOLVENT_RESNAMES:
+            continue
+        kept.append(line)
+    return "\n".join(kept)
 
 
 # 1. Pydantic model pro přijetí dat z frontendu (checkboxy)
@@ -97,7 +126,17 @@ async def export_workspace_files(workspace_id: str, req: DownloadRequest):
 @router.get("/{workspace_id}", summary="Starý endpoint pro stažení jednoho souboru (zpětná kompatibilita)")
 async def download_workspace_single_file(
         workspace_id: str,
-        format: str = Query("pdb", description="Formát (pdb, crd, top)")
+        format: str = Query("pdb", description="Formát (pdb, crd, top)"),
+        light: bool = Query(
+            False,
+            description="Pro pdb: vynechá objemovou vodu (WAT/HOH/SOL) - určeno pro "
+                        "interaktivní 3D viewer u velkých solvatovaných struktur, ne pro export."
+        ),
+        filename: Optional[str] = Query(
+            None,
+            description="Explicitní přepis souboru uvnitř workspace (např. structure_preview.pdb "
+                        "pro side-chain GUI náhled) místo defaultní cesty odvozené z 'format'."
+        ),
 ):
     """
     Tento endpoint zachováváme, protože frontendové knihovny (jako Molstar)
@@ -105,18 +144,36 @@ async def download_workspace_single_file(
     """
     workspace_manager.require_workspace(workspace_id)
 
-    if format not in FILE_MAPPING:
-        raise BadRequestError(f"Unsupported format: {format}")
-
-    file_config = FILE_MAPPING[format]
-    file_path = workspace_manager.get_file_path(workspace_id, file_config["filename"])
+    if filename is not None:
+        if not _SAFE_FILENAME_RE.match(filename):
+            raise BadRequestError("Invalid filename.")
+        file_path = workspace_manager.get_file_path(workspace_id, filename)
+        media_type = "chemical/x-pdb"
+    else:
+        if format not in FILE_MAPPING:
+            raise BadRequestError(f"Unsupported format: {format}")
+        file_config = FILE_MAPPING[format]
+        file_path = workspace_manager.get_file_path(workspace_id, file_config["filename"])
+        media_type = file_config["media_type"]
 
     if not file_path.exists():
-        raise NotFoundError(f"File {file_config['filename']} not found.")
+        raise NotFoundError(f"File {file_path.name} not found.")
 
-    logger.info(f"Serving {format.upper()} file via GET for workspace: {workspace_id}")
+    if file_path.suffix == ".pdb" and light:
+        # Odlehčená verze se počítá za běhu (jeden průchod textem, řádově
+        # desítky ms i na desítky MB) - nemá smysl ji cachovat na disk, "light"
+        # je čistě prezentační ořez pro viewer, ne artefakt výpočtu.
+        pdb_text = file_path.read_text(encoding="utf-8")
+        stripped = _strip_bulk_solvent(pdb_text)
+        logger.info(
+            f"Serving lightweight (solvent-stripped) PDB via GET for workspace: {workspace_id} "
+            f"({len(pdb_text.splitlines())} -> {len(stripped.splitlines())} lines)"
+        )
+        return PlainTextResponse(content=stripped, media_type=media_type)
+
+    logger.info(f"Serving {file_path.name} via GET for workspace: {workspace_id}")
     return FileResponse(
         path=file_path,
-        media_type=file_config["media_type"],
-        filename=f"{workspace_id}_{file_config['filename']}"
+        media_type=media_type,
+        filename=f"{workspace_id}_{file_path.name}"
     )

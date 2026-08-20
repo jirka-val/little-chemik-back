@@ -11,7 +11,8 @@ from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 
-from forge_molecule_builder import AtomID, build_mm_bond_graph, _topological_distance_upto
+from forge_molecule_builder import AtomID, build_mm_bond_graph
+from forge_molecule_mm import topological_distance_upto
 from forge_molecule_parser import Atom, Chain, Molecule, PDBAtomRecord, Residue, infer_element
 from forge_molecule_solvation import SolvationVdwParameters
 
@@ -196,7 +197,7 @@ def _independent_contact_count(
     for size in range(len(unique), 0, -1):
         for subset in combinations(unique, size):
             if all(
-                _topological_distance_upto(graph, left, right, max_depth=2)
+                topological_distance_upto(graph, left, right, max_depth=2)
                 is None
                 for left, right in combinations(subset, 2)
             ):

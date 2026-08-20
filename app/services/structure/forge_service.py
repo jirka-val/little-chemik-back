@@ -40,7 +40,7 @@ from forge_molecule_parser import (  # noqa: E402
 from forge_molecule_solvation import SolvationVdwParameters, SolvationSettings, load_solvation_template  # noqa: E402
 
 from app.core.exceptions import AppBaseException
-from app.services.analysis_service import build_sequence_tokens
+from app.services.analysis_service import build_sequence_tokens, required_ff_groups
 from app.services.forcefield_service import ForceFieldService
 
 _DATA_DIR = Path(__file__).resolve().parents[3] / "data"
@@ -160,6 +160,38 @@ class ForgeMissingDOFError(AppBaseException):
         )
 
 
+class ForgeMissingForceFieldError(AppBaseException):
+    """
+    ff_selections nepokrývá všechny FORGE mol_type skupiny, které tahle
+    struktura reálně potřebuje. Dva zdroje:
+
+    1. Statická před-kontrola (viz prepare_structure) přes
+       analysis_service.required_ff_groups - odchytí to DŘÍV, než se vůbec
+       spustí drahý (u velkých struktur i několikaminutový) builder run.
+    2. Bezpečnostní síť kolem run_forge_workflow() - pokud se přesto
+       během buildu/solvatace/iontů narazí na chybějící MM/LJ/iontové
+       parametry (KeyError z app/builder), překlopí se sem místo syrové 500.
+
+    V obou případech jde o stejnou upstream chybu (chybí nebo je špatně
+    vybrané FF pro konkrétní mol_type skupinu, typicky ionty - "Im" pro
+    Mg2+ je matoucí název, snadno se zamění za "I1+"), ne o pád kódu -
+    proto 409 (konzistentní s ForgeMissingDOFError), ne 500.
+    """
+
+    status_code = 409
+    code = "missing_force_field"
+
+    def __init__(self, missing: Dict[str, Any], detail: Optional[str] = None):
+        if missing:
+            groups = ", ".join(sorted(missing.keys()))
+            message = f"ff_selections is missing coverage for required mol_type group(s): {groups}."
+        else:
+            message = "The builder could not find MM/LJ parameters for an atom or ion in the selected force fields."
+        if detail:
+            message += f" ({detail})"
+        super().__init__(message, payload={"missing_groups": missing, "detail": detail})
+
+
 @dataclass(frozen=True)
 class _StaticResources:
     converting_dictionary: Any
@@ -229,6 +261,23 @@ def _chain_sort_key(molecule: Molecule, chain_id: str):
     return (2 if is_water else 1 if is_ion else 0, chain_id)
 
 
+def _pdb_serial(serial: int) -> int:
+    """
+    Sériové číslo atomu ve fixed-column PDB smí mít nejvýš 5 číslic
+    (sloupce 7-11). format_pdb_atom_line() to samo nehlídá - `f"{serial:5d}"`
+    u čísla >= 100000 tiše přeteče na 6 znaků a posune všechny další sloupce
+    na řádku o jeden doprava, takže resname/chain/souřadnice skončí na
+    špatné pozici. Potvrzeno pádem na solvatovaném 1JJ2 (925 179 atomů):
+    OpenMM (přes PDBFixer ve StructureChecker) na takhle posunutém řádku
+    spadne na "Misaligned residue name". Sériové číslo je čistě kosmetický
+    popisek (nic downstream ho nepoužívá jako identitu - všude se pracuje
+    přes chain/resseq/atom name), takže cyklické zabalení zpátky do rozsahu
+    1-99999 je bezpečné a zachová platný fixed-column formát i nad hranicí
+    legacy PDB limitu.
+    """
+    return ((serial - 1) % 99999) + 1
+
+
 def molecule_to_pdb(molecule: Molecule) -> str:
     """
     Zapíše výsledek FORGE builderu do PDB textu pro Molstar/downstream nástroje.
@@ -270,7 +319,7 @@ def molecule_to_pdb(molecule: Molecule) -> str:
 
                 lines.append(
                     format_pdb_atom_line(
-                        serial=serial,
+                        serial=_pdb_serial(serial),
                         record_name="HETATM" if hetero else "ATOM",
                         atom_name=atom_name_out,
                         resname=resname_out,
@@ -298,7 +347,7 @@ def molecule_to_pdb(molecule: Molecule) -> str:
 
         lines.append(
             format_pdb_atom_line(
-                serial=serial,
+                serial=_pdb_serial(serial),
                 record_name="HETATM",
                 atom_name=atom_name_out,
                 resname=resname_out,
@@ -335,6 +384,21 @@ def build_forge_meta(molecule: Molecule) -> Dict[str, Dict[str, Any]]:
 
 
 @dataclass
+class ForgeWorkflowRun:
+    """
+    Výsledek run_forge_workflow() spolu se zdroji/nastavením, kterými byl
+    spuštěn - sidechain_service.py je potřebuje znovu (mm_parameters pro MM
+    optimalizaci side-chainů, settings/salts pro navazující solvataci/ionty
+    po přijetí GUI voleb).
+    """
+
+    result: WorkflowResult
+    resources: WorkflowResources
+    settings: WorkflowSettings
+    salts: List[Any]
+
+
+@dataclass
 class ForgePreparationResult:
     pdb_text: str
     forge_meta: Dict[str, Dict[str, Any]]
@@ -350,6 +414,42 @@ class ForgeStructureService:
 
     def __init__(self):
         self.ff_service = ForceFieldService()
+
+    def _check_ff_coverage(
+        self,
+        pdb_text: str,
+        ff_selections: Dict[str, Any],
+        add_solvent_and_ions: bool,
+        salts: Optional[List[Dict[str, Any]]],
+    ) -> None:
+        """
+        Ověří PŘED spuštěním buildu, že ff_selections pokrývá všechny
+        mol_type skupiny, které tahle konkrétní struktura potřebuje (viz
+        analysis_service.required_ff_groups) - ať se chybějící/špatně
+        vybrané FF (typicky ionty, "Im" pro Mg2+ vs "I1+") odhalí hned,
+        ne až po několikaminutovém běhu buildu/solvatace pádem s KeyError.
+        """
+        covered = set()
+        for key, ff_data in ff_selections.items():
+            try:
+                covered.add(_resolve_mol_type(key, ff_data))
+            except ValueError:
+                continue
+
+        required = required_ff_groups(pdb_text, add_solvent_and_ions=add_solvent_and_ions, salts=salts)
+        missing = {}
+        for mol_type, info in required.items():
+            # "W" je záměrně obecný požadavek (nezáleží, jaký konkrétní
+            # vodní model - viz required_ff_groups), zatímco ff_selections
+            # se přes _resolve_mol_type vždy rozřeší na přesný podtyp
+            # (W3/W4/W5) - porovnávat je proto nutné přes celou skupinu.
+            if mol_type == "W":
+                if not covered & _WATER_GROUPS:
+                    missing[mol_type] = info
+            elif mol_type not in covered:
+                missing[mol_type] = info
+        if missing:
+            raise ForgeMissingForceFieldError(missing)
 
     def _resolve_force_field_parameters(self, ff_selections: Dict[str, Any]) -> SolvationVdwParameters:
         if not ff_selections:
@@ -378,6 +478,73 @@ class ForgeStructureService:
             force_field_parameters=self._resolve_force_field_parameters(ff_selections),
         )
 
+    def run_workflow(
+        self,
+        pdb_text: str,
+        ff_selections: Dict[str, Any],
+        ph: float = 7.0,
+        add_solvent_and_ions: bool = True,
+        salts: Optional[List[Dict[str, Any]]] = None,
+        box_shape: Optional[str] = None,
+        box_padding_angstrom: Optional[float] = None,
+        keep_crystal_waters: Optional[bool] = None,
+        crystal_water_mode: str = "remove_all",
+    ) -> "ForgeWorkflowRun":
+        """
+        Sdílené jádro mezi neinteraktivním `prepare_structure()` a interaktivním
+        side-chain flow (viz sidechain_service.py) - ff-coverage kontrola, sestavení
+        WorkflowResources/WorkflowSettings a samotné spuštění run_forge_workflow().
+        Rozhodnutí, co dělat s `result.stopped_at_missing_dof` (409 vs. otevření
+        interaktivní session), zůstává na volajícím.
+        """
+        pdb_text = _strip_unrecognized_heterogens(pdb_text, crystal_water_mode)
+        sequence_data = build_sequence_tokens(pdb_text, chain=None, fill_gaps=True)
+        structure_data = {"pdb_text": pdb_text, "missing_atoms": sequence_data}
+
+        self._check_ff_coverage(pdb_text, ff_selections, add_solvent_and_ions, salts)
+
+        resources = self._build_resources(ff_selections)
+        salt_specs = load_salt_specifications({"salts": salts or []})
+
+        solvation_kwargs = {}
+        if box_shape is not None:
+            solvation_kwargs["box_shape"] = box_shape
+        if box_padding_angstrom is not None:
+            solvation_kwargs["padding_angstrom"] = box_padding_angstrom
+        if keep_crystal_waters is not None:
+            solvation_kwargs["keep_crystal_waters"] = keep_crystal_waters
+
+        settings = WorkflowSettings(
+            pH=ph,
+            add_solvent_and_ions=add_solvent_and_ions,
+            solvation=SolvationSettings(**solvation_kwargs),
+        )
+
+        try:
+            result: WorkflowResult = run_forge_workflow(
+                structure_data,
+                resources,
+                salts=salt_specs,
+                settings=settings,
+            )
+        except KeyError as exc:
+            # Bezpečnostní síť pro chybějící MM/LJ/iontové parametry, které
+            # _check_ff_coverage výše z nějakého důvodu neodchytila (např.
+            # konkrétní rezidum/atom chybí ve vybraném FF, i když formálně
+            # mol_type skupina pokrytá je). app/builder tyhle KeyError hlásí
+            # ve třech rozlišitelných formátech - viz forge_molecule_ions.py
+            # _ion_params a forge_molecule_solvation.py/forge_molecule_builder.py
+            # atom_params. Cokoliv jiného (skutečný programátorský bug)
+            # necháváme propadnout jako dřív.
+            detail = exc.args[0] if exc.args else str(exc)
+            if isinstance(detail, str) and (
+                "parameters missing" in detail or "LJ sigma missing" in detail
+            ):
+                raise ForgeMissingForceFieldError({}, detail=detail) from exc
+            raise
+
+        return ForgeWorkflowRun(result=result, resources=resources, settings=settings, salts=salt_specs)
+
     def prepare_structure(
         self,
         pdb_text: str,
@@ -397,35 +564,22 @@ class ForgeStructureService:
 
         Vyhodí ForgeMissingDOFError, pokud builder narazí na chybějící stupeň
         volnosti, který nejde bezpečně dostavět - to volající musí propustit
-        uživateli, ne potichu obejít.
+        uživateli, ne potichu obejít. Pro interaktivní dostavění bezpečných
+        side-chain větví viz sidechain_service.SidechainSessionService, který
+        používá run_workflow() přímo místo tohohle wrapperu.
         """
-        pdb_text = _strip_unrecognized_heterogens(pdb_text, crystal_water_mode)
-        sequence_data = build_sequence_tokens(pdb_text, chain=None, fill_gaps=True)
-        structure_data = {"pdb_text": pdb_text, "missing_atoms": sequence_data}
-
-        resources = self._build_resources(ff_selections)
-        salt_specs = load_salt_specifications({"salts": salts or []})
-
-        solvation_kwargs = {}
-        if box_shape is not None:
-            solvation_kwargs["box_shape"] = box_shape
-        if box_padding_angstrom is not None:
-            solvation_kwargs["padding_angstrom"] = box_padding_angstrom
-        if keep_crystal_waters is not None:
-            solvation_kwargs["keep_crystal_waters"] = keep_crystal_waters
-
-        settings = WorkflowSettings(
-            pH=ph,
+        run = self.run_workflow(
+            pdb_text,
+            ff_selections,
+            ph=ph,
             add_solvent_and_ions=add_solvent_and_ions,
-            solvation=SolvationSettings(**solvation_kwargs),
+            salts=salts,
+            box_shape=box_shape,
+            box_padding_angstrom=box_padding_angstrom,
+            keep_crystal_waters=keep_crystal_waters,
+            crystal_water_mode=crystal_water_mode,
         )
-
-        result: WorkflowResult = run_forge_workflow(
-            structure_data,
-            resources,
-            salts=salt_specs,
-            settings=settings,
-        )
+        result = run.result
 
         if result.stopped_at_missing_dof:
             raise ForgeMissingDOFError(result.remaining_plan.steps[0], result.molecule)
