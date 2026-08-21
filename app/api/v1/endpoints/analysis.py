@@ -24,18 +24,23 @@ class StructurePrepRequest(BaseModel):
 
 
 @router.get("/sequence/{workspace_id}", summary="Analýza sekvence molekuly")
-async def analyze_sequence(workspace_id: str, chain: str | None = None, fill_gaps: bool = True):
+async def analyze_sequence(workspace_id: str, chain: str | None = None, fill_gaps: bool = True, filename: str = "structure.pdb"):
     """
     Vezme workspace_id, asynchronně přečte dočasný soubor na pozadí a
     v dedikovaném vlákně vrátí sekvenci včetně informací o chybějících atomech
     (pomocí converting_dictionary).
+
+    `filename` (stejný vzor jako /api/download) umožňuje analyzovat i jiný
+    soubor než finální structure.pdb - typicky "structure_preview.pdb" během
+    otevřené side-chain GUI relace (viz sidechains.py), kdy builder už doplnil
+    vodíky/atomy pro většinu reziduí, ale ještě nebyl commit.
     """
-    logger.info(f"Sequence analysis requested for workspace: {workspace_id} (chain: {chain}, fill_gaps: {fill_gaps})")
+    logger.info(f"Sequence analysis requested for workspace: {workspace_id} (chain: {chain}, fill_gaps: {fill_gaps}, filename: {filename})")
 
     workspace_manager.require_workspace(workspace_id)
 
     try:
-        file_path = workspace_manager.get_file_path(workspace_id, "structure.pdb")
+        file_path = workspace_manager.get_file_path(workspace_id, filename)
 
         async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
             pdb_text = await f.read()

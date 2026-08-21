@@ -234,6 +234,18 @@ def _pdb_safe_resname(residue: Residue) -> str:
     )
 
 
+def _format_ter_line(serial: int, resname: str, chain_id: str, resseq: int, icode: str) -> str:
+    """
+    Standardní PDB TER záznam - signalizuje downstream nástrojům (Mol* mimo
+    jiné), že tady polymerní řetězec končí. Bez něj hrozí, že se poslední
+    reziduum jednoho chainu a první reziduum dalšího vyhodnotí jako přerušený
+    (gap) polymer téhož řetězce, což se ve vieweru projeví tečkovanou
+    "vazbou" mezi dvěma chainy i po nastavení jejich terminality - viz
+    molecule_to_pdb().
+    """
+    return f"TER   {serial:5d}      {resname:>3s} {chain_id[:1]:1s}{resseq:4d}{icode[:1]:1s}"
+
+
 def _cryst1_line(molecule: Molecule) -> Optional[str]:
     import math
 
@@ -293,6 +305,11 @@ def molecule_to_pdb(molecule: Molecule) -> str:
 
     serial = 1
     for chain_id in sorted(molecule.chains, key=lambda cid: _chain_sort_key(molecule, cid)):
+        # _chain_sort_key()[0] je 0 jen pro "normální" (ne čistě voda/ionty)
+        # chainy - TER dává smysl jen pro tyhle polymerní řetězce, HETATM
+        # voda/ionty žádnou spojitost/gap logiku ve vieweru nespouští.
+        chain_is_polymer = _chain_sort_key(molecule, chain_id)[0] == 0
+        last_written: Optional[tuple] = None
         for residue in molecule.chains[chain_id].residues:
             is_ion = residue.group in _ION_GROUPS
             hetero = is_ion or residue.group in _WATER_GROUPS
@@ -334,6 +351,13 @@ def molecule_to_pdb(molecule: Molecule) -> str:
                     )
                 )
                 serial += 1
+                if chain_is_polymer:
+                    last_written = (resname_out, residue.resseq, residue.icode)
+
+        if chain_is_polymer and last_written is not None:
+            resname_out, resseq, icode = last_written
+            lines.append(_format_ter_line(_pdb_serial(serial), resname_out, chain_id, resseq, icode))
+            serial += 1
 
     for record in molecule.passthrough_atoms:
         is_ion = record.group in _ION_GROUPS
