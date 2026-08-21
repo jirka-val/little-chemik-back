@@ -1,2 +1,17 @@
 # Dočasné pracovní soubory (Workspaces)
 temp_workspaces/
+
+# Python
+__pycache__/
+*.pyc
+
+# Node (pokud se sem omylem nainstaluje)
+node_modules/
+
+# Cache data
+data/ff_cache/
+data/ff_cache_forge/
+data/propka_cache/
+
+# Env
+.env
