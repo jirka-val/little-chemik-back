@@ -15,6 +15,17 @@ class Settings(BaseSettings):
 
     RCSB_PDB_URL: str = "https://files.rcsb.org/download"
 
+    FORCE_FIELDS_CLASSIFICATION_FILE: Path = BASE_DIR / "data" / "force_fields.json"
+    FF_CATALOG_SNAPSHOT_FILE: Path = BASE_DIR / "data" / "ff_catalog.json"
+    # Jak často (v sekundách) se má katalog FF automaticky obnovovat z IDA na
+    # pozadí (viz app/workspaces/tasks/ff_catalog_refresher.py). Výchozí 24h
+    # odpovídá Pavlovu "aktualizace jednou denně v noci".
+    FF_CATALOG_REFRESH_INTERVAL_SECONDS: int = 24 * 60 * 60
+    # Sdílený token pro admin operace (přeřazování FF mezi tiery). Prázdné =
+    # endpoint je zamčený úplně, dokud si ho nasazení nenastaví v .env -
+    # bezpečnější výchozí stav než "otevřeno pro každého".
+    ADMIN_TOKEN: str = ""
+
     class Config:
         env_file = ".env"
         case_sensitive = True

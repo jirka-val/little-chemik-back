@@ -143,8 +143,32 @@ class ForceFieldService:
         logger.info(f"Forge-compatible force field view ready: {target_dir}")
         return target_dir
 
-    def get_matching_forcefields(self, molecule_types: List[str]) -> List[Dict[str, Any]]:
-        """Stáhne seznam FF z API a vyfiltruje ty odpovídající molekule."""
+    def fetch_all_forcefields(self) -> List[Dict[str, Any]]:
+        """
+        Stáhne KOMPLETNÍ, nefiltrovaný seznam FF z IDA. Jediné místo, které smí
+        volat EXTERNAL_URL - používá ho jak get_matching_forcefields (filtruje
+        výsledek pro jeden request), tak FFCatalogService.refresh_catalog()
+        (ukládá celý výsledek na disk, aby GET /api/forcefields nemusel při
+        každém požadavku čekat na IDA - viz ff_catalog_service.py).
+
+        Vyhazuje výjimku při selhání (na rozdíl od get_matching_forcefields,
+        která ji dřív polykala a vracela [] - to bylo v pořádku, dokud FF
+        seznam nebyl nikde perzistovaný, ale FFCatalogService potřebuje umět
+        selhání refreshe rozlišit od "IDA momentálně nemá žádné FF").
+        """
+        headers = {"x-client-version": "0.1.0"}
+        logger.info(f"Fetching force fields from {self.EXTERNAL_URL}")
+        response = requests.get(self.EXTERNAL_URL, headers=headers, timeout=30)
+        response.raise_for_status()
+        return response.json()
+
+    @staticmethod
+    def filter_forcefields(all_ffs: List[Dict[str, Any]], molecule_types: List[str]) -> List[Dict[str, Any]]:
+        """
+        Čistá filtrovací funkce bez síťového volání - použitelná jak nad
+        čerstvě staženým seznamem, tak nad lokálním katalogovým snapshotem
+        (viz FFCatalogService.get_forcefields v ff_catalog_service.py).
+        """
         search_types = set(molecule_types)
 
         if "W" in search_types:
@@ -153,23 +177,32 @@ class ForceFieldService:
         if "I" in search_types:
             search_types.update(["I1", "I1+", "Im", "Im+"])
 
+        matched_ffs = []
+        for ff in all_ffs:
+            ff_types = ff.get("molecule_type") or []
+            if any(t in search_types for t in ff_types):
+                matched_ffs.append(ff)
+        return matched_ffs
+
+    def get_matching_forcefields(self, molecule_types: List[str]) -> List[Dict[str, Any]]:
+        """Stáhne seznam FF živě z API a vyfiltruje ty odpovídající molekule.
+
+        POZOR: toto dělá živé síťové volání na IDA při každém volání - GET
+        /api/forcefields/{workspace_id} ho už NEPOUŽÍVÁ (viz forcefields.py),
+        protože přesně tohle bylo zdrojem pomalosti FF panelu. Zůstává tu pro
+        případ, kdy je potřeba čerstvá jednorázová odpověď mimo cache vrstvu.
+        """
         try:
-            headers = {"x-client-version": "0.1.0"}
-            logger.info(f"Fetching force fields from {self.EXTERNAL_URL}")
-
-            response = requests.get(self.EXTERNAL_URL, headers=headers, timeout=10)
-            response.raise_for_status()
-            all_ffs = response.json()
-
-            matched_ffs = []
-            for ff in all_ffs:
-                ff_types = ff.get("molecule_type") or []
-                if any(t in search_types for t in ff_types):
-                    matched_ffs.append(ff)
-            return matched_ffs
+            all_ffs = self.fetch_all_forcefields()
+            return self.filter_forcefields(all_ffs, molecule_types)
         except Exception as e:
             logger.error(f"External API communication error: {e}")
             return []
+
+    def ff_name(self, ff_data: Dict[str, Any]) -> str:
+        """Veřejná verze _ff_name - FFCatalogService/FFClassificationService
+        potřebují stejné odvození jména, aby se dalo párovat s force_fields.json."""
+        return self._ff_name(ff_data)
 
     def clear_cache(self):
         """Vymaže celou složku ff_cache i její builder-kompatibilní zrcadlo."""

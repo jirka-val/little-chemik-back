@@ -1,0 +1,234 @@
+{
+  "schema_version": 2,
+
+  "solute_force_fields": {
+    "D": {
+      "default": "OL24",
+      "recommended": [
+        "OL24",
+        "OL21",
+        "BSC1"
+      ],
+      "supported": [
+        "OL15",
+        "TUMUC1"
+      ],
+      "obsolete": [
+        "FF99BSC0",
+        "FF99"
+      ],
+      "new_unclassified": []
+    },
+
+    "R": {
+      "default": "OL3CP_gHBfix21_NBfix-0BPh",
+      "recommended": [
+        "OL3CP_gHBfix21_NBfix-0BPh",
+        "OL3CP_gHBfix21",
+        "OL3CP_NBfix19",
+        "OL3CP",
+        "OL3-LJBB",
+        "OL3",
+        "ROC",
+        "DESRES",
+        "OL3-HR2.7"
+      ],
+      "supported": [
+        "OL3CP_gHBfix19_NBfix-0BPh",
+        "OL3CP_gHBfix19",
+        "OL3CP_NBfix-0BPh",
+        "FF99BSC0-YIL"
+      ],
+      "obsolete": [
+        "FF99BSC0",
+        "FF99"
+      ],
+      "new_unclassified": []
+    },
+
+    "P": {
+      "default": "FF14SB",
+      "recommended": [
+        "FF14SB"
+      ],
+      "supported": [
+        "FF12SB"
+      ],
+      "obsolete": [
+        "FF99SB"
+      ],
+      "new_unclassified": []
+    }
+  },
+
+  "solvent": {
+    "default_water_type": "W3",
+
+    "water_types": {
+      "W3": {
+        "tier": "recommended",
+        "default_profile": "SPCE_JC_LM",
+        "profiles": [
+          "SPCE_JC_LM",
+          "SPCE_LM",
+          "OPC3_LM",
+          "TIP3P_JC_LM",
+          "TIP3P_LM"
+        ]
+      },
+
+      "W4": {
+        "tier": "recommended",
+        "default_profile": "OPC_LM",
+        "profiles": [
+          "OPC_LM",
+          "TIP4PEW_JC_LM",
+          "TIP4PEW_LM",
+          "TIP4PD_CHARMM_LM",
+          "TIP4P_LM_FALLBACK"
+        ]
+      },
+
+      "W5": {
+        "tier": "supported",
+        "default_profile": "TIP5P_LM_FALLBACK",
+        "profiles": [
+          "TIP5P_LM_FALLBACK"
+        ]
+      }
+    },
+
+    "profiles": {
+      "SPCE_JC_LM": {
+        "water": "SPCE",
+        "ions": {
+          "I1": "JC-SPCE_I1",
+          "I1+": "JC-SPCE-I1+",
+          "Im": "LM-SPCE-TIP3P-Im",
+          "Im+": "LM-SPCE-Im+"
+        },
+        "compatibility": "curated"
+      },
+
+      "SPCE_LM": {
+        "water": "SPCE",
+        "ions": {
+          "I1": "LM-SPCE-I1",
+          "I1+": "LM-SPCE-I1+",
+          "Im": "LM-SPCE-TIP3P-Im",
+          "Im+": "LM-SPCE-Im+"
+        },
+        "compatibility": "curated"
+      },
+
+      "OPC3_LM": {
+        "water": "OPC3",
+        "ions": {
+          "I1": "LM-OPC3-I1",
+          "I1+": "LM-OPC3-I1+",
+          "Im": "LM-OPC3-Im",
+          "Im+": "LM-OPC3-Im+"
+        },
+        "compatibility": "water_specific"
+      },
+
+      "TIP3P_JC_LM": {
+        "water": "TIP3P",
+        "ions": {
+          "I1": "JC-TIP3P-I1",
+          "I1+": "JC-TIP3P-I1+",
+          "Im": "LM-SPCE-TIP3P-Im",
+          "Im+": "LM-TIP3P-Im+"
+        },
+        "compatibility": "curated"
+      },
+
+      "TIP3P_LM": {
+        "water": "TIP3P",
+        "ions": {
+          "I1": "LM-TIP3P-I1",
+          "I1+": "LM-TIP3P-I1+",
+          "Im": "LM-SPCE-TIP3P-Im",
+          "Im+": "LM-TIP3P-Im+"
+        },
+        "compatibility": "curated"
+      },
+
+      "OPC_LM": {
+        "water": "OPC",
+        "ions": {
+          "I1": "LM-OPC-I1",
+          "I1+": "LM-OPC-I1+",
+          "Im": "LM-OPC-Im",
+          "Im+": "LM-OPC-Im+"
+        },
+        "compatibility": "water_specific"
+      },
+
+      "TIP4PEW_JC_LM": {
+        "water": "TIP4PEW",
+        "ions": {
+          "I1": "JC-TIP4PEW-I1",
+          "I1+": "JC-TIP4PEW-I1+",
+          "Im": "LM-TIP4PEW-Im",
+          "Im+": "LM-TIP4PEW-Im+"
+        },
+        "compatibility": "curated"
+      },
+
+      "TIP4PEW_LM": {
+        "water": "TIP4PEW",
+        "ions": {
+          "I1": "LM-TIP4PEW-I1",
+          "I1+": "LM-TIP4PEW-I1+",
+          "Im": "LM-TIP4PEW-Im",
+          "Im+": "LM-TIP4PEW-Im+"
+        },
+        "compatibility": "curated"
+      },
+
+      "TIP4PD_CHARMM_LM": {
+        "water": "TIP4PD",
+        "ions": {
+          "I1": "CHARMM22-TIP4PD-I1",
+          "I1+": "LM-TIP4PEW-I1+",
+          "Im": "CHARMM22-TIP4PD-Im",
+          "Im+": "LM-TIP4PEW-Im+"
+        },
+        "compatibility": "curated_mixed"
+      },
+
+      "TIP4P_LM_FALLBACK": {
+        "water": "TIP4P",
+        "ions": {
+          "I1": "LM-TIP4PEW-I1",
+          "I1+": "LM-TIP4PEW-I1+",
+          "Im": "LM-TIP4PEW-Im",
+          "Im+": "LM-TIP4PEW-Im+"
+        },
+        "compatibility": "fallback"
+      },
+
+      "TIP5P_LM_FALLBACK": {
+        "water": "TIP5P",
+        "ions": {
+          "I1": "LM-TIP4PEW-I1",
+          "I1+": "LM-TIP4PEW-I1+",
+          "Im": "LM-TIP4PEW-Im",
+          "Im+": "LM-TIP4PEW-Im+"
+        },
+        "compatibility": "fallback"
+      }
+    },
+
+    "new_unclassified": {
+      "W3": [],
+      "W4": [],
+      "W5": [],
+      "I1": [],
+      "I1+": [],
+      "Im": [],
+      "Im+": []
+    }
+  }
+}

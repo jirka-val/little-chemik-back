@@ -73,6 +73,15 @@ class BadRequestError(AppBaseException):
     code = "bad_request"
 
 
+class ForbiddenError(AppBaseException):
+    """Chybějící nebo neplatný admin token pro chráněnou operaci (např. přeřazení FF do jiného tieru)."""
+    status_code = 403
+    code = "forbidden"
+
+    def __init__(self, message: str = "Missing or invalid admin token."):
+        super().__init__(message)
+
+
 class InternalError(AppBaseException):
     """
     Generický 500 catch-all pro neočekávané selhání uvnitř zpracování (chyba
