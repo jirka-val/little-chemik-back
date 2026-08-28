@@ -67,6 +67,12 @@ class Residue:
     group: Optional[str] = None
     is_gap: bool = False
     is_broken: bool = False
+    # "gap" / "ter" / "geometry" / "chain_end" - proč byl tenhle konec rezidua
+    # (5'/3', N-/C-terminus) vůbec vytvořen (viz analysis_service.py
+    # terminus_reason). "chain_end" = reálný konec řetězce; ostatní hodnoty =
+    # umělá terminalita na okraji mezery, kde je potřeba mezi tohle reziduum
+    # a další v témže chain_id vypsat TER (viz forge_service.molecule_to_pdb).
+    terminus_reason: Optional[str] = None
     connectivity_parts: List[List[str]] = field(default_factory=list)
     # Coordinate records present in the input but not expected by the residue's
     # current converting-dictionary state.  State-assignment layers may need to
@@ -444,6 +450,7 @@ def build_molecule_from_forge_json(
                     group=group,
                     is_gap=bool(token.get("is_gap", False)),
                     is_broken=bool(token.get("is_broken", False)),
+                    terminus_reason=token.get("terminus_reason"),
                     connectivity_parts=list(token.get("connectivity_parts", [])),
                     observed_extra_atoms=observed_extra_atoms,
                 ))

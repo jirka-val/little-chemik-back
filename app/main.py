@@ -5,6 +5,7 @@ from app.api.api import api_router
 from app.core.logging import setup_logging
 from app.core.exceptions import AppBaseException, app_exception_handler
 from app.core.config import settings
+from app.core.http_client import close_external_http_client
 
 # <-- NOVÉ: Import naší vytvořené uklízečky
 from app.workspaces.tasks.garbage_collector import cleanup_old_workspaces
@@ -20,11 +21,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://147.251.115.223",  # Produkce
-        "http://localhost:5173",   # Standardní Vite port
-        "http://localhost:5174",   # Tvůj aktuální Vite port
-    ],
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -61,6 +58,7 @@ async def shutdown_event():
         cleanup_task.cancel()
     if ff_catalog_task:
         ff_catalog_task.cancel()
+    await close_external_http_client()
 
 @app.get("/", tags=["Health Check"])
 async def root():

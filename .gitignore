@@ -13,6 +13,7 @@ data/ff_cache/
 data/ff_cache_forge/
 data/propka_cache/
 data/ff_catalog.json
+data/pdb_files/
 
 # Env
 .env

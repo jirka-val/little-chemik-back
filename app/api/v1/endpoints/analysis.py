@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from typing import Dict, Any
 
 from app.core.exceptions import ExternalServiceError, InternalError, RemoteMoleculeNotFoundError
+from app.core.http_client import external_http_client
 from app.workspaces.manager import workspace_manager
 # ZMĚNA 1: Importujeme novou funkci process_structure místo původní clean_pdb_altlocs
 from app.services.analysis_service import build_sequence_tokens, analyze_pdb_altlocs, process_structure
@@ -76,55 +77,54 @@ async def analyze_remote_pdb(pdb_code: str, chain: str | None = None, fill_gaps:
 
     rcsb_url = f"https://files.rcsb.org/download/{pdb_code}.pdb"
 
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(rcsb_url)
+    try:
+        response = await external_http_client.get(rcsb_url)
 
-            if response.status_code == 404:
-                logger.error(f"PDB kód {pdb_code} nebyl v RCSB databázi nalezen.")
-                raise RemoteMoleculeNotFoundError(pdb_code)
+        if response.status_code == 404:
+            logger.error(f"PDB kód {pdb_code} nebyl v RCSB databázi nalezen.")
+            raise RemoteMoleculeNotFoundError(pdb_code)
 
-            elif response.status_code != 200:
-                logger.error(f"RCSB vrátilo neočekávaný stav: {response.status_code}")
-                raise ExternalServiceError("Chyba při komunikaci s RCSB databází.", status_code=502)
+        elif response.status_code != 200:
+            logger.error(f"RCSB vrátilo neočekávaný stav: {response.status_code}")
+            raise ExternalServiceError("Chyba při komunikaci s RCSB databází.", status_code=502)
 
-            pdb_text = response.text
+        pdb_text = response.text
 
-        except httpx.RequestError as e:
-            logger.exception(f"Síťová chyba při stahování molekuly {pdb_code}: {str(e)}")
-            raise ExternalServiceError("RCSB databáze je momentálně nedostupná.", status_code=503)
+    except httpx.RequestError as e:
+        logger.exception(f"Síťová chyba při stahování molekuly {pdb_code}: {str(e)}")
+        raise ExternalServiceError("RCSB databáze je momentálně nedostupná.", status_code=503)
 
-        # Auto-příprava struktury pro vzdálené PDB
-        try:
-            result = await run_in_threadpool(analyze_pdb_altlocs, pdb_text)
-            altlocs_data = result.get("residues", []) if isinstance(result, dict) else []
+    # Auto-příprava struktury pro vzdálené PDB
+    try:
+        result = await run_in_threadpool(analyze_pdb_altlocs, pdb_text)
+        altlocs_data = result.get("residues", []) if isinstance(result, dict) else []
 
-            auto_selection = {}
-            if altlocs_data and isinstance(altlocs_data, list):
-                for alt_item in altlocs_data:
-                    chain_id = alt_item.get("chain", "?")
-                    resseq = str(alt_item.get("resseq", ""))
-                    resname = alt_item.get("resname", "")
-                    key = f"{chain_id}_{resseq}_{resname}"
+        auto_selection = {}
+        if altlocs_data and isinstance(altlocs_data, list):
+            for alt_item in altlocs_data:
+                chain_id = alt_item.get("chain", "?")
+                resseq = str(alt_item.get("resseq", ""))
+                resname = alt_item.get("resname", "")
+                key = f"{chain_id}_{resseq}_{resname}"
 
-                    alt_locs_dict = alt_item.get("altLocs", {})
-                    variants = list(alt_locs_dict.keys())
-                    chosen_variant = variants[0] if variants else None
+                alt_locs_dict = alt_item.get("altLocs", {})
+                variants = list(alt_locs_dict.keys())
+                chosen_variant = variants[0] if variants else None
 
-                    if key and chosen_variant:
-                        auto_selection[key] = chosen_variant
+                if key and chosen_variant:
+                    auto_selection[key] = chosen_variant
 
-            # ZMĚNA 3: Voláme novou process_structure (vzdáleně standardně bereme Model 1 a aplikujeme symetrii)
-            has_symmetry = result.get("hasSymmetry", False) if isinstance(result, dict) else False
-            pdb_text = await run_in_threadpool(
-                process_structure,
-                pdb_text=pdb_text,
-                target_model=1,
-                apply_symmetry=has_symmetry,
-                selection=auto_selection
-            )
-        except Exception as e:
-            logger.exception(f"Chyba při automatické přípravě struktury pro {pdb_code}: {e}")
+        # ZMĚNA 3: Voláme novou process_structure (vzdáleně standardně bereme Model 1 a aplikujeme symetrii)
+        has_symmetry = result.get("hasSymmetry", False) if isinstance(result, dict) else False
+        pdb_text = await run_in_threadpool(
+            process_structure,
+            pdb_text=pdb_text,
+            target_model=1,
+            apply_symmetry=has_symmetry,
+            selection=auto_selection
+        )
+    except Exception as e:
+        logger.exception(f"Chyba při automatické přípravě struktury pro {pdb_code}: {e}")
 
     try:
         sequence_data = await run_in_threadpool(

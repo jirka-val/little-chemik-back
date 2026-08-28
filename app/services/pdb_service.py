@@ -1,7 +1,10 @@
 # app/services/pdb_service.py
-import httpx
 import logging
+import re
+import aiofiles
+import aiofiles.os
 from app.core.config import settings
+from app.core.http_client import external_http_client
 from pathlib import Path
 
 # --- NOVÝ IMPORT ---
@@ -9,18 +12,45 @@ from app.utils.water_models import water_extra_points
 
 logger = logging.getLogger(__name__)
 
+# RCSB kódy jsou krátké alfanumerické identifikátory (klasicky 4 znaky, např.
+# "1JJ2"). Přísný whitelist tady není jen kosmetika - pdb_code jde přímo do
+# jména souboru na disku (viz get_remote_pdb_content), takže bez něj by šlo
+# přes "../" nebo podobně zapisovat/číst mimo PDB_DATA_DIR.
+_PDB_CODE_RE = re.compile(r"^[A-Za-z0-9]{1,10}$")
+
 
 class PDBService:
     async def get_remote_pdb_content(self, pdb_code: str) -> str:
+        if not _PDB_CODE_RE.match(pdb_code):
+            raise FileNotFoundError(f"Neplatný formát PDB kódu: {pdb_code!r}.")
+
+        # PDB záznamy z RCSB jsou neměnné (stejný kód vždy vrací stejný
+        # obsah), takže lokální cache na disku nepotřebuje TTL/invalidaci -
+        # jde jen o "stáhni jednou, ulož napořád". Při víc serverech si
+        # každý stáhne kód poprvé nezávisle (jednorázový náklad na server,
+        # ne opakovaný náklad na request); sdílená cache (Redis/společný
+        # disk) dává smysl řešit až při reálném horizontálním škálování.
+        settings.PDB_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        cache_path = settings.PDB_DATA_DIR / f"{pdb_code.upper()}.pdb"
+
+        if await aiofiles.os.path.exists(cache_path):
+            logger.info(f"Molekula {pdb_code} nalezena v lokální cache ({cache_path}).")
+            async with aiofiles.open(cache_path, "r", encoding="utf-8") as f:
+                return await f.read()
+
         logger.info(f"Stahuji molekulu {pdb_code} z RCSB pro frontend...")
 
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{settings.RCSB_PDB_URL}/{pdb_code}.pdb")
+        response = await external_http_client.get(f"{settings.RCSB_PDB_URL}/{pdb_code}.pdb")
 
-            if response.status_code != 200:
-                raise FileNotFoundError(f"Molekula {pdb_code} neexistuje v RCSB databázi.")
+        if response.status_code != 200:
+            raise FileNotFoundError(f"Molekula {pdb_code} neexistuje v RCSB databázi.")
 
-            return response.text
+        pdb_content = response.text
+
+        async with aiofiles.open(cache_path, "w", encoding="utf-8") as f:
+            await f.write(pdb_content)
+
+        return pdb_content
 
     def get_molecule_types(self, pdb_content: str) -> list[str]:
         """
