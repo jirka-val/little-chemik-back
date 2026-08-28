@@ -266,6 +266,17 @@ def _cryst1_line(molecule: Molecule) -> Optional[str]:
     )
 
 
+def _is_artificial_break_terminus(residue: "Residue") -> bool:
+    """
+    True pro reziduum, které se stalo N- nebo C-terminálním kvůli přerušení
+    uprostřed řetězce (mezera v číslování, explicitní TER, chemicky nemožná
+    vzdálenost - viz analysis_service.terminus_reason), NE proto, že by šlo o
+    skutečný začátek/konec celého řetězce ("chain_end" - ten už řeší
+    end-of-chain TER na konci molecule_to_pdb).
+    """
+    return residue.terminus_reason is not None and residue.terminus_reason != "chain_end"
+
+
 def _chain_sort_key(molecule: Molecule, chain_id: str):
     residues = molecule.chains[chain_id].residues
     is_water = bool(residues) and all(r.group in _WATER_GROUPS for r in residues)
@@ -309,8 +320,9 @@ def molecule_to_pdb(molecule: Molecule) -> str:
         # chainy - TER dává smysl jen pro tyhle polymerní řetězce, HETATM
         # voda/ionty žádnou spojitost/gap logiku ve vieweru nespouští.
         chain_is_polymer = _chain_sort_key(molecule, chain_id)[0] == 0
+        chain_residues = molecule.chains[chain_id].residues
         last_written: Optional[tuple] = None
-        for residue in molecule.chains[chain_id].residues:
+        for res_idx, residue in enumerate(chain_residues):
             is_ion = residue.group in _ION_GROUPS
             hetero = is_ion or residue.group in _WATER_GROUPS
             for atom in residue.atoms.values():
@@ -353,6 +365,25 @@ def molecule_to_pdb(molecule: Molecule) -> str:
                 serial += 1
                 if chain_is_polymer:
                     last_written = (resname_out, residue.resseq, residue.icode)
+
+            # Hranice mezery uprostřed řetězce (GLU83/PHE89 na 1JJ2 apod.):
+            # tohle reziduum i to bezprostředně následující jsou OBĚ umělé
+            # terminusy (viz _is_artificial_break_terminus) přesně tehdy, když
+            # mezi nimi je gap/TER/geometrický zlom - "chain_end" (skutečný
+            # začátek/konec řetězce) tuhle podmínku nikdy nesplní, protože je
+            # vždy jen na jednom z dvojice sousedů. Bez explicitního TER by
+            # Molstar (a další downstream nástroje) mohly tenhle úsek
+            # vyhodnotit jako spojitý polymer navzdory nastavené terminalitě.
+            if (
+                chain_is_polymer
+                and last_written is not None
+                and _is_artificial_break_terminus(residue)
+                and res_idx + 1 < len(chain_residues)
+                and _is_artificial_break_terminus(chain_residues[res_idx + 1])
+            ):
+                resname_out, resseq, icode = last_written
+                lines.append(_format_ter_line(_pdb_serial(serial), resname_out, chain_id, resseq, icode))
+                serial += 1
 
         if chain_is_polymer and last_written is not None:
             resname_out, resseq, icode = last_written
