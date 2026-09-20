@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from app.api.v1.endpoints.validation import PreparationRequest, _BOX_SHAPE_MAP, _build_salt_specs
 from app.core.exceptions import AppBaseException, InternalError
+from app.services.structure.forge_service import build_preparation_summary
 from app.services.structure.sidechain_service import sidechain_session_service
 from app.services.validation.service import ValidationService
 from app.workspaces.manager import workspace_manager
@@ -97,6 +98,7 @@ async def start_sidechain_session(workspace_id: str, request: PreparationRequest
                 "message": "Structure successfully prepared.",
                 "warnings": prepared.warnings,
                 "validation": validation_results,
+                "preparation_summary": build_preparation_summary(prepared),
             }
 
         preview_path = workspace_manager.get_file_path(workspace_id, outcome.preview_filename)
@@ -196,6 +198,7 @@ async def commit_sidechains(workspace_id: str):
             "message": "Structure successfully prepared.",
             "warnings": prepared.warnings,
             "validation": validation_results,
+            "preparation_summary": build_preparation_summary(prepared),
         }
     except AppBaseException:
         # ForgeMissingDOFError (další, ne-bezpečný missing DOF) apod. - stejný
