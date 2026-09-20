@@ -186,6 +186,7 @@ async def refresh_catalog():
         logger.exception("Manual FF catalog refresh failed")
         raise ExternalServiceError(f"Nepodařilo se obnovit katalog force fieldů z IDA: {e}")
 
+    logger.info(f"Manual FF catalog refresh finished: {len(snapshot['forcefields'])} force field(s).")
     return {"fetched_at": snapshot["fetched_at"], "count": len(snapshot["forcefields"])}
 
 
@@ -216,4 +217,5 @@ async def patch_classification(payload: Dict[str, str], x_admin_token: str = Hea
     except ValueError as e:
         raise BadRequestError(str(e))
 
+    logger.info(f"Admin: force field '{ff_name}' ({group}) reclassified to tier '{tier}'.")
     return {"status": "ok", "group": group, "ff_name": ff_name, "tier": tier}

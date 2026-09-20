@@ -81,6 +81,7 @@ async def check_molecule(request: ValidationRequest):
     Detekuje alternativní lokace, chybějící atomy a kompatibilitu s forcefieldem.
     """
     workspace_manager.require_workspace(request.workspace_id)
+    logger.info(f"Validating structure for workspace {request.workspace_id} (label: {request.label})...")
 
     try:
         pdb_path = workspace_manager.get_file_path(request.workspace_id)
@@ -90,11 +91,20 @@ async def check_molecule(request: ValidationRequest):
             pdb_content = await f.read()
 
         # Delegace CPU-bound validace do threadpoolu pro zamezení blokování event loopu
-        return await run_in_threadpool(
+        result = await run_in_threadpool(
             validation_service.validate_pdb_content,
             pdb_content,
             request.label
         )
+
+        summary = result.get("summary", {})
+        analysis = result.get("analysis", {})
+        logger.info(
+            f"Validation finished for workspace {request.workspace_id}: "
+            f"ready_for_hpc={summary.get('is_ready_for_hpc')}, "
+            f"errors={len(analysis.get('errors', []))}, warnings={len(analysis.get('warnings', []))}"
+        )
+        return result
 
     except Exception as e:
         logger.exception(f"Validation error for workspace {request.workspace_id}: {str(e)}")
@@ -140,6 +150,10 @@ async def apply_selections(request: FixAltLocRequest):
     Aplikuje vybrané konformace a asynchronně přepíše zdrojový PDB soubor.
     """
     workspace_manager.require_workspace(request.workspace_id)
+    logger.info(
+        f"Applying {len(request.selections)} AltLoc selection(s) for workspace "
+        f"{request.workspace_id} (overwrites structure.pdb)..."
+    )
 
     try:
         pdb_path = workspace_manager.get_file_path(request.workspace_id)
@@ -157,6 +171,7 @@ async def apply_selections(request: FixAltLocRequest):
             async with aiofiles.open(pdb_path, "w", encoding="utf-8") as f:
                 await f.write(result["pdb_content"])
 
+        logger.info(f"AltLoc selections applied and written for workspace {request.workspace_id}.")
         return result
 
     except Exception as e:

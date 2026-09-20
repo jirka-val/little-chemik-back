@@ -11,7 +11,7 @@ from app.services.pdb_service import PDBService, remove_residue_from_pdb
 from app.workspaces.manager import workspace_manager
 from app.services.structure.forge_service import ForgeStructureService
 
-logger = logging.getLogger("api")
+logger = logging.getLogger(__name__)
 router = APIRouter()
 pdb_service = PDBService()
 forge_service = ForgeStructureService()
@@ -130,6 +130,11 @@ async def delete_residue(workspace_id: str, request: Request):
 
     FILENAME = "structure.pdb"
     pdb_path = workspace_manager.get_workspace_dir(workspace_id) / FILENAME
+
+    logger.info(
+        f"Removing residue {data.get('resseq')} from chain {data.get('chain')} "
+        f"in workspace {workspace_id}..."
+    )
 
     success = remove_residue_from_pdb(
         pdb_path=pdb_path,

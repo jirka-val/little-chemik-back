@@ -96,7 +96,38 @@ class StructureChecker:
                 "critical": True
             })
 
-        # 5. Water check
+        # 5. Check for extra/unexpected atoms (present in PDB but not part of
+        # the force-field template - the analysis-side equivalent of what the
+        # builder tracks internally as observed_extra_atoms). Heavy extras
+        # are treated as critical (same severity as missing heavy atoms),
+        # extra hydrogens only as a warning.
+        for token in all_tokens:
+            extra_atoms = token.get("extra_atoms") or []
+            if not extra_atoms:
+                continue
+            heavy_extra = [a for a in extra_atoms if not a.startswith("H")]
+            hydrogen_extra = [a for a in extra_atoms if a.startswith("H")]
+            if heavy_extra:
+                errors.append({
+                    "type": "STRUCTURE",
+                    "resn": token.get("pdb_resname"),
+                    "id": token.get("resseq"),
+                    "chain": token.get("chain"),
+                    "issue": "extra_atoms",
+                    "message": f"Unexpected heavy atoms not in force-field template: {', '.join(heavy_extra)}",
+                    "critical": True
+                })
+            if hydrogen_extra:
+                warnings.append({
+                    "type": "STRUCTURE",
+                    "resn": token.get("pdb_resname"),
+                    "id": token.get("resseq"),
+                    "chain": token.get("chain"),
+                    "issue": "extra_hydrogens",
+                    "message": f"Unexpected hydrogens not in force-field template: {', '.join(hydrogen_extra)}"
+                })
+
+        # 6. Water check
         has_water = any(r.name in ['HOH', 'WAT'] for r in self.fixer.topology.residues())
         if has_water:
             warnings.append({

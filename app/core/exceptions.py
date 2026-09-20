@@ -19,7 +19,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 import logging
 
-logger = logging.getLogger("api")
+logger = logging.getLogger(__name__)
 
 
 class AppBaseException(Exception):
@@ -93,7 +93,12 @@ class InternalError(AppBaseException):
 
 
 async def app_exception_handler(request: Request, exc: AppBaseException):
-    logger.error(f"Chyba aplikace na {request.url.path}: {exc.message}")
+    # exc.payload nese strukturovaný kontext (např. u ForgeMissingDOFError
+    # chain/resseq/ff_resname/atom_name rezidua, na kterém se builder zastavil) -
+    # bez něj by log ukazoval jen obecnou hlášku a nešlo by z něj poznat, KDE
+    # přesně v datech problém je, aniž by uživatel navíc poslal celou odpověď API.
+    detail = f" | {exc.payload}" if exc.payload else ""
+    logger.error(f"Chyba aplikace na {request.url.path}: {exc.message}{detail}")
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": exc.__class__.__name__, "code": exc.code, "message": exc.message, **exc.payload}

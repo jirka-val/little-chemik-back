@@ -365,7 +365,9 @@ class SidechainSessionService:
         )
 
     def cancel(self, workspace_id: str) -> None:
-        self._sessions.pop(workspace_id, None)
+        had_session = self._sessions.pop(workspace_id, None) is not None
+        if had_session:
+            logger.info(f"Sidechain session cancelled for workspace {workspace_id} - unsaved GUI edits discarded.")
 
     def preview_pdb_text(self, workspace_id: str) -> str:
         """

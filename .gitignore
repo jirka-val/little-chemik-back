@@ -4,6 +4,7 @@ temp_workspaces/
 # Python
 __pycache__/
 *.pyc
+.venv/
 
 # Node (pokud se sem omylem nainstaluje)
 node_modules/
