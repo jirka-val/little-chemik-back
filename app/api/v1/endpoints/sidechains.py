@@ -75,6 +75,9 @@ async def start_sidechain_session(workspace_id: str, request: PreparationRequest
             box_padding_angstrom=request.box_padding_nm * 10.0,
             keep_crystal_waters=request.crystal_water_mode != "remove_all",
             crystal_water_mode=request.crystal_water_mode,
+            clean_crystal_ions=request.clean_crystal_ions,
+            replace_structural_multivalent_with_mg=request.replace_structural_multivalent_with_mg,
+            concentration_mode=request.concentration_mode,
         )
 
         if outcome.status == "complete":

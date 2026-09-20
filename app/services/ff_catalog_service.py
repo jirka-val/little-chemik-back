@@ -10,16 +10,21 @@ refresh_catalog() - buď ručně (tlačítko Refresh ve FF panelu), nebo z
 nočního background jobu (app/workspaces/tasks/ff_catalog_refresher.py).
 """
 
+import base64
 import json
 import logging
+import re
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from app.core.config import settings
 from app.services.forcefield_service import ForceFieldService
 
 logger = logging.getLogger(__name__)
+
+_ION_MOL_TYPES = ("I1", "I1+", "Im", "Im+")
+_RESIDUE_SECTION_RE = re.compile(r"^\[\s*(\S+)\s*\]", re.MULTILINE)
 
 
 class FFCatalogService:
@@ -68,6 +73,42 @@ class FFCatalogService:
         added = classification_service.reconcile(all_ffs, self.ff_service.ff_name)
         logger.info(f"FF catalog refreshed: {len(all_ffs)} force field(s) from IDA, {added} newly unclassified.")
         return snapshot
+
+    def get_buildable_ion_resnames(self) -> Dict[str, Set[str]]:
+        """
+        Pro každou iontovou mol_type skupinu (I1/I1+/Im/Im+) zjistí, které
+        resnames mají v AKTUÁLNÍM katalogu reálně definované parametry
+        (residue_lib_ff_file aspoň jednoho FF s tou skupinou), ne jen výskyt v
+        converting_dictionary.json.
+
+        Ten totiž zná chemickou identitu iontu (jaký mol_type by měl mít),
+        ale ne, jestli pro něj v katalogu skutečně existuje FF - u Im+ je
+        rozdíl reálný: ~8 iontů (Ca2+, Cd2+, Ce3+, Ce4+, Hg2+, U, U4+, V2+)
+        converting_dictionary zná, ale žádný katalogový FF pro ně nemá
+        parametry, takže by jejich výběr vždycky skončil KeyError hluboko v
+        builderu. Navíc pro pár prvků katalog definuje jen starší
+        dvoupísmenné jméno holého symbolu (CA/CD/CE/Ce/HG), ne
+        nábojem-sufixovanou variantu (Ca2+/Cd2+/Ce3+.../Hg2+) - která z
+        dvojice je reálně stavitelná, tak není možné odvodit jinak než
+        přímým rozborem katalogu.
+        """
+        by_group: Dict[str, Set[str]] = {mt: set() for mt in _ION_MOL_TYPES}
+        for ff in self.get_forcefields():
+            mol_types = [mt for mt in (ff.get("molecule_type") or []) if mt in by_group]
+            if not mol_types:
+                continue
+            raw = ff.get("residue_lib_ff_file")
+            if not raw:
+                continue
+            try:
+                content = base64.b64decode(raw).decode("utf-8", errors="replace")
+            except Exception:
+                logger.warning(f"FF '{ff.get('ff_name')}' has an undecodable residue_lib_ff_file, skipping.")
+                continue
+            defined = {m for m in _RESIDUE_SECTION_RE.findall(content) if m.lower() != "bondedtypes"}
+            for mt in mol_types:
+                by_group[mt] |= defined
+        return by_group
 
     def ensure_catalog(self) -> Dict[str, Any]:
         """Bootstrap pro první spuštění po deploy - pokud na disku ještě není

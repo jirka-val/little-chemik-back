@@ -150,6 +150,9 @@ class SidechainSessionService:
         box_padding_angstrom: Optional[float] = None,
         keep_crystal_waters: Optional[bool] = None,
         crystal_water_mode: str = "remove_all",
+        clean_crystal_ions: Optional[bool] = None,
+        replace_structural_multivalent_with_mg: Optional[bool] = None,
+        concentration_mode: Optional[str] = None,
     ) -> SidechainStartResult:
         run = self.forge_service.run_workflow(
             pdb_text,
@@ -161,6 +164,9 @@ class SidechainSessionService:
             box_padding_angstrom=box_padding_angstrom,
             keep_crystal_waters=keep_crystal_waters,
             crystal_water_mode=crystal_water_mode,
+            clean_crystal_ions=clean_crystal_ions,
+            replace_structural_multivalent_with_mg=replace_structural_multivalent_with_mg,
+            concentration_mode=concentration_mode,
         )
         result = run.result
 
