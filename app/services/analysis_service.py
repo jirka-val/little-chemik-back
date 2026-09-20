@@ -178,6 +178,14 @@ _BOND_DISTANCE_LIMIT_ANGSTROM = {"P": 1.9, "R": 2.1, "D": 2.1}
 # oxygen on a protein C-terminus) - not a sign of an unbuildable gap.
 _TERMINAL_EXTRA_HEAVY_ATOMS = {"P": {"OXT"}, "R": set(), "D": set()}
 
+# Symmetric case, but on the *extra* side: heavy atoms a 5'-terminal nucleic
+# variant is allowed to still HAVE even though its own FF template doesn't
+# require them. A residue right after a sequence gap (or one that is simply
+# a genuine 5'-phosphorylated terminus in the source structure) keeps the
+# phosphate group that would normally link back to whatever precedes it -
+# that's expected, not a sign of an unrecognized/mismatched residue.
+_TERMINAL_ALLOWED_EXTRA_HEAVY_ATOMS = {"P": set(), "R": {"P", "OP1", "OP2"}, "D": {"P", "OP1", "OP2"}}
+
 # The single backbone atom a residue right before a gap must still have for
 # the builder's interactive side-chain completion (app/builder - see
 # INTEGRATION_CONTRACT.md "residue_local_open_branch") to have any anchor to
@@ -328,6 +336,7 @@ def _reterminate_as_gap_end(
     token["ff_resname"] = new_ff_resname
     token["known"] = new_known
     token["missing_atoms"] = _check_missing_atoms(group, new_ff_resname, token["atoms"], conv)
+    token["extra_atoms"] = _check_extra_atoms(group, new_ff_resname, token["atoms"], conv)
     conn_info = _check_connectivity_integrity(group, new_ff_resname, token["atoms"], conv)
     token["is_broken"] = conn_info["is_broken"]
     token["connectivity_parts"] = conn_info["components"]
@@ -440,6 +449,14 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
                 if resseq > prev_resseq + 1:
                     # OPRAVA: Zkontroluj, zda GAP je OPRAVDU prázdný nebo tam jen je neznámé reziduum
                     for missing_seq in range(prev_resseq + 1, resseq):
+                        # PDB číslování reziduí nikdy nepoužívá sekvenční číslo 0 (konvence
+                        # při přechodu ze záporného na kladné číslování, např. -1 -> 1 u
+                        # konstruktů s uměle přidaným 5'/N-koncovým leaderem - viz 2OUE
+                        # chain A). "Chybějící" reziduum 0 proto není skutečná mezera a
+                        # nesmí vytvořit GAP placeholder token.
+                        if missing_seq == 0:
+                            continue
+
                         # Hledej, zda existuje JAKÉKOLI reziduum se sekvencí missing_seq v PDB
                         residue_exists_in_pdb = any(r[1] == missing_seq and r[0] == ch for r in residues)
 
@@ -452,7 +469,7 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
                             tokens.append({
                                 "position": global_pos, "chain": ch, "resseq": None, "icode": None,
                                 "pdb_resname": "0", "is_gap": True, "group": None, "ff_resname": None,
-                                "known": False, "atoms": [], "missing_atoms": []
+                                "known": False, "atoms": [], "missing_atoms": [], "extra_atoms": []
                             })
                     break_reason = "gap"
                 else:
@@ -530,11 +547,18 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
 
             ff_resname, known, search_group = _pick_variant(group, resname, atoms, conv, terminal)
             missing_atoms = _check_missing_atoms(group, ff_resname, atoms, conv)
+            extra_atoms = _check_extra_atoms(group, ff_resname, atoms, conv)
+            if terminal == "5":
+                allowed_extra = _TERMINAL_ALLOWED_EXTRA_HEAVY_ATOMS.get(group, set())
+                extra_atoms = [a for a in extra_atoms if a not in allowed_extra]
 
             if not known:
                 warnings.append(f"Unknown residue '{resname}' at {ch}:{resseq}{icode or ''}")
-            elif missing_atoms:
-                warnings.append(f"Incomplete residue '{resname}' at {ch}:{resseq}: Missing {missing_atoms}")
+            else:
+                if missing_atoms:
+                    warnings.append(f"Incomplete residue '{resname}' at {ch}:{resseq}: Missing {missing_atoms}")
+                if extra_atoms:
+                    warnings.append(f"Unexpected residue '{resname}' at {ch}:{resseq}: Extra atoms not in template {extra_atoms}")
 
             if after_gap:
                 label = "N-terminus" if group == "P" else "5'-terminus"
@@ -558,6 +582,7 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
                 "known": known,
                 "atoms": atoms,
                 "missing_atoms": missing_atoms,
+                "extra_atoms": extra_atoms,
                 "is_broken": conn_info["is_broken"],
                 "connectivity_parts": conn_info["components"],
                 "terminus_reason": terminus_reason
@@ -594,6 +619,24 @@ def _check_missing_atoms(group: Optional[str], ff_name: str, atoms: List[str], c
     actual_atoms = set(atoms)
 
     return sorted([a for a in required_atoms if a not in actual_atoms])
+
+
+def _check_extra_atoms(group: Optional[str], ff_name: str, atoms: List[str], conv: Dict) -> List[str]:
+    """
+    ZRCADLOVÁ FUNKCE K _check_missing_atoms - POROVNÁ SEZNAM ATOMŮ Z PDB SE
+    ŠABLONOU A VRÁTÍ ATOMY, KTERÉ V PDB JSOU NAVÍC OPROTI ŠABLONĚ (tj. atomy,
+    které builder interně eviduje jako observed_extra_atoms - viz
+    forge_molecule_parser.py). Bez šablony (neznámé reziduum) nelze nic
+    porovnat, vrací se prázdný seznam stejně jako u _check_missing_atoms.
+    """
+    res_def = _get_res_def(group, ff_name, conv)
+    if not res_def:
+        return []
+
+    required_atoms = set(res_def.get("atom", {}).keys())
+    actual_atoms = set(atoms)
+
+    return sorted([a for a in actual_atoms if a not in required_atoms])
 
 
 def _check_connectivity_integrity(group: Optional[str], ff_name: str, atoms: List[str], conv: Dict) -> Dict[str, Any]:

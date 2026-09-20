@@ -271,6 +271,111 @@ class TestNonNumericChainBreaks:
         assert _by_resseq(tokens, 2)["terminus_reason"] is None
 
 
+class TestZeroResidueNumberSkip:
+    """
+    Regresní sada pro opravu popsanou v konverzaci: reálné PDB 2OUE má
+    chain A číslovaný -5..-2 (uměle přidaný 5' leader), pak podle běžné PDB
+    konvence PŘESKOČÍ sekvenční číslo 0 a pokračuje 1, 2, ... Sekvenční
+    číslo 0 v PDB záznamech principiálně nikdy neexistuje, takže tenhle
+    skok není skutečná mezera - kód dřív "reziduum 0" bral jako chybějící a
+    vytvořil falešný GAP placeholder token (pdb_resname="0", resseq=None,
+    zobrazený v UI jako "UNK ??").
+    """
+
+    def test_no_gap_when_numbering_skips_zero_by_convention(self):
+        pdb = (
+            "ATOM      1  N   ALA A  -1       0.000   0.000   0.000  1.00  0.00           N\n"
+            "ATOM      2  CA  ALA A  -1       1.000   1.000   1.000  1.00  0.00           C\n"
+            "ATOM      3  N   ALA A   1       4.000   4.000   4.000  1.00  0.00           N\n"
+            "ATOM      4  CA  ALA A   1       5.000   5.000   5.000  1.00  0.00           C\n"
+        )
+        tokens = _tokens(pdb, "A")
+        assert sum(1 for t in tokens if t["is_gap"]) == 0
+
+    def test_real_gap_still_detected_when_crossing_zero_boundary(self):
+        """
+        Reziduum 1 opravdu v PDB chybí (skok rovnou z -1 na 2). Přeskočení
+        neexistujícího čísla 0 nesmí "spolknout" i tenhle skutečně chybějící
+        úsek - musí vzniknout přesně jeden GAP token, ne nula.
+        """
+        pdb = (
+            "ATOM      1  N   ALA A  -1       0.000   0.000   0.000  1.00  0.00           N\n"
+            "ATOM      2  CA  ALA A  -1       1.000   1.000   1.000  1.00  0.00           C\n"
+            "ATOM      3  N   ALA A   2       4.000   4.000   4.000  1.00  0.00           N\n"
+            "ATOM      4  CA  ALA A   2       5.000   5.000   5.000  1.00  0.00           C\n"
+        )
+        tokens = _tokens(pdb, "A")
+        assert sum(1 for t in tokens if t["is_gap"]) == 1
+
+
+class TestExtraAtomDetection:
+    """
+    _check_extra_atoms je zrcadlová funkce k _check_missing_atoms: místo
+    "co v šabloně je, ale v PDB chybí" hlídá "co je v PDB navíc oproti
+    šabloně". Builder tenhle případ interně eviduje jako
+    observed_extra_atoms (viz forge_molecule_parser.py) - tenhle token je
+    analytická vrstva nad stejným konceptem.
+    """
+
+    _ALA_WITH_EXTRA = (
+        "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00           N\n"
+        "ATOM      2  CA  ALA A   1       1.000   1.000   1.000  1.00  0.00           C\n"
+        "ATOM      3  C   ALA A   1       2.000   0.000   0.000  1.00  0.00           C\n"
+        "ATOM      4  O   ALA A   1       2.500   1.000   0.000  1.00  0.00           O\n"
+        "ATOM      5  CB  ALA A   1      -0.500   1.000  -1.000  1.00  0.00           C\n"
+        "ATOM      6  CX  ALA A   1       9.000   9.000   9.000  1.00  0.00           C\n"
+        "ATOM      7  HZ9 ALA A   1       9.500   9.500   9.500  1.00  0.00           H\n"
+    )
+
+    def test_no_extra_atoms_for_clean_residue(self):
+        pdb = (
+            "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00           N\n"
+            "ATOM      2  CA  ALA A   1       1.000   1.000   1.000  1.00  0.00           C\n"
+            "ATOM      3  C   ALA A   1       2.000   0.000   0.000  1.00  0.00           C\n"
+            "ATOM      4  O   ALA A   1       2.500   1.000   0.000  1.00  0.00           O\n"
+            "ATOM      5  CB  ALA A   1      -0.500   1.000  -1.000  1.00  0.00           C\n"
+        )
+        tokens = _tokens(pdb, "A")
+        assert _by_resseq(tokens, 1)["extra_atoms"] == []
+
+    def test_heavy_and_hydrogen_extra_atoms_are_both_reported(self):
+        tokens = _tokens(self._ALA_WITH_EXTRA, "A")
+        ala1 = _by_resseq(tokens, 1)
+        assert ala1["extra_atoms"] == ["CX", "HZ9"]
+
+    def test_extra_atom_warning_is_emitted(self):
+        result = build_sequence_tokens(self._ALA_WITH_EXTRA, chain="A", fill_gaps=True)
+        warnings = result["chains"]["A"]["warnings"]
+        assert any("Extra atoms not in template" in w and "CX" in w for w in warnings)
+
+    def test_5prime_gap_phosphate_is_not_flagged_as_extra(self, pdb_rna_gap):
+        """
+        Regrese: reziduum hned za mezerou dostane 5'-terminální variantu
+        (RU5/RA5/...), jejíž FF šablona fosfátovou skupinu neobsahuje - ale
+        reálná struktura ji stejně nese (fosfát, který by se normálně
+        napojoval na chybějící předchozí reziduum). To NENÍ neznámý/extra
+        atom, je to očekávaný stav umělého 5' konce - viz
+        _TERMINAL_ALLOWED_EXTRA_HEAVY_ATOMS.
+        """
+        tokens = _tokens(pdb_rna_gap, "A")
+        u6 = _by_resseq(tokens, 6)
+        assert u6["ff_resname"] == "RU5"
+        assert u6["terminus_reason"] == "gap"
+        assert "P" in u6["atoms"]
+        assert u6["extra_atoms"] == []
+
+    def test_unknown_residue_reports_no_extra_atoms(self):
+        """Bez šablony (neznámé reziduum) nelze nic porovnávat - stejně jako u missing_atoms."""
+        pdb = (
+            "ATOM      1  N   XYZ A   1       0.000   0.000   0.000  1.00  0.00           N\n"
+            "ATOM      2  CA  XYZ A   1       1.000   1.000   1.000  1.00  0.00           C\n"
+        )
+        tokens = _tokens(pdb, "A")
+        xyz1 = _by_resseq(tokens, 1)
+        assert xyz1["known"] is False
+        assert xyz1["extra_atoms"] == []
+
+
 class TestHisVariantDetection:
     # Bare "HIS" není samo o sobě klíčem v converting_dictionary.json (jen
     # jeho vyřešené HID/HIE/HIP varianty jsou) - _infer_group má proto pro

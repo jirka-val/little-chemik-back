@@ -4,7 +4,7 @@ import logging
 from app.core.config import settings
 from app.services.ff_catalog_service import catalog_service
 
-logger = logging.getLogger("api")
+logger = logging.getLogger(__name__)
 
 
 async def refresh_ff_catalog_periodically():

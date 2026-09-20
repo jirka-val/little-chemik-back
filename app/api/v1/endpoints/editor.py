@@ -103,6 +103,10 @@ async def mutate_residue(request: MutateRequest):
 
 @router.post("/rename-atom")
 async def rename_atom(request: RenameAtomRequest):
+    logger.info(
+        f"Renaming atom '{request.old_atom_name}' to '{request.new_atom_name}' "
+        f"in residue {request.residue_number} ({request.chain_id})"
+    )
     return await _process_editor_action(
         request.workspace_id,
         editor_service.rename_atom,
@@ -115,6 +119,7 @@ async def rename_atom(request: RenameAtomRequest):
 
 @router.post("/remove-atom")
 async def remove_atom(request: RemoveAtomRequest):
+    logger.info(f"Removing atom '{request.atom_name}' from residue {request.residue_number} ({request.chain_id})")
     return await _process_editor_action(
         request.workspace_id,
         editor_service.remove_atom,

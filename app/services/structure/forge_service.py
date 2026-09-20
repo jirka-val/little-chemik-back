@@ -19,6 +19,8 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+from app.core.logging import console_logger
+
 _BUILDER_DIR = Path(__file__).resolve().parents[2] / "builder"
 if str(_BUILDER_DIR) not in sys.path:
     sys.path.insert(0, str(_BUILDER_DIR))
@@ -552,6 +554,12 @@ class ForgeStructureService:
         Rozhodnutí, co dělat s `result.stopped_at_missing_dof` (409 vs. otevření
         interaktivní session), zůstává na volajícím.
         """
+        logger.info(
+            f"FORGE: Preparing structure (pH={ph}, add_solvent_and_ions={add_solvent_and_ions}, "
+            f"crystal_water_mode={crystal_water_mode}, ff_selections={list(ff_selections.keys())})"
+        )
+        console_logger.info("Preparing structure...")
+
         pdb_text = _strip_unrecognized_heterogens(pdb_text, crystal_water_mode)
         sequence_data = build_sequence_tokens(pdb_text, chain=None, fill_gaps=True)
         structure_data = {"pdb_text": pdb_text, "missing_atoms": sequence_data}
@@ -595,8 +603,40 @@ class ForgeStructureService:
             if isinstance(detail, str) and (
                 "parameters missing" in detail or "LJ sigma missing" in detail
             ):
+                console_logger.error("Structure preparation failed - missing force field parameters.")
                 raise ForgeMissingForceFieldError({}, detail=detail) from exc
+            console_logger.error("Structure preparation failed.")
             raise
+
+        if result.stopped_at_missing_dof:
+            logger.info(
+                f"FORGE: Build stopped at a missing degree of freedom - "
+                f"{len(result.remaining_plan.steps)} step(s) remaining, awaiting user decision."
+            )
+            console_logger.warning("Build paused - a residue needs a manual decision.")
+        else:
+            logger.info("FORGE: Build complete (all residues resolved).")
+            if result.crystal_ion_cleanup:
+                c = result.crystal_ion_cleanup
+                logger.info(
+                    f"FORGE: Crystal ion cleanup - input={c.input_ions}, "
+                    f"removed_monovalent={c.removed_monovalent}, "
+                    f"removed_nonstructural_multivalent={c.removed_nonstructural_multivalent}, "
+                    f"retained={c.retained_structural_monovalent + c.retained_structural_multivalent}"
+                )
+            if result.solvation:
+                s = result.solvation
+                logger.info(
+                    f"FORGE: Solvation complete - box={s.box_shape} (padding={s.padding_angstrom}A), "
+                    f"crystal_waters_retained={s.retained_crystal_waters}, "
+                    f"generated_waters={s.generated_waters}, total_waters={s.total_waters}"
+                )
+            if result.ion_addition:
+                i = result.ion_addition
+                logger.info(
+                    f"FORGE: Ion placement complete - neutralization={i.neutralization_ions}, "
+                    f"added={i.added_ions}, final_system_charge={i.final_system_charge}"
+                )
 
         return ForgeWorkflowRun(result=result, resources=resources, settings=settings, salts=salt_specs)
 
@@ -638,6 +678,15 @@ class ForgeStructureService:
 
         if result.stopped_at_missing_dof:
             raise ForgeMissingDOFError(result.remaining_plan.steps[0], result.molecule)
+
+        for warning in result.molecule.warnings:
+            logger.warning(f"FORGE: {warning}")
+        logger.info("FORGE: Structure preparation finished successfully.")
+
+        if result.molecule.warnings:
+            console_logger.info(f"Structure prepared successfully ({len(result.molecule.warnings)} warning(s)).")
+        else:
+            console_logger.info("Structure prepared successfully.")
 
         return ForgePreparationResult(
             pdb_text=molecule_to_pdb(result.molecule),

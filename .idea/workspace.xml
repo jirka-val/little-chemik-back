@@ -5,20 +5,25 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor analysis service to improve error handling and streamline workspace validation plus new builder">
+      <change beforePath="$PROJECT_DIR$/.idea/little-chemik-back.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/little-chemik-back.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/api/api.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/download.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/download.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/analysis.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/editor.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/editor.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/forcefields.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/forcefields.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/builder/INTEGRATION_CONTRACT.md" beforeDir="false" afterPath="$PROJECT_DIR$/app/builder/INTEGRATION_CONTRACT.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/builder/MANIFEST.sha256" beforeDir="false" afterPath="$PROJECT_DIR$/app/builder/MANIFEST.sha256" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/builder/VERSION" beforeDir="false" afterPath="$PROJECT_DIR$/app/builder/VERSION" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/builder/forge_molecule_builder.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/builder/forge_molecule_builder.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/builder/forge_molecule_ions.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/builder/forge_molecule_ions.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/builder/forge_molecule_solvation.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/builder/forge_molecule_solvation.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/builder/forge_workflow.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/builder/forge_workflow.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/topology.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/topology.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/validation.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/validation.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/core/exceptions.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/core/exceptions.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/core/logging.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/core/logging.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/services/analysis_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/analysis_service.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/services/structure/forge_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/structure/forge_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/structure/sidechain_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/structure/sidechain_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/validation/checker.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/validation/checker.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/workspaces/tasks/ff_catalog_refresher.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/workspaces/tasks/ff_catalog_refresher.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/workspaces/tasks/garbage_collector.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/workspaces/tasks/garbage_collector.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/test_analysis_tokens.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_analysis_tokens.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -61,7 +66,6 @@
   &quot;associatedIndex&quot;: 7
 }</component>
   <component name="ProjectId" id="36NPdB9GLBmoFoVS82fWhtXa68S" />
-  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
@@ -71,14 +75,18 @@
     &quot;FastAPI.test_molecular-modification.executor&quot;: &quot;Run&quot;,
     &quot;Python tests.Python tests for test_api.test_10_3dvz_rna_variants_and_atoms_detection.executor&quot;: &quot;Run&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
     &quot;SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
+    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
     &quot;git-widget-placeholder&quot;: &quot;master&quot;,
-    &quot;last_opened_file_path&quot;: &quot;C:/DevProjects/littleChemik/little-chemik-back&quot;,
+    &quot;last_opened_file_path&quot;: &quot;J:/DevProjects/littlechemik/little-chemik-back&quot;,
     &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
     &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
     &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
     &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
     &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;python.packages.toolwindow.project.migrated.to.right.top.v2&quot;: &quot;true&quot;,
     &quot;settings.editor.selected.configurable&quot;: &quot;reference.settingsdialog.IDE.editor.colors.Console Font&quot;,
     &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
@@ -104,7 +112,9 @@
       <option name="IS_MODULE_SDK" value="false" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="DEBUG_JUST_MY_CODE" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="RUN_TOOL" value="" />
       <option name="launchJavascriptDebuger" value="false" />
       <method v="2" />
     </configuration>
@@ -118,7 +128,9 @@
       <option name="IS_MODULE_SDK" value="true" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="DEBUG_JUST_MY_CODE" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="RUN_TOOL" value="" />
       <option name="_new_additionalArguments" value="&quot;&quot;" />
       <option name="_new_target" value="&quot;test_api.test_10_3dvz_rna_variants_and_atoms_detection&quot;" />
       <option name="_new_targetType" value="&quot;PYTHON&quot;" />
@@ -133,8 +145,7 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-js-predefined-d6986cc7102b-5c90d61e3bab-JavaScript-PY-242.26775.22" />
-        <option value="bundled-python-sdk-9f73701ac511-399fe30bd8c1-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-242.26775.22" />
+        <option value="bundled-python-sdk-eff1e8def5f5-5bd6d13a2a75-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-262.10315.174" />
       </set>
     </attachedChunks>
   </component>
@@ -284,6 +295,10 @@
       <workItem from="1786951498779" duration="3798000" />
       <workItem from="1787050599387" duration="6305000" />
       <workItem from="1787261297848" duration="2093000" />
+      <workItem from="1789063920750" duration="1774000" />
+      <workItem from="1789068694144" duration="2237000" />
+      <workItem from="1789375365246" duration="27000" />
+      <workItem from="1789907613246" duration="3293000" />
     </task>
     <task id="LOCAL-00015" summary="New validation">
       <option name="closed" value="true" />

@@ -13,7 +13,7 @@ from app.workspaces.manager import workspace_manager
 # ZMĚNA 1: Importujeme novou funkci process_structure místo původní clean_pdb_altlocs
 from app.services.analysis_service import build_sequence_tokens, analyze_pdb_altlocs, process_structure
 
-logger = logging.getLogger("api")
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 

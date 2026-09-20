@@ -13,7 +13,7 @@ from app.workspaces.manager import workspace_manager
 
 router = APIRouter()
 topology_service = TopologyService()
-logger = logging.getLogger("api")
+logger = logging.getLogger(__name__)
 
 
 class TopologyRequest(BaseModel):
@@ -24,6 +24,7 @@ class TopologyRequest(BaseModel):
 @router.post("/{workspace_id}/generate")
 async def generate_topology(workspace_id: str, request: TopologyRequest):
     workspace_manager.require_workspace(workspace_id)
+    logger.info(f"Generating topology for workspace {workspace_id} (ff_selections: {list(request.ff_selections.keys())})...")
 
     try:
         # 1. Vygenerujeme soubory na disk (vrátí dict s názvy)
@@ -32,6 +33,8 @@ async def generate_topology(workspace_id: str, request: TopologyRequest):
             pdb_filename=request.pdb_filename,
             ff_selections=request.ff_selections
         )
+
+        logger.info(f"Topology generated successfully for workspace {workspace_id}.")
 
         # 2. VRÁTÍME ČISTÝ JSON (Žádný StreamingResponse, žádný ZIP!)
         return {
@@ -42,5 +45,5 @@ async def generate_topology(workspace_id: str, request: TopologyRequest):
             }
         }
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.exception(f"Topology generation failed for workspace {workspace_id}: {e}")
         raise InternalError(str(e))

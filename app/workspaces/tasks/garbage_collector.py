@@ -5,7 +5,7 @@ import logging
 import shutil  # Nutné pro mazání celých složek
 from app.workspaces.manager import WORKSPACE_DIR
 
-logger = logging.getLogger("api")
+logger = logging.getLogger(__name__)
 
 # Jak dlouho může složka žít (2 hodiny)
 MAX_AGE_SECONDS = 2 * 60 * 60
@@ -41,6 +41,7 @@ def _cleanup_old_workspaces_sync() -> int:
                         # Pro jistotu, kdyby tam zůstal zapomenutý soubor mimo složku
                         os.remove(item_path)
 
+                    logger.info(f"Garbage Collector: removed expired workspace '{item}' (age {int(item_age)}s).")
                     deleted_count += 1
                 except Exception as sub_e:
                     logger.error(f"Failed to delete {item_path}: {sub_e}")
