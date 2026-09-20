@@ -13,7 +13,7 @@ from app.core.exceptions import AppBaseException, BadRequestError, InternalError
 from app.services.analysis_service import list_ion_options, resolve_ion_mol_type
 from app.services.ff_catalog_service import catalog_service
 from app.services.validation.service import ValidationService
-from app.services.structure.forge_service import ForgeStructureService
+from app.services.structure.forge_service import ForgeStructureService, build_preparation_summary
 from app.workspaces.manager import workspace_manager
 
 logger = logging.getLogger(__name__)
@@ -306,7 +306,8 @@ async def prepare_molecule(request: PreparationRequest):
         return {
             "message": "Structure successfully prepared.",
             "warnings": result.warnings,
-            "validation": validation_results
+            "validation": validation_results,
+            "preparation_summary": build_preparation_summary(result),
         }
 
     except AppBaseException:

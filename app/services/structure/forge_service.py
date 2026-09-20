@@ -466,6 +466,103 @@ class ForgePreparationResult:
     ion_addition: Any
 
 
+def _format_residue_key(residue_key: tuple) -> str:
+    chain, resseq, icode = residue_key
+    return f"{chain}{resseq}{icode}".rstrip()
+
+
+def _format_atom_key(atom_key: tuple) -> str:
+    chain, resseq, icode, atom_name = atom_key
+    return f"{_format_residue_key((chain, resseq, icode))}:{atom_name}"
+
+
+def build_preparation_summary(result: ForgePreparationResult) -> Dict[str, Any]:
+    """
+    Serializuje report objekty (state_assignment/crystal_ion_cleanup/solvation/
+    ion_addition), které builder počítá při KAŽDÉ přípravě, ale API je dřív
+    zahazovalo - vraceli jsme jen {message, warnings, validation}, report se
+    jen logoval na server (viz run_workflow logger.info volání níže) a nikdy
+    se nedostal na frontend. To přesně odpovídá review krokům W5.1/W5.2 v
+    FORGE_general_design_v5.xlsx ("Review ... state assignments" a "Review
+    ... retained crystal species, salt conditions and net charge") - ty tam
+    nejsou jako samostatná W2/W3 review obrazovka (to spec explicitně
+    nechce), ale musí být VIDĚT někde na konci přípravy.
+
+    U protonation_assignments vracíme jen ne-defaultní přiřazení (ne
+    kompletní inventář všech reziduí) - u velké struktury by kompletní seznam
+    byl tisíce nezajímavých řádků, zatímco přesně tohle přiřazení "odlišné od
+    výchozího" je to, co si review krok podle Excel dokumentu žádá zvýraznit.
+    """
+    summary: Dict[str, Any] = {}
+
+    sa = result.state_assignment
+    if sa is not None:
+        covalent = sa.covalent
+        summary["disulfide_bonds"] = [
+            {
+                "atom1": _format_atom_key(b.atom1),
+                "atom2": _format_atom_key(b.atom2),
+                "distance_angstrom": round(b.distance_angstrom, 3),
+            }
+            for b in covalent.bonds
+        ]
+        summary["covalent_state_changes"] = [
+            {"residue": _format_residue_key(res_key), "from": old, "to": new}
+            for res_key, old, new in covalent.state_changes
+        ]
+        summary["covalent_missing_bond_atoms"] = [
+            {"residue": _format_residue_key(res_key), "resname": resname, "expected_atom": atom}
+            for res_key, resname, atom in covalent.missing_bond_atoms
+        ]
+
+        prot = sa.protonation
+        summary["protonation_assignments"] = [
+            {
+                "residue": _format_residue_key(a.residue_key),
+                "default": a.default_resname,
+                "assigned": a.new_resname,
+            }
+            for a in prot.assignments
+            if not a.is_default
+        ]
+        summary["protonation_conflicts"] = [
+            {"kind": c.kind, "message": c.message} for c in prot.conflicts
+        ]
+        summary["protonation_warnings"] = list(prot.warnings)
+
+    c = result.crystal_ion_cleanup
+    if c is not None:
+        summary["crystal_ion_cleanup"] = {
+            "input_ions": c.input_ions,
+            "removed_monovalent": c.removed_monovalent,
+            "removed_nonstructural_multivalent": c.removed_nonstructural_multivalent,
+            "retained_structural_monovalent": c.retained_structural_monovalent,
+            "retained_structural_multivalent": c.retained_structural_multivalent,
+            "replaced_by_magnesium": c.replaced_by_magnesium,
+        }
+
+    s = result.solvation
+    if s is not None:
+        summary["solvation"] = {
+            "box_shape": s.box_shape,
+            "padding_angstrom": s.padding_angstrom,
+            "input_crystal_waters": s.input_crystal_waters,
+            "retained_crystal_waters": s.retained_crystal_waters,
+            "generated_waters": s.generated_waters,
+            "total_waters": s.total_waters,
+        }
+
+    i = result.ion_addition
+    if i is not None:
+        summary["ion_addition"] = {
+            "neutralization_ions": dict(i.neutralization_ions),
+            "added_ions": dict(i.added_ions),
+            "final_system_charge": round(i.final_system_charge, 4),
+        }
+
+    return summary
+
+
 class ForgeStructureService:
     """Bridges upstream-cleaned PDB structures (analysis_service) to app/builder."""
 
