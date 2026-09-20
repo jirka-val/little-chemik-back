@@ -31,16 +31,34 @@ class FFCatalogService:
     def __init__(self, path: Optional[Path] = None, ff_service: Optional[ForceFieldService] = None):
         self.path = path or settings.FF_CATALOG_SNAPSHOT_FILE
         self.ff_service = ff_service or ForceFieldService()
+        # In-memory cache pro _load()/get_buildable_ion_resnames() - bez ní
+        # se ff_catalog.json (~15 MB) četl a parsoval ze souboru při KAŽDÉM
+        # volání get_forcefields() (naměřeno ~126 ms/volání), a
+        # get_buildable_ion_resnames() nad tím navíc dekódovalo/regexovalo
+        # base64 residue_lib obsah všech iontových FF znovu - u /prepare, kde
+        # se volá 2x (cation+anion, viz validation.py _build_salt_specs), to
+        # přidávalo ~260 ms na každý požadavek jen na opakované parsování
+        # téhož souboru. `catalog_service` je proces-lokální singleton a
+        # jediné místo, které soubor přepisuje, je refresh_catalog() (ruční
+        # tlačítko i noční job běží nad stejnou instancí - viz
+        # ff_catalog_refresher.py), takže cache je bezpečné invalidovat
+        # výhradně tam.
+        self._snapshot_cache: Optional[Dict[str, Any]] = None
+        self._buildable_ions_cache: Optional[Dict[str, Set[str]]] = None
 
     def _load(self) -> Dict[str, Any]:
+        if self._snapshot_cache is not None:
+            return self._snapshot_cache
         if not self.path.exists():
             return {"fetched_at": None, "forcefields": []}
         try:
             with open(self.path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                snapshot = json.load(f)
         except (json.JSONDecodeError, OSError) as e:
             logger.error(f"FF catalog snapshot at {self.path} is unreadable ({e}), treating as empty.")
             return {"fetched_at": None, "forcefields": []}
+        self._snapshot_cache = snapshot
+        return snapshot
 
     def get_forcefields(self) -> List[Dict[str, Any]]:
         """Rychlá cesta pro request handlery - čte ze souboru, NIKDY nevolá IDA."""
@@ -70,6 +88,9 @@ class FFCatalogService:
             json.dump(snapshot, f, ensure_ascii=False)
         tmp_path.replace(self.path)
 
+        self._snapshot_cache = snapshot
+        self._buildable_ions_cache = None  # odvozené z obsahu, přepočítat líně při dalším dotazu
+
         added = classification_service.reconcile(all_ffs, self.ff_service.ff_name)
         logger.info(f"FF catalog refreshed: {len(all_ffs)} force field(s) from IDA, {added} newly unclassified.")
         return snapshot
@@ -91,7 +112,16 @@ class FFCatalogService:
         nábojem-sufixovanou variantu (Ca2+/Cd2+/Ce3+.../Hg2+) - která z
         dvojice je reálně stavitelná, tak není možné odvodit jinak než
         přímým rozborem katalogu.
+
+        Výsledek je cachovaný (base64 decode + regex nad ~60 FF souborů by se
+        jinak opakovalo při každém volání - viz cache poznámka v __init__),
+        invalidovaný jedině přes refresh_catalog(). Vrácený dict/set NENÍ
+        kopie - volající ho čte, nikdy nemodifikuje (viz stávající použití v
+        validation.py).
         """
+        if self._buildable_ions_cache is not None:
+            return self._buildable_ions_cache
+
         by_group: Dict[str, Set[str]] = {mt: set() for mt in _ION_MOL_TYPES}
         for ff in self.get_forcefields():
             mol_types = [mt for mt in (ff.get("molecule_type") or []) if mt in by_group]
@@ -108,6 +138,8 @@ class FFCatalogService:
             defined = {m for m in _RESIDUE_SECTION_RE.findall(content) if m.lower() != "bondedtypes"}
             for mt in mol_types:
                 by_group[mt] |= defined
+
+        self._buildable_ions_cache = by_group
         return by_group
 
     def ensure_catalog(self) -> Dict[str, Any]:
