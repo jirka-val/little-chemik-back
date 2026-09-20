@@ -1042,10 +1042,45 @@ def process_structure(pdb_text: str, target_model: int, apply_symmetry: bool, se
 _POLYMER_GROUP_LABELS = {"P": "protein", "R": "RNA", "D": "DNA"}
 
 
+def resolve_ion_mol_type(resname: str, conv: Optional[dict] = None) -> Optional[str]:
+    """
+    Jediné povolené místo pro převod iontového resname na FORGE mol_type
+    (I1/I1+/Im/Im+) - viz varování v required_ff_groups o třech nezávislých
+    hardcoded kopiích tohohle mapování, které dřív v repu existovaly a
+    způsobily reálný pád (KeyError na 1JJ2, Mg2+ nerozpoznané jako Im).
+    Vrací None, pokud converting_dictionary žádný takový iont nezná.
+    """
+    conv = conv if conv is not None else load_converting_dictionary()
+    for mol_type in ("I1", "I1+", "Im", "Im+"):
+        if resname in conv.get(mol_type, {}):
+            return mol_type
+    return None
+
+
+def list_ion_options() -> Dict[str, List[str]]:
+    """
+    Všechny iontové resnames, které converting_dictionary.json zná po
+    mol_type skupině - tohle je čistě chemická identita (jaký mol_type ion
+    má), NE záruka, že pro něj v aktuální FF katalogové sadě existuje reálný
+    force field. Kdo potřebuje jen skutečně stavitelné ionty (typicky
+    dropdown na frontendu), musí výsledek protnout s
+    FFCatalogService.get_buildable_ion_resnames() - viz GET
+    /api/validation/ions. Bez toho průniku by šlo vybrat ion, u kterého
+    builder vždy spadne na KeyError (viz docstring
+    get_buildable_ion_resnames pro konkrétní příklady).
+    """
+    conv = load_converting_dictionary()
+    return {
+        mol_type: sorted(conv.get(mol_type, {}).keys())
+        for mol_type in ("I1", "I1+", "Im", "Im+")
+    }
+
+
 def required_ff_groups(
     pdb_text: str,
     add_solvent_and_ions: bool = True,
     salts: Optional[List[Dict[str, Any]]] = None,
+    require_mg: bool = False,
 ) -> Dict[str, Dict[str, Any]]:
     """
     Zjistí, jaké FORGE mol_type skupiny (P/R/D/W/I1/I1+/Im/Im+) tahle
@@ -1055,10 +1090,11 @@ def required_ff_groups(
 
     Jediný zdroj pravdy je converting_dictionary.json (stejný, jaký uvnitř
     používá i builder), ne samostatný hardcoded seznam iontů - takových už
-    v repu byly tři nezávislé kopie (pdb_service.get_molecule_types,
-    validation._MONOVALENT_ION_MOL_TYPE, forge_service._KNOWN_ION_RESNAMES)
-    a právě jejich vzájemná neshoda (žádná neznala "Im") byla přímou
-    příčinou pádu "KeyError: Ion parameters missing for Im:Mg2+" na 1JJ2 -
+    v repu dřív byly nezávislé kopie (pdb_service.get_molecule_types a
+    validation._MONOVALENT_ION_MOL_TYPE, ten druhý od teď nahrazený
+    resolve_ion_mol_type() níže) a právě jejich vzájemná neshoda (žádná
+    neznala "Im") byla přímou příčinou pádu "KeyError: Ion parameters
+    missing for Im:Mg2+" na 1JJ2 -
     uživatel vybral I1+ místo Im a nikde nebylo vidět, že Im je potřeba.
 
     Ionty "Im"/"Im+" jsou v konverzním slovníku pojmenované matoucně -
@@ -1126,6 +1162,9 @@ def required_ff_groups(
 
         for mol_type in salt_mol_types:
             by_group.setdefault(mol_type, []).append("default/requested neutralization or salt")
+
+        if require_mg:
+            by_group.setdefault("Im", []).append("structural multivalent ion -> Mg2+ replacement requested")
 
         for mol_type, reasons in by_group.items():
             result[mol_type] = {"reason": f"ions: {', '.join(reasons)}"}

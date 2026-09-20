@@ -31,7 +31,7 @@ from forge_workflow import (  # noqa: E402
     WorkflowResult,
     run_forge_workflow,
 )
-from forge_molecule_ions import load_salt_specifications  # noqa: E402
+from forge_molecule_ions import IonIdentity, IonPlacementSettings, load_salt_specifications  # noqa: E402
 from forge_molecule_parser import (  # noqa: E402
     Molecule,
     Residue,
@@ -478,6 +478,7 @@ class ForgeStructureService:
         ff_selections: Dict[str, Any],
         add_solvent_and_ions: bool,
         salts: Optional[List[Dict[str, Any]]],
+        require_mg: bool = False,
     ) -> None:
         """
         Ověří PŘED spuštěním buildu, že ff_selections pokrývá všechny
@@ -493,7 +494,9 @@ class ForgeStructureService:
             except ValueError:
                 continue
 
-        required = required_ff_groups(pdb_text, add_solvent_and_ions=add_solvent_and_ions, salts=salts)
+        required = required_ff_groups(
+            pdb_text, add_solvent_and_ions=add_solvent_and_ions, salts=salts, require_mg=require_mg
+        )
         missing = {}
         for mol_type, info in required.items():
             # "W" je záměrně obecný požadavek (nezáleží, jaký konkrétní
@@ -546,6 +549,9 @@ class ForgeStructureService:
         box_padding_angstrom: Optional[float] = None,
         keep_crystal_waters: Optional[bool] = None,
         crystal_water_mode: str = "remove_all",
+        clean_crystal_ions: Optional[bool] = None,
+        replace_structural_multivalent_with_mg: Optional[bool] = None,
+        concentration_mode: Optional[str] = None,
     ) -> "ForgeWorkflowRun":
         """
         Sdílené jádro mezi neinteraktivním `prepare_structure()` a interaktivním
@@ -564,7 +570,10 @@ class ForgeStructureService:
         sequence_data = build_sequence_tokens(pdb_text, chain=None, fill_gaps=True)
         structure_data = {"pdb_text": pdb_text, "missing_atoms": sequence_data}
 
-        self._check_ff_coverage(pdb_text, ff_selections, add_solvent_and_ions, salts)
+        self._check_ff_coverage(
+            pdb_text, ff_selections, add_solvent_and_ions, salts,
+            require_mg=bool(replace_structural_multivalent_with_mg),
+        )
 
         resources = self._build_resources(ff_selections)
         salt_specs = load_salt_specifications({"salts": salts or []})
@@ -577,10 +586,19 @@ class ForgeStructureService:
         if keep_crystal_waters is not None:
             solvation_kwargs["keep_crystal_waters"] = keep_crystal_waters
 
+        ion_kwargs = {}
+        if clean_crystal_ions is not None:
+            ion_kwargs["clean_crystal_ions"] = clean_crystal_ions
+        if replace_structural_multivalent_with_mg is not None:
+            ion_kwargs["replace_structural_multivalent_with_mg"] = replace_structural_multivalent_with_mg
+        if concentration_mode is not None:
+            ion_kwargs["concentration_mode"] = concentration_mode
+
         settings = WorkflowSettings(
             pH=ph,
             add_solvent_and_ions=add_solvent_and_ions,
             solvation=SolvationSettings(**solvation_kwargs),
+            ions=IonPlacementSettings(**ion_kwargs),
         )
 
         try:
@@ -651,6 +669,9 @@ class ForgeStructureService:
         box_padding_angstrom: Optional[float] = None,
         keep_crystal_waters: Optional[bool] = None,
         crystal_water_mode: str = "remove_all",
+        clean_crystal_ions: Optional[bool] = None,
+        replace_structural_multivalent_with_mg: Optional[bool] = None,
+        concentration_mode: Optional[str] = None,
     ) -> ForgePreparationResult:
         """
         Spustí kompletní FORGE zpracování (stavy/protonace, stavba chybějících
@@ -673,6 +694,9 @@ class ForgeStructureService:
             box_padding_angstrom=box_padding_angstrom,
             keep_crystal_waters=keep_crystal_waters,
             crystal_water_mode=crystal_water_mode,
+            clean_crystal_ions=clean_crystal_ions,
+            replace_structural_multivalent_with_mg=replace_structural_multivalent_with_mg,
+            concentration_mode=concentration_mode,
         )
         result = run.result
 

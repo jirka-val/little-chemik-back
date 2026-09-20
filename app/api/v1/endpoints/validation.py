@@ -3,13 +3,15 @@ import logging
 import traceback
 import time
 import aiofiles
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
-from app.core.exceptions import AppBaseException, InternalError
+from app.core.exceptions import AppBaseException, BadRequestError, InternalError
+from app.services.analysis_service import list_ion_options, resolve_ion_mol_type
+from app.services.ff_catalog_service import catalog_service
 from app.services.validation.service import ValidationService
 from app.services.structure.forge_service import ForgeStructureService
 from app.workspaces.manager import workspace_manager
@@ -20,21 +22,39 @@ router = APIRouter()
 validation_service = ValidationService()
 forge_service = ForgeStructureService()
 
-# Mapování dnešních jednoduchých pojmenovaných iontů na FORGE mol_type - všechny
-# monovalentní ionty v Literal seznamu níže jsou v converting_dictionary vedené
-# pod "I1" (Na+/K+/Cl-) nebo "I1+" (Li+/Rb+/Cs+/F-/Br-/I-).
-_MONOVALENT_ION_MOL_TYPE = {
-    "Na+": "I1", "K+": "I1", "Cl-": "I1",
-    "Li+": "I1+", "Cs+": "I1+", "Rb+": "I1+", "F-": "I1+", "Br-": "I1+", "I-": "I1+",
-}
+
+def _resolve_buildable_ion_mol_type(resname: str) -> Optional[str]:
+    """
+    Jako resolve_ion_mol_type(), ale navíc ověří, že pro ten resname
+    existuje v aktuálním FF katalogu reálný force field (viz
+    FFCatalogService.get_buildable_ion_resnames) - jinak by volba prošla
+    /prepare validací, ale build by vždy spadl na KeyError hluboko v
+    builderu. GET /validation/ions už nabízí jen tuhle buildable množinu,
+    tohle je obrana pro případ zastaralého frontendu nebo přímého API volání.
+    """
+    mol_type = resolve_ion_mol_type(resname)
+    if mol_type is None:
+        return None
+    buildable = catalog_service.get_buildable_ion_resnames()
+    return mol_type if resname in buildable.get(mol_type, set()) else None
 
 
 def _build_salt_specs(positive_ion: str, negative_ion: str, ionic_strength: float) -> List[Dict[str, Any]]:
     if ionic_strength <= 0:
         return []
+    # mol_type se čte z converting_dictionary.json (přes resolve_ion_mol_type),
+    # ne z lokálního hardcoded mapování - repo už jednou mělo tři nezávislé
+    # kopie tohodle mapování a jejich nesoulad (Mg2+ nikde jako "Im") způsobil
+    # pád na 1JJ2, viz docstring analysis_service.required_ff_groups.
+    cation_mol_type = _resolve_buildable_ion_mol_type(positive_ion)
+    anion_mol_type = _resolve_buildable_ion_mol_type(negative_ion)
+    if cation_mol_type is None:
+        raise BadRequestError(f"Positive ion '{positive_ion}' is unknown or has no force field in the current catalog.")
+    if anion_mol_type is None:
+        raise BadRequestError(f"Negative ion '{negative_ion}' is unknown or has no force field in the current catalog.")
     return [{
-        "cation": {"mol_type": _MONOVALENT_ION_MOL_TYPE.get(positive_ion, "I1"), "resname": positive_ion},
-        "anion": {"mol_type": _MONOVALENT_ION_MOL_TYPE.get(negative_ion, "I1"), "resname": negative_ion},
+        "cation": {"mol_type": cation_mol_type, "resname": positive_ion},
+        "anion": {"mol_type": anion_mol_type, "resname": negative_ion},
         "concentration": ionic_strength,
     }]
 
@@ -67,12 +87,50 @@ class PreparationRequest(BaseModel):
     add_solvent: bool = Field(False)
     box_padding_nm: float = Field(1.0)
     ionic_strength: float = Field(0.15, description="Salt concentration (M). The system is automatically neutralized.")
-    positive_ion: Literal["Na+", "K+", "Li+", "Cs+", "Rb+"] = Field("Na+")
-    negative_ion: Literal["Cl-", "F-", "Br-", "I-"] = Field("Cl-")
+    positive_ion: str = Field(
+        "Na+", description="Cation resname to add for neutralization/salt. See GET /validation/ions for valid options."
+    )
+    negative_ion: str = Field(
+        "Cl-", description="Anion resname to add for neutralization/salt. See GET /validation/ions for valid options."
+    )
     box_shape: Literal["cube", "octahedron", "truncated octahedron"] = Field("cube")
+    clean_crystal_ions: bool = Field(
+        True, description="Remove non-structural crystallographic ions (e.g. cryo/buffer ions) before solvation."
+    )
+    replace_structural_multivalent_with_mg: bool = Field(
+        False,
+        description="Replace retained structural multivalent ions (e.g. Zn2+, Ca2+) with Mg2+. "
+                    "Requires a force field selection for the 'Im' ion group.",
+    )
+    concentration_mode: Literal["water_ratio", "box_volume"] = Field(
+        "water_ratio", description="How ionic_strength is interpreted when placing salt ions."
+    )
 
 
 # --- Endpoints ---
+
+@router.get("/ions", summary="Vrátí vybíratelné ionty pro salt/neutralizaci po mol_type skupině")
+async def get_ion_options():
+    """
+    Zdroj pravdy pro pos./neg. ion dropdowny na frontendu - converting_dictionary.json
+    (chemická identita, ne z hardcoded seznamu - viz poznámka u
+    required_ff_groups o třech nezávislých kopiích, co tenhle seznam dřív
+    měl a jak to skončilo) PROTNUTÉ s FFCatalogService.get_buildable_ion_resnames()
+    (jestli pro ten ion v aktuálním katalogu vůbec existuje force field).
+    Bez tohohle průniku by šlo z dropdownu vybrat ion (typicky exotický
+    lanthanid/aktinid z Im+, nebo nábojem-sufixovanou variantu tam, kde
+    katalog zná jen starší holý symbol), který by vždy skončil neřešitelnou
+    chybou - buď 409 "missing force field" (nikde není co vybrat), nebo
+    KeyError hluboko v builderu. "I1"/"I1+" jsou monovalentní, "Im"/"Im+"
+    dvojmocné+ (Im obsahuje Mg2+).
+    """
+    known = list_ion_options()
+    buildable = catalog_service.get_buildable_ion_resnames()
+    return {
+        mol_type: sorted(set(resnames) & buildable.get(mol_type, set()))
+        for mol_type, resnames in known.items()
+    }
+
 
 @router.post("/check", summary="Zvaliduje stav molekuly a detekuje AltLocs")
 async def check_molecule(request: ValidationRequest):
@@ -219,6 +277,9 @@ async def prepare_molecule(request: PreparationRequest):
             box_padding_angstrom=request.box_padding_nm * 10.0,
             keep_crystal_waters=request.crystal_water_mode != "remove_all",
             crystal_water_mode=request.crystal_water_mode,
+            clean_crystal_ions=request.clean_crystal_ions,
+            replace_structural_multivalent_with_mg=request.replace_structural_multivalent_with_mg,
+            concentration_mode=request.concentration_mode,
         )
 
         if not result.pdb_text:

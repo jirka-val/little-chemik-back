@@ -7,7 +7,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.exceptions import AppBaseException, BadRequestError, ExternalServiceError, ForbiddenError, InternalError
-from app.services.analysis_service import required_ff_groups
+from app.services.analysis_service import required_ff_groups, resolve_ion_mol_type
 from app.services.ff_catalog_service import catalog_service
 from app.services.ff_classification_service import classification_service
 from app.services.forcefield_service import ForceFieldService
@@ -91,7 +91,13 @@ def _build_water_profiles(ffs_by_group: Dict[str, List[Any]], mode: str) -> List
 
 
 @router.get("/{workspace_id}", summary="Získá dostupné forcefieldy pro danou molekulu")
-async def get_my_forcefields(workspace_id: str, mode: str = "standard"):
+async def get_my_forcefields(
+    workspace_id: str,
+    mode: str = "standard",
+    positive_ion: str = "Na+",
+    negative_ion: str = "Cl-",
+    replace_structural_multivalent_with_mg: bool = False,
+):
     """
     Vrací FF dostupné pro tuhle strukturu, seskupené a obohacené o tier
     (recommended/supported/obsolete/new_unclassified) podle data/force_fields.json,
@@ -112,11 +118,28 @@ async def get_my_forcefields(workspace_id: str, mode: str = "standard"):
     reálně přítomných polymerů/iontů) jsou potřeba, takže se dají FF
     seskupit podle skupiny a chybějící pokrytí je vidět dopředu, ne až po
     pádu v /prepare.
+
+    `positive_ion`/`negative_ion`/`replace_structural_multivalent_with_mg`
+    zrcadlí aktuální výběr v Hydrogens tabu (viz appState.selectedPositiveIon
+    apod. na frontendu) - bez nich by tenhle endpoint pořád ukazoval jen
+    výchozí I1 (Na+/Cl-), i když uživatel v salt dropdownu zvolí I1+/Im/Im+
+    iont, a ten by pak neměl kde vybrat odpovídající FF (viz /prepare, kde
+    přesně tohle _check_ff_coverage hlídá a bez tady vystavené volby by
+    končilo neřešitelným 409).
     """
     if mode not in _MODES:
         raise BadRequestError(f"Unknown mode '{mode}', expected one of {_MODES}.")
 
     workspace_manager.require_workspace(workspace_id)
+
+    # Best-effort mol_type resolve - neznámý/nedokončeně zadaný iont tady
+    # nemá padat chybou (na rozdíl od /prepare), prostě spadne na I1 a FF
+    # panel ukáže aspoň výchozí kategorii.
+    salts_for_ff_coverage = [{
+        "cation": {"mol_type": resolve_ion_mol_type(positive_ion) or "I1", "resname": positive_ion},
+        "anion": {"mol_type": resolve_ion_mol_type(negative_ion) or "I1", "resname": negative_ion},
+        "concentration": 1.0,
+    }]
 
     try:
         # Načteme PDB ze souboru ASYNCHRONNĚ
@@ -128,7 +151,9 @@ async def get_my_forcefields(workspace_id: str, mode: str = "standard"):
         # potřebuje - viz docstring výše. Solvataci/ionty nabízíme vždy
         # jako volitelnou (add_solvent_and_ions=True), i když ji uživatel
         # nakonec nepoužije - FF pro ně je potřeba vybrat předem.
-        required = await run_in_threadpool(required_ff_groups, pdb_content, True, None)
+        required = await run_in_threadpool(
+            required_ff_groups, pdb_content, True, salts_for_ff_coverage, replace_structural_multivalent_with_mg
+        )
 
         search_types = set(required.keys())
         search_types.add("W")  # obecné "W" -> filter_forcefields rozbalí na W3/W4/W5
