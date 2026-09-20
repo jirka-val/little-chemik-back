@@ -466,9 +466,16 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
                             missing_resname = remark465.get((ch, missing_seq, ""), "?")
                             gap_labels.append(f"{missing_resname}{missing_seq}")
                             global_pos += 1
+                            # resseq/pdb_resname nesou SKUTEČNOU identitu chybějícího rezidua
+                            # (missing_seq je vždy known - je to přímo číslo, na kterém
+                            # smyčka zrovna je; pdb_resname z REMARK 465, pokud ho PDB
+                            # hlavička uvádí, jinak zůstává "?"). Dřív se sem tvrdě
+                            # zapisovalo resseq=None/pdb_resname="0" pro KAŽDÉ chybějící
+                            # reziduum bez rozdílu - frontend to pak nedokázal ukázat jinak
+                            # než jako nerozlišitelnou řadu "UNK ??" řádků u delších mezer.
                             tokens.append({
-                                "position": global_pos, "chain": ch, "resseq": None, "icode": None,
-                                "pdb_resname": "0", "is_gap": True, "group": None, "ff_resname": None,
+                                "position": global_pos, "chain": ch, "resseq": missing_seq, "icode": None,
+                                "pdb_resname": missing_resname, "is_gap": True, "group": None, "ff_resname": None,
                                 "known": False, "atoms": [], "missing_atoms": [], "extra_atoms": []
                             })
                     break_reason = "gap"
