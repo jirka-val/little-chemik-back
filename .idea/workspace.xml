@@ -5,25 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="4877923b-8711-41a1-8315-d196d296e80a" name="Changes" comment="refactor analysis service to improve error handling and streamline workspace validation plus new builder">
-      <change beforePath="$PROJECT_DIR$/.idea/little-chemik-back.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/little-chemik-back.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/api.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/api.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/analysis.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/editor.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/editor.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/forcefields.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/forcefields.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/molecules.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/topology.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/topology.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/api/v1/endpoints/validation.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/api/v1/endpoints/validation.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/core/exceptions.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/core/exceptions.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/core/logging.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/core/logging.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/analysis_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/analysis_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/structure/forge_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/structure/forge_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/structure/sidechain_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/structure/sidechain_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/validation/checker.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/validation/checker.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/workspaces/tasks/ff_catalog_refresher.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/workspaces/tasks/ff_catalog_refresher.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/workspaces/tasks/garbage_collector.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/workspaces/tasks/garbage_collector.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/unit/test_analysis_tokens.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_analysis_tokens.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -298,7 +280,7 @@
       <workItem from="1789063920750" duration="1774000" />
       <workItem from="1789068694144" duration="2237000" />
       <workItem from="1789375365246" duration="27000" />
-      <workItem from="1789907613246" duration="3293000" />
+      <workItem from="1789907613246" duration="4276000" />
     </task>
     <task id="LOCAL-00015" summary="New validation">
       <option name="closed" value="true" />

@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import molecules, validation, analysis, download, forcefields, topology, editor, sidechains, system
+from app.api.v1.endpoints import molecules, validation, analysis, download, forcefields, topology, editor, sidechains, system, simulation
 
 api_router = APIRouter()
 api_router.include_router(molecules.router, prefix="/molecules", tags=["molecules"])
@@ -11,3 +11,4 @@ api_router.include_router(download.router, prefix="/download", tags=["download"]
 api_router.include_router(editor.router, prefix="/editor", tags=["editor"])
 api_router.include_router(sidechains.router, prefix="/sidechains", tags=["sidechains"])
 api_router.include_router(system.router, prefix="/system", tags=["system"])
+api_router.include_router(simulation.router, prefix="/simulation", tags=["simulation"])
