@@ -19,7 +19,7 @@ from fastapi import APIRouter
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
-from app.api.v1.endpoints.validation import PreparationRequest, _BOX_SHAPE_MAP, _build_salt_specs
+from app.api.v1.endpoints.validation import PreparationRequest, _BOX_SHAPE_MAP, build_request_salt_specs
 from app.core.exceptions import AppBaseException, InternalError
 from app.services.structure.forge_service import build_preparation_summary
 from app.services.structure.sidechain_service import sidechain_session_service
@@ -71,7 +71,7 @@ async def start_sidechain_session(workspace_id: str, request: PreparationRequest
             ff_selections=request.ff_selections,
             ph=request.ph,
             add_solvent_and_ions=request.add_solvent,
-            salts=_build_salt_specs(request.positive_ion, request.negative_ion, request.ionic_strength),
+            salts=build_request_salt_specs(request),
             box_shape=_BOX_SHAPE_MAP.get(request.box_shape),
             box_padding_angstrom=request.box_padding_nm * 10.0,
             keep_crystal_waters=request.crystal_water_mode != "remove_all",

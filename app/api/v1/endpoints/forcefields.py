@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict, List
 
 import aiofiles
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Header, Query
 from fastapi.concurrency import run_in_threadpool
 
 from app.core.config import settings
@@ -97,6 +97,8 @@ async def get_my_forcefields(
     positive_ion: str = "Na+",
     negative_ion: str = "Cl-",
     replace_structural_multivalent_with_mg: bool = False,
+    extra_positive_ions: List[str] = Query(default=[]),
+    extra_negative_ions: List[str] = Query(default=[]),
 ):
     """
     Vrací FF dostupné pro tuhle strukturu, seskupené a obohacené o tier
@@ -135,11 +137,16 @@ async def get_my_forcefields(
     # Best-effort mol_type resolve - neznámý/nedokončeně zadaný iont tady
     # nemá padat chybou (na rozdíl od /prepare), prostě spadne na I1 a FF
     # panel ukáže aspoň výchozí kategorii.
+    #
+    # extra_positive_ions/extra_negative_ions = další soli z Hydrogens tabu
+    # (PreparationRequest.additional_salts), párované podle pořadí - i jejich
+    # ionty potřebují vybrané FF, jinak by /prepare skončilo 409.
+    ion_pairs = [(positive_ion, negative_ion), *zip(extra_positive_ions, extra_negative_ions)]
     salts_for_ff_coverage = [{
-        "cation": {"mol_type": resolve_ion_mol_type(positive_ion) or "I1", "resname": positive_ion},
-        "anion": {"mol_type": resolve_ion_mol_type(negative_ion) or "I1", "resname": negative_ion},
+        "cation": {"mol_type": resolve_ion_mol_type(pos) or "I1", "resname": pos},
+        "anion": {"mol_type": resolve_ion_mol_type(neg) or "I1", "resname": neg},
         "concentration": 1.0,
-    }]
+    } for pos, neg in ion_pairs]
 
     try:
         # Načteme PDB ze souboru ASYNCHRONNĚ

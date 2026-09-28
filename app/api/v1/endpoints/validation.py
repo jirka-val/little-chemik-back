@@ -75,6 +75,13 @@ class FixAltLocRequest(BaseModel):
     )
 
 
+class SaltStep(BaseModel):
+    """Další sůl přidaná po té hlavní (např. NaCl + KCl) - viz additional_salts."""
+    positive_ion: str = Field(..., description="Cation resname, see GET /validation/ions.")
+    negative_ion: str = Field(..., description="Anion resname, see GET /validation/ions.")
+    ionic_strength: float = Field(..., ge=0, description="Concentration (M) of this salt.")
+
+
 class PreparationRequest(BaseModel):
     workspace_id: str = Field(...)
     ff_selections: Dict[str, Any] = Field(
@@ -105,6 +112,24 @@ class PreparationRequest(BaseModel):
     concentration_mode: Literal["water_ratio", "box_volume"] = Field(
         "water_ratio", description="How ionic_strength is interpreted when placing salt ions."
     )
+    additional_salts: List[SaltStep] = Field(
+        default_factory=list,
+        description="Further salts added after the primary one (positive_ion/negative_ion/ionic_strength). "
+                    "Neutralization always uses the primary salt; builder places each salt in order.",
+    )
+
+
+def build_request_salt_specs(request: "PreparationRequest") -> List[Dict[str, Any]]:
+    """
+    Všechny soli z požadavku v pořadí: hlavní (positive_ion/negative_ion/
+    ionic_strength) + additional_salts. Builder (add_ions_to_solvated_molecule)
+    je umisťuje postupně a neutralizuje podle první z nich. Kroky s nulovou
+    koncentrací se vynechají (stejně jako dřív u hlavní soli).
+    """
+    specs = _build_salt_specs(request.positive_ion, request.negative_ion, request.ionic_strength)
+    for step in request.additional_salts:
+        specs += _build_salt_specs(step.positive_ion, step.negative_ion, step.ionic_strength)
+    return specs
 
 
 # --- Endpoints ---
@@ -272,7 +297,7 @@ async def prepare_molecule(request: PreparationRequest):
             ff_selections=request.ff_selections,
             ph=request.ph,
             add_solvent_and_ions=request.add_solvent,
-            salts=_build_salt_specs(request.positive_ion, request.negative_ion, request.ionic_strength),
+            salts=build_request_salt_specs(request),
             box_shape=_BOX_SHAPE_MAP.get(request.box_shape),
             box_padding_angstrom=request.box_padding_nm * 10.0,
             keep_crystal_waters=request.crystal_water_mode != "remove_all",
