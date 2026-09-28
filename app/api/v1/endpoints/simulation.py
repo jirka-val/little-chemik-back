@@ -24,6 +24,7 @@ from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
+from app.core.exceptions import BadRequestError
 from app.workspaces.manager import workspace_manager
 
 logger = logging.getLogger(__name__)
@@ -38,13 +39,22 @@ class AmberMdinRequest(BaseModel):
     hmr: bool = False
 
     # W4.3 Ensemble / temperature
+    #
+    # `thermostat`/`barostat` jsou primární volba (frontend od redesignu
+    # vybírá termostat a barostat zvlášť, ensemble z nich vyplývá). Pokud
+    # nepřijdou (starší klient), odvodí se ze `ensemble` přesně jako dřív:
+    # NVE = žádný, NVT = Langevin, NPT = Langevin + Monte Carlo.
     ensemble: Literal["NVE", "NVT", "NPT"] = "NVT"
+    thermostat: Literal["none", "langevin", "berendsen", "andersen"] | None = None
+    barostat: Literal["none", "monte-carlo", "berendsen"] | None = None
     temp0: float = 298.16
-    gamma_ln: float = Field(1.0, ge=0)
+    gamma_ln: float = Field(1.0, ge=0)      # Langevin (ntt=3)
+    tautp: float = Field(1.0, gt=0)         # Berendsen weak coupling (ntt=1)
+    vrand: int = Field(1000, gt=0)          # Andersen - kroky mezi randomizacemi (ntt=2)
 
-    # W4.4 Pressure (NPT only)
+    # W4.4 Pressure (jen s barostatem)
     pres0: float = 1.0
-    taup: float = 2.0
+    taup: float = 2.0                       # Berendsen barostat (barostat=1)
 
     # W4.5 Constraints
     constraints: Literal["none", "h-bonds", "all-bonds"] = "h-bonds"
@@ -66,6 +76,33 @@ class AmberMdinRequest(BaseModel):
 
 
 _NTC_NTF = {"none": 1, "h-bonds": 2, "all-bonds": 3}
+_NTT = {"none": 0, "berendsen": 1, "andersen": 2, "langevin": 3}
+_BAROSTAT = {"berendsen": 1, "monte-carlo": 2}
+
+
+def _resolve_coupling(req: AmberMdinRequest) -> tuple[str, str]:
+    """(thermostat, barostat) - explicitní volba, jinak odvozené z `ensemble`."""
+    thermostat = req.thermostat
+    barostat = req.barostat
+    if thermostat is None:
+        thermostat = "none" if req.ensemble == "NVE" else "langevin"
+    if barostat is None:
+        barostat = "monte-carlo" if req.ensemble == "NPT" else "none"
+    if barostat != "none" and thermostat == "none":
+        # Monte Carlo barostat potřebuje cílovou teplotu (temp0) pro
+        # akceptační kritérium a NPH bez termostatu není podporovaný
+        # produkční režim tohohle generátoru.
+        raise BadRequestError(
+            "A barostat requires a thermostat - pressure coupling without temperature control (NPH) is not supported.",
+            code="barostat_requires_thermostat",
+        )
+    return thermostat, barostat
+
+
+def _ensemble_label(thermostat: str, barostat: str) -> str:
+    if barostat != "none":
+        return "NPT"
+    return "NVE" if thermostat == "none" else "NVT"
 
 
 def _fmt(value: float) -> str:
@@ -79,14 +116,17 @@ def _fmt(value: float) -> str:
     return text if not text.endswith(".") else text + "0"
 
 
-def _build_title(req: AmberMdinRequest) -> str:
-    parts = f"Production {req.ensemble}, {req.duration_ns:g} ns segment, {req.dt_fs:g} fs"
+def _build_title(req: AmberMdinRequest, ensemble: str) -> str:
+    parts = f"Production {ensemble}, {req.duration_ns:g} ns segment, {req.dt_fs:g} fs"
     if req.hmr:
         parts += " with HMR in the topology"
     return parts
 
 
 def render_amber_mdin(req: AmberMdinRequest) -> str:
+    thermostat, barostat = _resolve_coupling(req)
+    ensemble = _ensemble_label(thermostat, barostat)
+
     dt_ps = req.dt_fs / 1000.0
     nstlim = round(req.duration_ns * 1000.0 / dt_ps)
     ntpr = max(1, round(req.log_interval_ps / dt_ps))
@@ -94,30 +134,40 @@ def render_amber_mdin(req: AmberMdinRequest) -> str:
     ntwr = max(1, round(req.restart_interval_ps / dt_ps))
     ntc = ntf = _NTC_NTF[req.constraints]
 
-    is_npt = req.ensemble == "NPT"
-    is_nve = req.ensemble == "NVE"
+    has_barostat = barostat != "none"
     irest, ntx = (0, 1) if req.run_type == "new" else (1, 5)
-    ntb = 2 if is_npt else 1
-    ntp = 1 if is_npt else 0
-    ntt = 0 if is_nve else 3
+    ntb = 2 if has_barostat else 1
+    ntp = 1 if has_barostat else 0
+    ntt = _NTT[thermostat]
 
-    lines = [_build_title(req), "&cntrl"]
+    lines = [_build_title(req, ensemble), "&cntrl"]
     lines.append("  imin=0,")
     lines.append(f"  irest={irest}, ntx={ntx},")
     lines.append(f"  nstlim={nstlim}, dt={_fmt(dt_ps)},")
     lines.append(f"  ntb={ntb}, ntp={ntp}, cut={_fmt(req.cut)},")
     lines.append(f"  ntc={ntc}, ntf={ntf}, tol={_fmt(req.tol)},")
 
-    if not is_nve:
+    # Parametry termostatu - vždy jen ty, které zvolený ntt opravdu čte
+    # (design list W4.3: "gamma_ln only for ntt=3; tautp only for ntt=1.
+    # Never emit both blindly.").
+    if thermostat == "langevin":
         # ig=-1 (auto-seed from date/time) on every segment, including restarts -
         # Amber26.pdf 23.6.7 explicitly warns against reusing a fixed seed across
         # Langevin restarts ("synchronization" artifacts).
         lines.append(f"  ntt={ntt}, temp0={_fmt(req.temp0)}, gamma_ln={_fmt(req.gamma_ln)}, ig=-1,")
+    elif thermostat == "andersen":
+        # Andersen je taky stochastický - stejný důvod pro ig=-1 jako u Langevinu.
+        lines.append(f"  ntt={ntt}, temp0={_fmt(req.temp0)}, vrand={req.vrand}, ig=-1,")
+    elif thermostat == "berendsen":
+        lines.append(f"  ntt={ntt}, temp0={_fmt(req.temp0)}, tautp={_fmt(req.tautp)},")
     else:
         lines.append(f"  ntt={ntt},")
 
-    if is_npt:
-        lines.append(f"  barostat=2, pres0={_fmt(req.pres0)}, taup={_fmt(req.taup)},")
+    if has_barostat:
+        # Řádek pro Monte Carlo je beze změny proti verzi před redesignem
+        # (včetně taup). Design list W4.4 říká, že taup se pro MC nemusí
+        # uvádět - odstranění je samostatné rozhodnutí, ne vedlejší efekt.
+        lines.append(f"  barostat={_BAROSTAT[barostat]}, pres0={_fmt(req.pres0)}, taup={_fmt(req.taup)},")
 
     output_line = f"  ntpr={ntpr}, ntwx={ntwx}, ntwr={ntwr},"
     if req.write_energy_file:
@@ -131,22 +181,31 @@ def render_amber_mdin(req: AmberMdinRequest) -> str:
 
 
 def _mdin_filename(req: AmberMdinRequest) -> str:
+    ensemble = _ensemble_label(*_resolve_coupling(req))
     hmr_suffix = "_hmr" if req.hmr else ""
     duration_label = f"{req.duration_ns:g}".replace(".", "p")
-    return f"amber_{req.ensemble.lower()}_production_{duration_label}ns{hmr_suffix}.mdin"
+    return f"amber_{ensemble.lower()}_production_{duration_label}ns{hmr_suffix}.mdin"
 
 
 @router.post("/{workspace_id}/amber-mdin", summary="Generuje AMBER produkční mdin (&cntrl) soubor")
-async def generate_amber_mdin(workspace_id: str, req: AmberMdinRequest):
+async def generate_amber_mdin(workspace_id: str, req: AmberMdinRequest, preview: bool = False):
+    """
+    `preview=true` = živý náhled v Simulation panelu (volá se debounced při
+    každé změně formuláře) - stejný výstup, jen se neloguje, ať náhled
+    nezaplaví log při každém stisku klávesy.
+    """
     workspace_manager.require_workspace(workspace_id)
 
     content = render_amber_mdin(req)
     filename = _mdin_filename(req)
 
-    logger.info(
-        f"Generated AMBER mdin for workspace {workspace_id}: "
-        f"{req.ensemble}, {req.duration_ns:g} ns, dt={req.dt_fs:g} fs, hmr={req.hmr}"
-    )
+    if not preview:
+        thermostat, barostat = _resolve_coupling(req)
+        logger.info(
+            f"Generated AMBER mdin for workspace {workspace_id}: "
+            f"{_ensemble_label(thermostat, barostat)} (thermostat={thermostat}, barostat={barostat}), "
+            f"{req.duration_ns:g} ns, dt={req.dt_fs:g} fs, hmr={req.hmr}"
+        )
 
     return PlainTextResponse(
         content=content,
