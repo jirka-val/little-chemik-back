@@ -4,6 +4,8 @@ import logging
 from pdbfixer import PDBFixer
 from openmm.app import PDBFile
 
+from app.core.exceptions import NotFoundError
+
 logger = logging.getLogger(__name__)
 
 
@@ -130,12 +132,23 @@ class StructureEditorService:
         input_stream = io.StringIO(pdb_content)
         fixer = PDBFixer(pdbfile=input_stream)
 
-        # PDBFixer syntaxe pro mutaci: "NovýNázev-ČísloRezidua-IDŘetězce" (např. "TYR-42-A")
-        mutation_query = f"{mutate_to}-{res_num}-{chain_id}"
+        # PDBFixer API: applyMutations(mutations, chain_id), kde každá mutace je
+        # "PůvodníNázev-ČísloRezidua-NovýNázev" (např. "ALA-133-GLY"). Dřívější
+        # volání posílalo "NovýNázev-Číslo-Řetězec" bez chain_id a končilo
+        # TypeError (500) - mutace z editoru rezidua proto nikdy nefungovala.
+        original_name = next(
+            (res.name
+             for chain in fixer.topology.chains() if chain.id == chain_id
+             for res in chain.residues() if res.id == str(res_num)),
+            None,
+        )
+        if original_name is None:
+            raise NotFoundError(f"Residue {res_num} in chain {chain_id} not found.")
+        mutation_query = f"{original_name}-{res_num}-{mutate_to}"
 
         try:
             # 1. Aplikace mutace (PDBFixer v paměti "odřízne" staré atomy)
-            fixer.applyMutations([mutation_query])
+            fixer.applyMutations([mutation_query], chain_id)
 
             # 2. Dopočítání chybějících (nových) atomů
             fixer.findMissingResidues()

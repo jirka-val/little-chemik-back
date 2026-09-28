@@ -25,6 +25,10 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Frontend čte jméno staženého souboru z Content-Disposition (mdin, export).
+    # Cross-origin (dev: :5173 -> :8000) ho prohlížeč bez expose neukáže a
+    # frontend pak spadl na výchozí "production.mdin".
+    expose_headers=["Content-Disposition"],
 )
 
 # ... horní část kódu zůstává stejná (importy, middleware, atd.) ...
