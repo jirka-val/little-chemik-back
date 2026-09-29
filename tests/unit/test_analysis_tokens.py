@@ -268,7 +268,56 @@ class TestNonNumericChainBreaks:
             "ATOM      5  CA  GLY A   2       5.830   0.000   0.000  1.00  0.00           C\n"
         )
         tokens = _tokens(pdb, "A")
-        assert _by_resseq(tokens, 2)["terminus_reason"] is None
+        # GLY2 je poslední reziduum -> skutečný konec řetězce, ne přerušení.
+        assert _by_resseq(tokens, 1)["terminus_reason"] == "chain_end"
+        assert _by_resseq(tokens, 2)["terminus_reason"] == "chain_end"
+
+
+class TestNumberingSkipWithoutMissingResidues:
+    """
+    Chymotrypsinové číslování (trypsin 2PTN): čísla se přeskakují (217 -> 219)
+    a insertion kódy stojí před reziduem se stejným číslem (221A, 221), ale
+    řetězec je souvislý. Díra v číslování u vázaných sousedů není mezera.
+    """
+
+    _SKIP = (
+        "ATOM      1  N   SER A 217       0.000   0.000   0.000  1.00  0.00           N\n"
+        "ATOM      2  CA  SER A 217       1.500   0.000   0.000  1.00  0.00           C\n"
+        "ATOM      3  C   SER A 217       3.000   0.000   0.000  1.00  0.00           C\n"
+        "ATOM      4  O   SER A 217       3.500   1.200   0.000  1.00  0.00           O\n"
+        "ATOM      5  CB  SER A 217       2.200  -1.200   0.000  1.00  0.00           C\n"
+        "ATOM      6  OG  SER A 217       2.200  -2.600   0.000  1.00  0.00           O\n"
+        "ATOM      7  N   GLY A 219       4.330   0.000   0.000  1.00  0.00           N\n"
+        "ATOM      8  CA  GLY A 219       5.830   0.000   0.000  1.00  0.00           C\n"
+        "ATOM      9  C   GLY A 219       7.330   0.000   0.000  1.00  0.00           C\n"
+        "ATOM     10  O   GLY A 219       7.830   1.200   0.000  1.00  0.00           O\n"
+        "ATOM     11  N   ALA A 221A      8.660   0.000   0.000  1.00  0.00           N\n"
+        "ATOM     12  CA  ALA A 221A     10.160   0.000   0.000  1.00  0.00           C\n"
+        "ATOM     13  C   ALA A 221A     11.660   0.000   0.000  1.00  0.00           C\n"
+        "ATOM     14  O   ALA A 221A     12.160   1.200   0.000  1.00  0.00           O\n"
+        "ATOM     15  CB  ALA A 221A     10.860  -1.200   0.000  1.00  0.00           C\n"
+        "ATOM     16  N   GLY A 221      12.990   0.000   0.000  1.00  0.00           N\n"
+        "ATOM     17  CA  GLY A 221      14.490   0.000   0.000  1.00  0.00           C\n"
+    )
+
+    def test_bonded_numbering_skip_is_not_a_gap(self):
+        tokens = _tokens(self._SKIP, "A")
+        assert sum(1 for t in tokens if t["is_gap"]) == 0
+        gly219 = _by_resseq(tokens, 219)
+        assert gly219["ff_resname"] == "GLY" and gly219["terminus_reason"] is None
+
+    def test_insertion_code_keeps_file_order(self):
+        tokens = [t for t in _tokens(self._SKIP, "A") if not t["is_gap"]]
+        assert [(t["resseq"], t["icode"]) for t in tokens] == [(217, ""), (219, ""), (221, "A"), (221, "")]
+        assert all(t["terminus_reason"] in (None, "chain_end") for t in tokens)
+
+    def test_unbonded_numbering_skip_is_still_a_gap(self):
+        far = self._SKIP.replace(
+            "ATOM      7  N   GLY A 219       4.330", "ATOM      7  N   GLY A 219      40.330"
+        )
+        tokens = _tokens(far, "A")
+        assert sum(1 for t in tokens if t["is_gap"]) == 1
+        assert _by_resseq(tokens, 219)["terminus_reason"] == "gap"
 
 
 class TestZeroResidueNumberSkip:

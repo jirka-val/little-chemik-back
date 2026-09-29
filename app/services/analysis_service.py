@@ -61,7 +61,11 @@ def _parse_residues_from_pdb(pdb_text: str, chain: Optional[str]) -> List[Tuple[
         if atom_name not in residue_data[key]["atoms"]:
             residue_data[key]["atoms"].append(atom_name)
 
-    ordered_keys.sort(key=lambda x: (x[0], x[1], x[2]))
+    # Řetězce abecedně, uvnitř řetězce ale pořadí ze souboru - to je pořadí
+    # vazeb. Řazení podle (resseq, icode) by rozbilo insertion kódy, které
+    # v PDB stojí PŘED reziduem se stejným číslem (chymotrypsinové číslování
+    # u trypsinu: 183, 184A, 184, 185) - builder by pak vázal 183 -> 184 -> 184A.
+    ordered_keys.sort(key=lambda x: x[0])
 
     return [
         (k[0], k[1], k[2], residue_data[k]["resname"], residue_data[k]["atoms"])
@@ -312,6 +316,24 @@ def _is_chemically_impossible_bond(
     return dist > _BOND_DISTANCE_LIMIT_ANGSTROM[group]
 
 
+def _is_bonded(
+    group: Optional[str],
+    prev_key: Tuple[str, int, str],
+    curr_key: Tuple[str, int, str],
+    coords: Dict[Tuple[str, int, str, str], Tuple[float, float, float]],
+) -> bool:
+    """Opak _is_chemically_impossible_bond: obě kotvy známé a ve vazebné vzdálenosti."""
+    if group not in _BOUNDARY_ATOM_NAMES:
+        return False
+    prev_atom, curr_atom = _BOUNDARY_ATOM_NAMES[group]
+    p = coords.get(prev_key + (prev_atom,))
+    c = coords.get(curr_key + (curr_atom,))
+    if p is None or c is None:
+        return False
+    dist = ((p[0] - c[0]) ** 2 + (p[1] - c[1]) ** 2 + (p[2] - c[2]) ** 2) ** 0.5
+    return dist <= _BOND_DISTANCE_LIMIT_ANGSTROM[group]
+
+
 def _reterminate_as_gap_end(
     token: Dict[str, Any],
     conv: Dict,
@@ -424,9 +446,9 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
             else:
                 ligands.append(r)
 
-        main_chain.sort(key=lambda x: (x[1], x[2]))
-        first_main_seq = main_chain[0][1] if main_chain else None
-        last_main_seq = main_chain[-1][1] if main_chain else None
+        # Pořadí ze souboru (viz _parse_residues_from_pdb), žádné řazení podle čísel.
+        first_main_key = (main_chain[0][1], main_chain[0][2]) if main_chain else None
+        last_main_key = (main_chain[-1][1], main_chain[-1][2]) if main_chain else None
         processed_ordered = main_chain + ligands
         prev_resseq = None
         prev_icode = ""
@@ -446,7 +468,20 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
                 gap_found = False
                 gap_labels: List[str] = []
 
-                if resseq > prev_resseq + 1:
+                prev_key = (ch, prev_resseq, prev_icode)
+                curr_key = (ch, resseq, icode or "")
+                prev_group = prev_main_token["group"] if prev_main_token else group
+                # Díra v číslování není důkaz chybějícího úseku, když jsou
+                # sousedé prokazatelně vázaní (C-N / O3'-P v délce vazby).
+                # Chymotrypsinové číslování trypsinu přeskakuje čísla
+                # (34 -> 37, 217 -> 219) u souvislého řetězce - dřív se tam
+                # řetězec uměle rozřízl na nabité konce.
+                numbering_only_skip = (
+                    resseq > prev_resseq + 1
+                    and _is_bonded(prev_group, prev_key, curr_key, boundary_coords)
+                )
+
+                if resseq > prev_resseq + 1 and not numbering_only_skip:
                     # OPRAVA: Zkontroluj, zda GAP je OPRAVDU prázdný nebo tam jen je neznámé reziduum
                     for missing_seq in range(prev_resseq + 1, resseq):
                         # PDB číslování reziduí nikdy nepoužívá sekvenční číslo 0 (konvence
@@ -484,9 +519,6 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
                     # přerušený - explicitní TER uprostřed řetězce nebo chemicky
                     # nemožná meziresiduová vzdálenost (další dva důkazy jmenované
                     # v INTEGRATION_CONTRACT.md vedle díry v číslování).
-                    prev_key = (ch, prev_resseq, prev_icode)
-                    curr_key = (ch, resseq, icode or "")
-                    prev_group = prev_main_token["group"] if prev_main_token else group
                     if prev_key in ter_breaks:
                         gap_found = True
                         break_reason = "ter"
@@ -545,10 +577,10 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
                 if after_gap:
                     terminal = "5"
                     terminus_reason = break_reason
-                elif resseq == first_main_seq:
+                elif (resseq, icode) == first_main_key:
                     terminal = "5"
                     terminus_reason = "chain_end"
-                elif resseq == last_main_seq:
+                elif (resseq, icode) == last_main_key:
                     terminal = "3"
                     terminus_reason = "chain_end"
 
