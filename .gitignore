@@ -9,6 +9,9 @@ __pycache__/
 # Node (pokud se sem omylem nainstaluje)
 node_modules/
 
+# Manuální testovací PDB soubory pro nahrávání přes webovku (sandbox, ne CI fixtures)
+manual_test_pdbs/
+
 # Cache data
 data/ff_cache/
 data/ff_cache_forge/

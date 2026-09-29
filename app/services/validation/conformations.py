@@ -9,7 +9,7 @@ class ConformationManager:
     @staticmethod
     def detect_alt_locs(pdb_content: str) -> List[Dict[str, Any]]:
         """
-        Profesionální detekce AltLocs.
+        Detekce AltLocs.
         Mapuje všechny varianty (A, B, C...) a ukládá souřadnice pro kontrolu kontinuity.
         """
         res_map = {}
