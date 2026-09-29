@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence, Tuple
 
 from forge_molecule_builder import (
     BuildPlan,
@@ -89,6 +89,9 @@ class WorkflowSettings:
     solvation: SolvationSettings = field(default_factory=SolvationSettings)
     ions: IonPlacementSettings = field(default_factory=IonPlacementSettings)
     add_solvent_and_ions: bool = True
+    # LittleChemik extension: user-forced protonation states, residue key
+    # (chain, resseq, icode) -> state name, see assign_protonation_states.
+    protonation_overrides: Mapping[Tuple[str, int, str], str] = field(default_factory=dict)
 
 
 @dataclass
@@ -140,6 +143,7 @@ def run_forge_workflow(
         pH=settings.pH,
         covalent_cutoff_angstrom=settings.covalent_cutoff_angstrom,
         hydrogen_bond_settings=settings.hydrogen_bond,
+        forced_protonation_states=settings.protonation_overrides,
         modify_myself=True,
     )
 

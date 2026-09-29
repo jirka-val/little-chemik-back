@@ -82,6 +82,13 @@ class SaltStep(BaseModel):
     ionic_strength: float = Field(..., ge=0, description="Concentration (M) of this salt.")
 
 
+class ProtonationOverride(BaseModel):
+    chain: str
+    resseq: int
+    icode: str = ""
+    state: str = Field(..., description="Target state name within the residue's family, e.g. HID/HIE/HIP.")
+
+
 class PreparationRequest(BaseModel):
     workspace_id: str = Field(...)
     ff_selections: Dict[str, Any] = Field(
@@ -111,6 +118,16 @@ class PreparationRequest(BaseModel):
     )
     concentration_mode: Literal["water_ratio", "box_volume"] = Field(
         "water_ratio", description="How ionic_strength is interpreted when placing salt ions."
+    )
+    protonation_overrides: List[ProtonationOverride] = Field(
+        default_factory=list,
+        description="Protonation states forced by the user (Expert mode), e.g. HIS -> HIE. "
+                    "The builder skips its own decision for these residues.",
+    )
+    review_protonation: bool = Field(
+        False,
+        description="Expert mode: stop before building (status 'protonation_review' from "
+                    "/sidechains/start) when a titratable residue has an uncertain state.",
     )
     additional_salts: List[SaltStep] = Field(
         default_factory=list,
@@ -305,6 +322,7 @@ async def prepare_molecule(request: PreparationRequest):
             clean_crystal_ions=request.clean_crystal_ions,
             replace_structural_multivalent_with_mg=request.replace_structural_multivalent_with_mg,
             concentration_mode=request.concentration_mode,
+            protonation_overrides=[o.model_dump() for o in request.protonation_overrides],
         )
 
         if not result.pdb_text:

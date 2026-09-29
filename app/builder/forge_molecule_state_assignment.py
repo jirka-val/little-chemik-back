@@ -122,6 +122,9 @@ class ProtonationResidueAssignment:
     new_resname: str
     default_resname: str
     is_default: bool
+    # LittleChemik extension: state was forced by the user (forced_states),
+    # not chosen by the solver.
+    is_forced: bool = False
 
 
 @dataclass
@@ -1124,7 +1127,9 @@ def _solve_protonation_states(
     fixed_requirements: Mapping[AtomKey, FixedSiteEvidence],
     contacts: Sequence[VariableSiteContact],
     report: ProtonationAssignmentReport,
+    forced: Optional[Mapping[int, _ProtonationStateOption]] = None,
 ) -> Dict[int, _ProtonationStateOption]:
+    forced = forced or {}
     owner_by_site: Dict[AtomKey, int] = {}
     site_name_by_key: Dict[AtomKey, str] = {}
     for item in titratables:
@@ -1142,7 +1147,12 @@ def _solve_protonation_states(
             if owner_by_site[contact.site1] in component_set
             and owner_by_site[contact.site2] in component_set
         ]
-        option_lists = [titratables[index].family.options for index in component]
+        # A forced residue offers only its forced option; its contacts still
+        # constrain the other residues of the component.
+        option_lists = [
+            (forced[index],) if index in forced else titratables[index].family.options
+            for index in component
+        ]
         best_score = None
         best_deterministic = None
         best_combo = None
@@ -1257,9 +1267,16 @@ def assign_protonation_states(
     *,
     pH: float = 7.0,
     geometry_settings: Optional[HydrogenBondGeometrySettings] = None,
+    forced_states: Optional[Mapping[Tuple[str, int, str], str]] = None,
     modify_myself: bool = False,
 ) -> Tuple[Molecule, ProtonationAssignmentReport]:
-    """Assign protonation levels and tautomers from pH and H-bond geometry."""
+    """Assign protonation levels and tautomers from pH and H-bond geometry.
+
+    ``forced_states`` (LittleChemik extension) maps a residue key to a state
+    name chosen by the user (e.g. ``"HIE"``); terminal variants match by base
+    name (``"HIE"`` selects ``NHIE`` on an N-terminus). A name outside the
+    residue's family is reported as a conflict and ignored.
+    """
     if not math.isfinite(pH):
         raise ValueError("pH must be finite")
     settings = geometry_settings or HydrogenBondGeometrySettings()
@@ -1306,11 +1323,52 @@ def assign_protonation_states(
         settings,
         report,
     )
+    forced: Dict[int, _ProtonationStateOption] = {}
+    for item in titratables:
+        wanted = (forced_states or {}).get(_residue_key(item.residue))
+        if wanted is None:
+            continue
+        match = next(
+            (
+                option
+                for option in item.family.options
+                if option.resname == wanted
+                or (option.resname[:1] in ("N", "C") and option.resname[1:] == wanted)
+            ),
+            None,
+        )
+        if match is None:
+            report.conflicts.append(
+                ProtonationConflict(
+                    kind="forced_state_not_applicable",
+                    message=(
+                        f"Requested state {wanted} is not available for "
+                        f"{item.residue.ff_resname} {_residue_key(item.residue)}; ignored"
+                    ),
+                )
+            )
+            continue
+        forced[item.index] = match
+
+    titratable_keys = {_residue_key(item.residue) for item in titratables}
+    for residue_key, wanted in (forced_states or {}).items():
+        if tuple(residue_key) not in titratable_keys:
+            report.conflicts.append(
+                ProtonationConflict(
+                    kind="forced_state_not_applicable",
+                    message=(
+                        f"Requested state {wanted} for {residue_key} ignored - "
+                        "the residue has no protonation alternatives"
+                    ),
+                )
+            )
+
     chosen = _solve_protonation_states(
         titratables,
         fixed_requirements,
         variable_contacts,
         report,
+        forced,
     )
 
     for item in titratables:
@@ -1336,6 +1394,7 @@ def assign_protonation_states(
                     option.mol_type == default.mol_type
                     and option.resname == default.resname
                 ),
+                is_forced=item.index in forced,
             )
         )
 
@@ -1358,6 +1417,7 @@ def assign_molecule_states(
     pH: float = 7.0,
     covalent_cutoff_angstrom: float = 2.3,
     hydrogen_bond_settings: Optional[HydrogenBondGeometrySettings] = None,
+    forced_protonation_states: Optional[Mapping[Tuple[str, int, str], str]] = None,
     modify_myself: bool = False,
 ) -> Tuple[Molecule, StateAssignmentReport]:
     """Run covalent assignment followed by protonation/tautomer assignment."""
@@ -1376,6 +1436,7 @@ def assign_molecule_states(
         state_data,
         pH=pH,
         geometry_settings=hydrogen_bond_settings,
+        forced_states=forced_protonation_states,
         modify_myself=True,
     )
     return target, StateAssignmentReport(

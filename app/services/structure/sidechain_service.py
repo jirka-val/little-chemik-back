@@ -69,11 +69,12 @@ class SidechainSessionNotFoundError(NotFoundError):
 
 @dataclass
 class SidechainStartResult:
-    status: str  # "complete" | "missing_dof"
+    status: str  # "complete" | "missing_dof" | "protonation_review"
     prepared: Optional[ForgePreparationResult] = None
     gui_payload: Optional[Dict[str, Any]] = None
     preview_filename: Optional[str] = None
     preview_pdb_text: Optional[str] = None
+    protonation_review: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -153,6 +154,8 @@ class SidechainSessionService:
         clean_crystal_ions: Optional[bool] = None,
         replace_structural_multivalent_with_mg: Optional[bool] = None,
         concentration_mode: Optional[str] = None,
+        protonation_overrides: Optional[List[Dict[str, Any]]] = None,
+        review_protonation: bool = False,
     ) -> SidechainStartResult:
         run = self.forge_service.run_workflow(
             pdb_text,
@@ -167,7 +170,14 @@ class SidechainSessionService:
             clean_crystal_ions=clean_crystal_ions,
             replace_structural_multivalent_with_mg=replace_structural_multivalent_with_mg,
             concentration_mode=concentration_mode,
+            protonation_overrides=protonation_overrides,
+            review_protonation=review_protonation,
         )
+        if run.protonation_review is not None:
+            # Krok 3.5 (Expert) - nic se nestavělo, případná stará relace
+            # patří k předchozí přípravě.
+            self._sessions.pop(workspace_id, None)
+            return SidechainStartResult(status="protonation_review", protonation_review=run.protonation_review)
         result = run.result
 
         if not result.stopped_at_missing_dof:

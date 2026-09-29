@@ -79,7 +79,15 @@ async def start_sidechain_session(workspace_id: str, request: PreparationRequest
             clean_crystal_ions=request.clean_crystal_ions,
             replace_structural_multivalent_with_mg=request.replace_structural_multivalent_with_mg,
             concentration_mode=request.concentration_mode,
+            protonation_overrides=[o.model_dump() for o in request.protonation_overrides],
+            review_protonation=request.review_protonation,
         )
+
+        if outcome.status == "protonation_review":
+            # Krok 3.5 (Expert): structure.pdb se nemění, frontend po kontrole
+            # pošle /start znovu s protonation_overrides.
+            logger.info(f"Sidechain start: protonation review requested for {workspace_id} in {time.time() - start_time:.2f}s.")
+            return {"status": "protonation_review", "protonation_review": outcome.protonation_review}
 
         if outcome.status == "complete":
             prepared = outcome.prepared

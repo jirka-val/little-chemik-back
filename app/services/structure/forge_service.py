@@ -11,6 +11,7 @@ varianty) a sám žádnou opravu identity reziduí ani přemostění chybějíc�
 from __future__ import annotations
 
 import logging
+import re
 import sys
 from dataclasses import dataclass
 from functools import lru_cache
@@ -35,11 +36,13 @@ from forge_molecule_ions import IonIdentity, IonPlacementSettings, load_salt_spe
 from forge_molecule_parser import (  # noqa: E402
     Molecule,
     Residue,
+    build_molecule_from_forge_json,
     format_pdb_atom_line,
     infer_element,
     load_json,
 )
 from forge_molecule_solvation import SolvationVdwParameters, SolvationSettings, load_solvation_template  # noqa: E402
+from forge_molecule_state_assignment import assign_molecule_states  # noqa: E402
 
 from app.core.exceptions import AppBaseException
 from app.services.analysis_service import build_sequence_tokens, required_ff_groups
@@ -449,10 +452,13 @@ class ForgeWorkflowRun:
     po přijetí GUI voleb).
     """
 
-    result: WorkflowResult
+    result: Optional[WorkflowResult]
     resources: WorkflowResources
     settings: WorkflowSettings
     salts: List[Any]
+    # Vyplněné (a result=None), když se run_workflow zastavil před stavbou
+    # kvůli kontrole protonace v Expert režimu - viz _protonation_review.
+    protonation_review: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -466,6 +472,14 @@ class ForgePreparationResult:
     ion_addition: Any
 
 
+def _protonation_override_map(overrides: Optional[List[Dict[str, Any]]]) -> Dict[tuple, str]:
+    """[{chain, resseq, icode, state}] z požadavku -> klíč rezidua builderu."""
+    return {
+        (o["chain"], int(o["resseq"]), o.get("icode") or ""): o["state"]
+        for o in overrides or []
+    }
+
+
 def _format_residue_key(residue_key: tuple) -> str:
     chain, resseq, icode = residue_key
     return f"{chain}{resseq}{icode}".rstrip()
@@ -474,6 +488,139 @@ def _format_residue_key(residue_key: tuple) -> str:
 def _format_atom_key(atom_key: tuple) -> str:
     chain, resseq, icode, atom_name = atom_key
     return f"{_format_residue_key((chain, resseq, icode))}:{atom_name}"
+
+
+# Builder píše do zpráv o konfliktech atomové klíče jako Python tuple
+# ("('A', 57, '', 'ND1')") - pro uživatele je převedeme na "A57:ND1".
+_ATOM_KEY_REPR = re.compile(r"\('([^']*)', (-?\d+), '([^']*)', '([^']+)'\)")
+_RESIDUE_KEY_REPR = re.compile(r"\('([^']*)', (-?\d+), '([^']*)'\)")
+
+
+def _readable_conflict(message: str) -> str:
+    message = _ATOM_KEY_REPR.sub(lambda m: f"{m[1]}{m[2]}{m[3]}:{m[4]}", message)
+    return _RESIDUE_KEY_REPR.sub(lambda m: f"{m[1]}{m[2]}{m[3]}", message)
+
+
+def _family_base_names(family_names: tuple) -> List[str]:
+    """
+    Názvy stavů bez koncové předpony (NHIE -> HIE), když ji mají všechny
+    členy rodiny - uživatel volí HID/HIE/HIP, builder si koncovou variantu
+    dohledá sám (viz forced_states v assign_protonation_states).
+    """
+    for prefix in ("N", "C"):
+        if family_names and all(n.startswith(prefix) and len(n) > 3 for n in family_names):
+            return [n[1:] for n in family_names]
+    return list(family_names)
+
+
+def _titratable_residue_report(prot: Any) -> List[Dict[str, Any]]:
+    """
+    Všechna titrovatelná rezidua (dnes HIS) s tím, PROČ builder zvolil daný
+    stav - pro lidskou kontrolu v Structure kroku a ruční přepsání v Expert
+    režimu. Evidence se skládá z reportu builderu podle atomových míst
+    rezidua: pevné vodíkové vazby (partner má jednoznačnou roli), vazby mezi
+    dvěma proměnnými místy a nejednoznačné kontakty.
+    """
+    families = [tuple(names) for names, _default in prot.family_defaults]
+    out = []
+    for a in prot.assignments:
+        rk = tuple(a.residue_key)
+
+        def own(atom_key) -> bool:
+            return tuple(atom_key[:3]) == rk
+
+        evidence = []
+        for e in prot.fixed_evidence:
+            if own(e.variable_site):
+                evidence.append({
+                    "kind": "fixed",
+                    "site": e.variable_site[3],
+                    "role": e.required_role,
+                    "partner": _format_atom_key(e.partner_site),
+                    "distance_angstrom": round(e.distance_angstrom, 2),
+                })
+        for c in prot.variable_contacts:
+            if own(c.site1) or own(c.site2):
+                mine, other = (c.site1, c.site2) if own(c.site1) else (c.site2, c.site1)
+                evidence.append({
+                    "kind": "variable",
+                    "site": mine[3],
+                    "partner": _format_atom_key(other),
+                    "distance_angstrom": round(c.distance_angstrom, 2),
+                })
+        for c in prot.ambivalent_contacts:
+            if own(c.variable_site):
+                evidence.append({
+                    "kind": "ambivalent",
+                    "site": c.variable_site[3],
+                    "partner": _format_atom_key(c.partner_site),
+                    "distance_angstrom": round(c.distance_angstrom, 2),
+                })
+
+        conflicts = [_readable_conflict(c.message) for c in prot.conflicts if any(own(site) for site in c.sites)]
+        unevaluable = [f"{key[3]}: {reason}" for key, reason in prot.unevaluable_sites if own(key)]
+
+        if a.is_forced:
+            source = "user"
+        elif any(e["kind"] in ("fixed", "variable") for e in evidence):
+            source = "hbond"
+        else:
+            source = "ph_default"
+
+        # Proč stav stojí za lidskou kontrolu (krok 3.5 v Expert režimu).
+        # Ruční volba uživatele se znovu nekontroluje - už o ní rozhodl.
+        review_reasons = []
+        if source != "user":
+            if conflicts:
+                review_reasons.append("conflict")
+            if any(e["kind"] == "ambivalent" for e in evidence):
+                review_reasons.append("ambivalent")
+            if unevaluable:
+                review_reasons.append("unevaluable")
+            if source == "ph_default":
+                review_reasons.append("no_hbond")
+
+        family = next((f for f in families if a.new_resname in f), (a.new_resname,))
+        base = dict(zip(family, _family_base_names(family)))
+        chain, resseq, icode = rk
+        out.append({
+            "residue": _format_residue_key(rk),
+            "chain": chain,
+            "resseq": resseq,
+            "icode": icode,
+            "original": a.old_resname,
+            "assigned": base.get(a.new_resname, a.new_resname),
+            "default": base.get(a.default_resname, a.default_resname),
+            "options": _family_base_names(family),
+            "source": source,
+            "evidence": evidence,
+            "conflicts": conflicts,
+            "unevaluable": unevaluable,
+            "review_reasons": review_reasons,
+        })
+    return out
+
+
+def build_protonation_review(prot: Any) -> Optional[Dict[str, Any]]:
+    """
+    Podklad pro krok 3.5 (Expert): titrovatelná rezidua s nejistým stavem,
+    nebo None, když builder o všech rozhodl jednoznačně. Obecné problémy,
+    které nepatří ke konkrétnímu reziduu, jdou zvlášť do `general_issues`.
+    """
+    rows = _titratable_residue_report(prot)
+    flagged = [r for r in rows if r["review_reasons"]]
+    if not flagged:
+        return None
+    per_residue = {msg for r in rows for msg in r["conflicts"]}
+    general = [
+        msg for msg in (_readable_conflict(c.message) for c in prot.conflicts)
+        if msg not in per_residue
+    ]
+    return {
+        "residues": flagged,
+        "total_titratable": len(rows),
+        "general_issues": general + list(prot.warnings),
+    }
 
 
 def build_preparation_summary(result: ForgePreparationResult) -> Dict[str, Any]:
@@ -526,7 +673,7 @@ def build_preparation_summary(result: ForgePreparationResult) -> Dict[str, Any]:
             if not a.is_default
         ]
         summary["protonation_conflicts"] = [
-            {"kind": c.kind, "message": c.message} for c in prot.conflicts
+            {"kind": c.kind, "message": _readable_conflict(c.message)} for c in prot.conflicts
         ]
         summary["protonation_warnings"] = list(prot.warnings)
 
@@ -635,6 +782,29 @@ class ForgeStructureService:
             force_field_parameters=self._resolve_force_field_parameters(ff_selections),
         )
 
+    @staticmethod
+    def _protonation_review(
+        structure_data: Dict[str, Any], resources: WorkflowResources, settings: WorkflowSettings
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Samostatné přiřazení stavů (stejné volání jako na začátku
+        run_forge_workflow) jen kvůli reportu - bez stavby atomů, takže je
+        levné. Builder tím zůstává beze změny: zastavení je věc služby.
+        """
+        molecule = build_molecule_from_forge_json(structure_data, resources.converting_dictionary)
+        _molecule, report = assign_molecule_states(
+            molecule,
+            resources.converting_dictionary,
+            resources.building_template,
+            resources.state_definitions,
+            pH=settings.pH,
+            covalent_cutoff_angstrom=settings.covalent_cutoff_angstrom,
+            hydrogen_bond_settings=settings.hydrogen_bond,
+            forced_protonation_states=settings.protonation_overrides,
+            modify_myself=True,
+        )
+        return build_protonation_review(report.protonation)
+
     def run_workflow(
         self,
         pdb_text: str,
@@ -649,6 +819,8 @@ class ForgeStructureService:
         clean_crystal_ions: Optional[bool] = None,
         replace_structural_multivalent_with_mg: Optional[bool] = None,
         concentration_mode: Optional[str] = None,
+        protonation_overrides: Optional[List[Dict[str, Any]]] = None,
+        review_protonation: bool = False,
     ) -> "ForgeWorkflowRun":
         """
         Sdílené jádro mezi neinteraktivním `prepare_structure()` a interaktivním
@@ -656,6 +828,11 @@ class ForgeStructureService:
         WorkflowResources/WorkflowSettings a samotné spuštění run_forge_workflow().
         Rozhodnutí, co dělat s `result.stopped_at_missing_dof` (409 vs. otevření
         interaktivní session), zůstává na volajícím.
+
+        review_protonation=True (Expert): když má některé titrovatelné
+        reziduum nejistý stav, workflow se vůbec nespustí a vrátí se
+        `protonation_review` s result=None. Frontend po kontrole uživatelem
+        pošle přípravu znovu s protonation_overrides a review_protonation=False.
         """
         logger.info(
             f"FORGE: Preparing structure (pH={ph}, add_solvent_and_ions={add_solvent_and_ions}, "
@@ -696,7 +873,21 @@ class ForgeStructureService:
             add_solvent_and_ions=add_solvent_and_ions,
             solvation=SolvationSettings(**solvation_kwargs),
             ions=IonPlacementSettings(**ion_kwargs),
+            protonation_overrides=_protonation_override_map(protonation_overrides),
         )
+
+        if review_protonation:
+            review = self._protonation_review(structure_data, resources, settings)
+            if review is not None:
+                logger.info(
+                    f"FORGE: Stopped for protonation review - "
+                    f"{len(review['residues'])} residue(s) need a manual check."
+                )
+                console_logger.warning("Preparation paused - protonation states need a manual check.")
+                return ForgeWorkflowRun(
+                    result=None, resources=resources, settings=settings, salts=salt_specs,
+                    protonation_review=review,
+                )
 
         try:
             result: WorkflowResult = run_forge_workflow(
@@ -769,6 +960,7 @@ class ForgeStructureService:
         clean_crystal_ions: Optional[bool] = None,
         replace_structural_multivalent_with_mg: Optional[bool] = None,
         concentration_mode: Optional[str] = None,
+        protonation_overrides: Optional[List[Dict[str, Any]]] = None,
     ) -> ForgePreparationResult:
         """
         Spustí kompletní FORGE zpracování (stavy/protonace, stavba chybějících
@@ -794,6 +986,7 @@ class ForgeStructureService:
             clean_crystal_ions=clean_crystal_ions,
             replace_structural_multivalent_with_mg=replace_structural_multivalent_with_mg,
             concentration_mode=concentration_mode,
+            protonation_overrides=protonation_overrides,
         )
         result = run.result
 
