@@ -232,3 +232,55 @@ class TestSidechainRealGapBoundaryRegression:
         assert residue["ff_resname"] == "CGLU"
         dof_names = sorted(dof["dof_key"]["atom"] for dof in sidechains[0]["dofs"])
         assert dof_names == ["CD", "CG", "OE1"]
+
+
+def _with_zero_occupancy(pdb_text: str, atom_name: str) -> str:
+    """Nastaví obsazenost 0.00 jednomu atomu (sloupce 55-60)."""
+    out = []
+    for line in pdb_text.splitlines():
+        if line.startswith("ATOM") and line[12:16].strip() == atom_name:
+            line = line[:54] + "  0.00" + line[60:]
+        out.append(line)
+    return "\n".join(out) + "\n"
+
+
+class TestStructureCheck:
+    """Krok 3.5 "Structure Check" - zastavení před stavbou v Expert režimu."""
+
+    def test_review_stops_before_building(
+        self, client, offline_forge_ff, make_workspace, pdb_glu_open_branch
+    ):
+        ws_id = make_workspace(_with_zero_occupancy(pdb_glu_open_branch, "CB"))
+
+        response = client.post(
+            f"/api/sidechains/start/{ws_id}", json=_start_payload(ws_id, review_structure=True)
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["status"] == "structure_review"
+        [zero] = body["structure_review"]["zero_occupancy"]
+        assert zero["atoms"] == ["CB"] and zero["rebuildable"]
+        assert not workspace_manager.get_file_path(ws_id, "structure_preview.pdb").exists()
+
+    def test_decided_items_do_not_stop_again(
+        self, client, offline_forge_ff, make_workspace, pdb_glu_open_branch
+    ):
+        ws_id = make_workspace(_with_zero_occupancy(pdb_glu_open_branch, "CB"))
+        resseq = int(next(l for l in pdb_glu_open_branch.splitlines() if l.startswith("ATOM"))[22:26])
+        decisions = {"zero_occupancy": [{"chain": "A", "resseq": resseq, "icode": "", "apply": False}]}
+
+        response = client.post(
+            f"/api/sidechains/start/{ws_id}",
+            json=_start_payload(ws_id, review_structure=True, structure_decisions=decisions),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "missing_dof"
+
+    def test_without_review_flag_nothing_stops(
+        self, client, offline_forge_ff, make_workspace, pdb_glu_open_branch
+    ):
+        ws_id = make_workspace(_with_zero_occupancy(pdb_glu_open_branch, "CB"))
+        response = client.post(f"/api/sidechains/start/{ws_id}", json=_start_payload(ws_id))
+        assert response.json()["status"] == "missing_dof"

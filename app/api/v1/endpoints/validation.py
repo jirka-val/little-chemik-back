@@ -89,6 +89,21 @@ class ProtonationOverride(BaseModel):
     state: str = Field(..., description="Target state name within the residue's family, e.g. HID/HIE/HIP.")
 
 
+class ResidueDecision(BaseModel):
+    chain: str
+    resseq: int
+    icode: str = ""
+    apply: bool = Field(..., description="True = flip the amide / rebuild zero-occupancy atoms; False = keep as is.")
+
+
+class StructureDecisionsPayload(BaseModel):
+    amide_flips: List[ResidueDecision] = Field(default_factory=list)
+    zero_occupancy: List[ResidueDecision] = Field(default_factory=list)
+    acknowledged_heterogens: List[str] = Field(
+        default_factory=list, description="Keys 'chain:resseq:icode:resname' of removed ligands the user saw."
+    )
+
+
 class PreparationRequest(BaseModel):
     workspace_id: str = Field(...)
     ff_selections: Dict[str, Any] = Field(
@@ -124,10 +139,15 @@ class PreparationRequest(BaseModel):
         description="Protonation states forced by the user (Expert mode), e.g. HIS -> HIE. "
                     "The builder skips its own decision for these residues.",
     )
-    review_protonation: bool = Field(
+    structure_decisions: StructureDecisionsPayload = Field(
+        default_factory=StructureDecisionsPayload,
+        description="User decisions from the Structure Check step (amide flips, zero-occupancy "
+                    "rebuilds, acknowledged removed ligands).",
+    )
+    review_structure: bool = Field(
         False,
-        description="Expert mode: stop before building (status 'protonation_review' from "
-                    "/sidechains/start) when a titratable residue has an uncertain state.",
+        description="Expert mode: stop before building (status 'structure_review' from "
+                    "/sidechains/start) when something needs a manual check.",
     )
     additional_salts: List[SaltStep] = Field(
         default_factory=list,
@@ -323,6 +343,7 @@ async def prepare_molecule(request: PreparationRequest):
             replace_structural_multivalent_with_mg=request.replace_structural_multivalent_with_mg,
             concentration_mode=request.concentration_mode,
             protonation_overrides=[o.model_dump() for o in request.protonation_overrides],
+            structure_decisions=request.structure_decisions.model_dump(),
         )
 
         if not result.pdb_text:

@@ -69,12 +69,12 @@ class SidechainSessionNotFoundError(NotFoundError):
 
 @dataclass
 class SidechainStartResult:
-    status: str  # "complete" | "missing_dof" | "protonation_review"
+    status: str  # "complete" | "missing_dof" | "structure_review"
     prepared: Optional[ForgePreparationResult] = None
     gui_payload: Optional[Dict[str, Any]] = None
     preview_filename: Optional[str] = None
     preview_pdb_text: Optional[str] = None
-    protonation_review: Optional[Dict[str, Any]] = None
+    structure_review: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -155,7 +155,8 @@ class SidechainSessionService:
         replace_structural_multivalent_with_mg: Optional[bool] = None,
         concentration_mode: Optional[str] = None,
         protonation_overrides: Optional[List[Dict[str, Any]]] = None,
-        review_protonation: bool = False,
+        structure_decisions: Optional[Dict[str, Any]] = None,
+        review_structure: bool = False,
     ) -> SidechainStartResult:
         run = self.forge_service.run_workflow(
             pdb_text,
@@ -171,13 +172,14 @@ class SidechainSessionService:
             replace_structural_multivalent_with_mg=replace_structural_multivalent_with_mg,
             concentration_mode=concentration_mode,
             protonation_overrides=protonation_overrides,
-            review_protonation=review_protonation,
+            structure_decisions=structure_decisions,
+            review_structure=review_structure,
         )
-        if run.protonation_review is not None:
+        if run.structure_review is not None:
             # Krok 3.5 (Expert) - nic se nestavělo, případná stará relace
             # patří k předchozí přípravě.
             self._sessions.pop(workspace_id, None)
-            return SidechainStartResult(status="protonation_review", protonation_review=run.protonation_review)
+            return SidechainStartResult(status="structure_review", structure_review=run.structure_review)
         result = run.result
 
         if not result.stopped_at_missing_dof:

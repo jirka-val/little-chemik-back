@@ -47,6 +47,7 @@ from forge_molecule_state_assignment import assign_molecule_states  # noqa: E402
 from app.core.exceptions import AppBaseException
 from app.services.analysis_service import build_sequence_tokens, required_ff_groups
 from app.services.forcefield_service import ForceFieldService
+from app.services.structure.structure_review import apply_structure_edits, find_amide_flips, find_zero_occupancy
 
 _DATA_DIR = Path(__file__).resolve().parents[3] / "data"
 _ION_GROUPS = frozenset({"I1", "I1+", "Im", "Im+"})
@@ -132,6 +133,36 @@ def _strip_unrecognized_heterogens(pdb_text: str, crystal_water_mode: str) -> st
                 continue
         out_lines.append(line)
     return "\n".join(out_lines)
+
+
+def find_removed_heterogens(pdb_text: str, crystal_water_mode: str) -> List[Dict[str, Any]]:
+    """
+    Ligandy/aditiva, které _strip_unrecognized_heterogens zahodí (builder pro
+    ně nemá šablonu) - pro krok 3.5, ať to uživatel ví. Voda sem nepatří,
+    tu řídí crystal_water_mode.
+    """
+    if crystal_water_mode == "keep_all":
+        return []
+    found: Dict[tuple, Dict[str, Any]] = {}
+    for line in pdb_text.splitlines():
+        if not line.startswith("HETATM"):
+            continue
+        resname = line[17:20].strip()
+        if resname in _WATER_RESNAMES or resname in _KNOWN_ION_RESNAMES or resname in _KNOWN_POLYMER_RESNAMES:
+            continue
+        try:
+            resseq = int(line[22:26])
+        except ValueError:
+            continue
+        chain, icode = line[21].strip() or "?", line[26].strip()
+        entry = found.setdefault((chain, resseq, icode, resname), {
+            "key": f"{chain}:{resseq}:{icode}:{resname}",
+            "residue": f"{chain}{resseq}{icode}",
+            "resname": resname,
+            "atoms": 0,
+        })
+        entry["atoms"] += 1
+    return list(found.values())
 
 
 class ForgeWriterError(RuntimeError):
@@ -457,8 +488,40 @@ class ForgeWorkflowRun:
     settings: WorkflowSettings
     salts: List[Any]
     # Vyplněné (a result=None), když se run_workflow zastavil před stavbou
-    # kvůli kontrole protonace v Expert režimu - viz _protonation_review.
-    protonation_review: Optional[Dict[str, Any]] = None
+    # kvůli kroku 3.5 "Structure Check" v Expert režimu - viz _structure_review.
+    structure_review: Optional[Dict[str, Any]] = None
+
+
+@dataclass
+class StructureDecisions:
+    """
+    Rozhodnutí uživatele z kroku 3.5 (mimo HIS, ty jdou přes
+    protonation_overrides). *_decided = o čem už rozhodl (i "ponechat"),
+    aby se na totéž při další přípravě znovu neptal.
+    """
+
+    flips: List[tuple]
+    amide_flips_decided: List[tuple]
+    rebuilds: List[tuple]
+    zero_occupancy_decided: List[tuple]
+    acknowledged_heterogens: set
+
+    @classmethod
+    def from_payload(cls, payload: Optional[Dict[str, Any]]) -> "StructureDecisions":
+        payload = payload or {}
+
+        def key(item: Dict[str, Any]) -> tuple:
+            return (item["chain"], int(item["resseq"]), item.get("icode") or "")
+
+        flips = payload.get("amide_flips") or []
+        zero = payload.get("zero_occupancy") or []
+        return cls(
+            flips=[key(i) for i in flips if i.get("apply")],
+            amide_flips_decided=[key(i) for i in flips],
+            rebuilds=[key(i) for i in zero if i.get("apply")],
+            zero_occupancy_decided=[key(i) for i in zero],
+            acknowledged_heterogens=set(payload.get("acknowledged_heterogens") or []),
+        )
 
 
 @dataclass
@@ -601,26 +664,28 @@ def _titratable_residue_report(prot: Any) -> List[Dict[str, Any]]:
     return out
 
 
-def build_protonation_review(prot: Any) -> Optional[Dict[str, Any]]:
+def build_histidine_review(prot: Any) -> Dict[str, Any]:
     """
-    Podklad pro krok 3.5 (Expert): titrovatelná rezidua s nejistým stavem,
-    nebo None, když builder o všech rozhodl jednoznačně. Obecné problémy,
+    HIS sekce kroku 3.5 (Expert): titrovatelná rezidua s nejistým stavem
+    (prázdný seznam = builder o všech rozhodl jednoznačně). Obecné problémy,
     které nepatří ke konkrétnímu reziduu, jdou zvlášť do `general_issues`.
     """
     rows = _titratable_residue_report(prot)
-    flagged = [r for r in rows if r["review_reasons"]]
-    if not flagged:
-        return None
     per_residue = {msg for r in rows for msg in r["conflicts"]}
     general = [
         msg for msg in (_readable_conflict(c.message) for c in prot.conflicts)
         if msg not in per_residue
     ]
     return {
-        "residues": flagged,
-        "total_titratable": len(rows),
+        "histidines": [r for r in rows if r["review_reasons"]],
+        "total_histidines": len(rows),
         "general_issues": general + list(prot.warnings),
     }
+
+
+# Sekce kroku 3.5, které vyžadují rozhodnutí - když jsou všechny prázdné,
+# příprava se nezastaví (general_issues samy o sobě ne).
+_REVIEW_SECTIONS = ("histidines", "zero_occupancy", "amide_flips", "removed_heterogens")
 
 
 def build_preparation_summary(result: ForgePreparationResult) -> Dict[str, Any]:
@@ -783,9 +848,37 @@ class ForgeStructureService:
         )
 
     @staticmethod
-    def _protonation_review(
-        structure_data: Dict[str, Any], resources: WorkflowResources, settings: WorkflowSettings
+    def _structure_review(
+        original_pdb: str,
+        crystal_water_mode: str,
+        decisions: "StructureDecisions",
+        structure_data: Dict[str, Any],
+        resources: WorkflowResources,
+        settings: WorkflowSettings,
     ) -> Optional[Dict[str, Any]]:
+        """
+        Krok 3.5 "Structure Check": vrátí sekce s nevyřízenými položkami,
+        nebo None, když není o čem rozhodovat. Nulová obsazenost, amidy a
+        heterogeny se hledají v původním PDB (bez položek, o kterých už
+        uživatel rozhodl); HIS na struktuře s už aplikovanými rozhodnutími.
+        """
+        review = {
+            **ForgeStructureService._histidine_review(structure_data, resources, settings),
+            "zero_occupancy": find_zero_occupancy(original_pdb, decided=decisions.zero_occupancy_decided),
+            "amide_flips": find_amide_flips(original_pdb, decided=decisions.amide_flips_decided),
+            "removed_heterogens": [
+                h for h in find_removed_heterogens(original_pdb, crystal_water_mode)
+                if h["key"] not in decisions.acknowledged_heterogens
+            ],
+        }
+        if not any(review[section] for section in _REVIEW_SECTIONS):
+            return None
+        return review
+
+    @staticmethod
+    def _histidine_review(
+        structure_data: Dict[str, Any], resources: WorkflowResources, settings: WorkflowSettings
+    ) -> Dict[str, Any]:
         """
         Samostatné přiřazení stavů (stejné volání jako na začátku
         run_forge_workflow) jen kvůli reportu - bez stavby atomů, takže je
@@ -803,7 +896,7 @@ class ForgeStructureService:
             forced_protonation_states=settings.protonation_overrides,
             modify_myself=True,
         )
-        return build_protonation_review(report.protonation)
+        return build_histidine_review(report.protonation)
 
     def run_workflow(
         self,
@@ -820,7 +913,8 @@ class ForgeStructureService:
         replace_structural_multivalent_with_mg: Optional[bool] = None,
         concentration_mode: Optional[str] = None,
         protonation_overrides: Optional[List[Dict[str, Any]]] = None,
-        review_protonation: bool = False,
+        structure_decisions: Optional[Dict[str, Any]] = None,
+        review_structure: bool = False,
     ) -> "ForgeWorkflowRun":
         """
         Sdílené jádro mezi neinteraktivním `prepare_structure()` a interaktivním
@@ -829,10 +923,12 @@ class ForgeStructureService:
         Rozhodnutí, co dělat s `result.stopped_at_missing_dof` (409 vs. otevření
         interaktivní session), zůstává na volajícím.
 
-        review_protonation=True (Expert): když má některé titrovatelné
-        reziduum nejistý stav, workflow se vůbec nespustí a vrátí se
-        `protonation_review` s result=None. Frontend po kontrole uživatelem
-        pošle přípravu znovu s protonation_overrides a review_protonation=False.
+        review_structure=True (Expert, krok 3.5 "Structure Check"): když je o
+        čem rozhodovat (nejistý HIS, nulová obsazenost, otočený amid,
+        odstraněný ligand), workflow se vůbec nespustí a vrátí se
+        `structure_review` s result=None. Frontend po kontrole pošle přípravu
+        znovu s rozhodnutími (protonation_overrides, structure_decisions) a
+        review_structure=False.
         """
         logger.info(
             f"FORGE: Preparing structure (pH={ph}, add_solvent_and_ions={add_solvent_and_ions}, "
@@ -840,6 +936,11 @@ class ForgeStructureService:
         )
         console_logger.info("Preparing structure...")
 
+        decisions = StructureDecisions.from_payload(structure_decisions)
+        original_pdb = pdb_text
+        pdb_text = apply_structure_edits(
+            pdb_text, flip_residues=decisions.flips, rebuild_residues=decisions.rebuilds
+        )
         pdb_text = _strip_unrecognized_heterogens(pdb_text, crystal_water_mode)
         sequence_data = build_sequence_tokens(pdb_text, chain=None, fill_gaps=True)
         structure_data = {"pdb_text": pdb_text, "missing_atoms": sequence_data}
@@ -876,17 +977,17 @@ class ForgeStructureService:
             protonation_overrides=_protonation_override_map(protonation_overrides),
         )
 
-        if review_protonation:
-            review = self._protonation_review(structure_data, resources, settings)
+        if review_structure:
+            review = self._structure_review(
+                original_pdb, crystal_water_mode, decisions, structure_data, resources, settings
+            )
             if review is not None:
-                logger.info(
-                    f"FORGE: Stopped for protonation review - "
-                    f"{len(review['residues'])} residue(s) need a manual check."
-                )
-                console_logger.warning("Preparation paused - protonation states need a manual check.")
+                counts = ", ".join(f"{s}={len(review[s])}" for s in _REVIEW_SECTIONS if review[s])
+                logger.info(f"FORGE: Stopped for structure check - {counts}.")
+                console_logger.warning("Preparation paused - the structure needs a manual check.")
                 return ForgeWorkflowRun(
                     result=None, resources=resources, settings=settings, salts=salt_specs,
-                    protonation_review=review,
+                    structure_review=review,
                 )
 
         try:
@@ -961,6 +1062,7 @@ class ForgeStructureService:
         replace_structural_multivalent_with_mg: Optional[bool] = None,
         concentration_mode: Optional[str] = None,
         protonation_overrides: Optional[List[Dict[str, Any]]] = None,
+        structure_decisions: Optional[Dict[str, Any]] = None,
     ) -> ForgePreparationResult:
         """
         Spustí kompletní FORGE zpracování (stavy/protonace, stavba chybějících
@@ -987,6 +1089,7 @@ class ForgeStructureService:
             replace_structural_multivalent_with_mg=replace_structural_multivalent_with_mg,
             concentration_mode=concentration_mode,
             protonation_overrides=protonation_overrides,
+            structure_decisions=structure_decisions,
         )
         result = run.result
 

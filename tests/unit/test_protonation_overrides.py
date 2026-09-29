@@ -111,7 +111,7 @@ def _his_assignment(resseq, forced=False):
 
 def test_review_flags_only_uncertain_residues():
     from forge_molecule_state_assignment import ProtonationConflict
-    from app.services.structure.forge_service import build_protonation_review
+    from app.services.structure.forge_service import build_histidine_review
 
     prot = ProtonationAssignmentReport(pH=7.4)
     prot.family_defaults.append((("HIP", "HIE", "HID"), "HIE"))
@@ -121,22 +121,22 @@ def test_review_flags_only_uncertain_residues():
     prot.assignments.append(_his_assignment(90, forced=True))    # A90: rozhodl uživatel
     prot.conflicts.append(ProtonationConflict(kind="x", message="general problem"))
 
-    review = build_protonation_review(prot)
+    review = build_histidine_review(prot)
 
-    assert [r["residue"] for r in review["residues"]] == ["A57"]
-    assert review["residues"][0]["review_reasons"] == ["no_hbond"]
-    assert review["total_titratable"] == 3
+    assert [r["residue"] for r in review["histidines"]] == ["A57"]
+    assert review["histidines"][0]["review_reasons"] == ["no_hbond"]
+    assert review["total_histidines"] == 3
     assert review["general_issues"] == ["general problem"]
 
 
-def test_review_is_none_when_everything_is_decided():
-    from app.services.structure.forge_service import build_protonation_review
+def test_review_is_empty_when_everything_is_decided():
+    from app.services.structure.forge_service import build_histidine_review
 
     prot = ProtonationAssignmentReport(pH=7.4)
     prot.family_defaults.append((("HIP", "HIE", "HID"), "HIE"))
     prot.fixed_evidence.extend(_nd1_must_donate().values())
     prot.assignments.append(_his_assignment(24))
-    assert build_protonation_review(prot) is None
+    assert build_histidine_review(prot)["histidines"] == []
 
 
 def test_ion_placement_keeps_polymer_numbering():
