@@ -157,6 +157,7 @@ class SidechainSessionService:
         protonation_overrides: Optional[List[Dict[str, Any]]] = None,
         structure_decisions: Optional[Dict[str, Any]] = None,
         review_structure: bool = False,
+        auto_amide_flips: bool = False,
     ) -> SidechainStartResult:
         run = self.forge_service.run_workflow(
             pdb_text,
@@ -174,6 +175,7 @@ class SidechainSessionService:
             protonation_overrides=protonation_overrides,
             structure_decisions=structure_decisions,
             review_structure=review_structure,
+            auto_amide_flips=auto_amide_flips,
         )
         if run.structure_review is not None:
             # Krok 3.5 (Expert) - nic se nestavělo, případná stará relace

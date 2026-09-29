@@ -915,6 +915,7 @@ class ForgeStructureService:
         protonation_overrides: Optional[List[Dict[str, Any]]] = None,
         structure_decisions: Optional[Dict[str, Any]] = None,
         review_structure: bool = False,
+        auto_amide_flips: bool = False,
     ) -> "ForgeWorkflowRun":
         """
         Sdílené jádro mezi neinteraktivním `prepare_structure()` a interaktivním
@@ -929,6 +930,9 @@ class ForgeStructureService:
         `structure_review` s result=None. Frontend po kontrole pošle přípravu
         znovu s rozhodnutími (protonation_overrides, structure_decisions) a
         review_structure=False.
+
+        auto_amide_flips=True (Guided/Standard): doporučená otočení amidů
+        ASN/GLN (find_amide_flips) se použijí bez ptaní.
         """
         logger.info(
             f"FORGE: Preparing structure (pH={ph}, add_solvent_and_ions={add_solvent_and_ions}, "
@@ -938,8 +942,16 @@ class ForgeStructureService:
 
         decisions = StructureDecisions.from_payload(structure_decisions)
         original_pdb = pdb_text
+        flips = list(decisions.flips)
+        if auto_amide_flips:
+            auto = find_amide_flips(original_pdb, decided=decisions.amide_flips_decided)
+            flips += [(f["chain"], f["resseq"], f["icode"]) for f in auto]
+            if auto:
+                names = ", ".join(f"{f['resname']} {f['residue']}" for f in auto)
+                logger.info(f"FORGE: Auto-flipped amides: {names}")
+                console_logger.info(f"Flipped {len(auto)} ASN/GLN amide(s) to fit hydrogen bonds: {names}.")
         pdb_text = apply_structure_edits(
-            pdb_text, flip_residues=decisions.flips, rebuild_residues=decisions.rebuilds
+            pdb_text, flip_residues=flips, rebuild_residues=decisions.rebuilds
         )
         pdb_text = _strip_unrecognized_heterogens(pdb_text, crystal_water_mode)
         sequence_data = build_sequence_tokens(pdb_text, chain=None, fill_gaps=True)
@@ -1063,6 +1075,7 @@ class ForgeStructureService:
         concentration_mode: Optional[str] = None,
         protonation_overrides: Optional[List[Dict[str, Any]]] = None,
         structure_decisions: Optional[Dict[str, Any]] = None,
+        auto_amide_flips: bool = False,
     ) -> ForgePreparationResult:
         """
         Spustí kompletní FORGE zpracování (stavy/protonace, stavba chybějících
@@ -1090,6 +1103,7 @@ class ForgeStructureService:
             concentration_mode=concentration_mode,
             protonation_overrides=protonation_overrides,
             structure_decisions=structure_decisions,
+            auto_amide_flips=auto_amide_flips,
         )
         result = run.result
 

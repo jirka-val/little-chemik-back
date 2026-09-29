@@ -149,6 +149,10 @@ class PreparationRequest(BaseModel):
         description="Expert mode: stop before building (status 'structure_review' from "
                     "/sidechains/start) when something needs a manual check.",
     )
+    auto_amide_flips: bool = Field(
+        False,
+        description="Guided/Standard mode: apply the suggested ASN/GLN amide flips without asking.",
+    )
     additional_salts: List[SaltStep] = Field(
         default_factory=list,
         description="Further salts added after the primary one (positive_ion/negative_ion/ionic_strength). "
@@ -344,6 +348,7 @@ async def prepare_molecule(request: PreparationRequest):
             concentration_mode=request.concentration_mode,
             protonation_overrides=[o.model_dump() for o in request.protonation_overrides],
             structure_decisions=request.structure_decisions.model_dump(),
+            auto_amide_flips=request.auto_amide_flips,
         )
 
         if not result.pdb_text:

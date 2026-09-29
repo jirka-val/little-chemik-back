@@ -82,6 +82,7 @@ async def start_sidechain_session(workspace_id: str, request: PreparationRequest
             protonation_overrides=[o.model_dump() for o in request.protonation_overrides],
             structure_decisions=request.structure_decisions.model_dump(),
             review_structure=request.review_structure,
+            auto_amide_flips=request.auto_amide_flips,
         )
 
         if outcome.status == "structure_review":
