@@ -7,6 +7,7 @@ import traceback
 from app.services.pdb_service import PDBService, parse_pdb_to_topology_dict
 from app.services.forcefield_service import ForceFieldService
 from app.services.topology_patches import apply_topology_patches
+from app.services.hmr import apply_hmr, DEFAULT_HMR_H_MASS
 from app.utils.adams4sims_processing_library.utils import AMBER_topology
 from app.utils.adams4sims_processing_library import FF_IDA
 from app.workspaces.manager import WorkspaceManager
@@ -89,9 +90,14 @@ class TopologyService:
             logger.warning(f"Failed to read forge_meta sidecar {meta_path}: {e}")
             return None
 
-    def generate_topology(self, workspace_id: str, pdb_filename: str, ff_selections: Dict[str, Any]) -> Dict[str, str]:
+    def generate_topology(self, workspace_id: str, pdb_filename: str, ff_selections: Dict[str, Any],
+                          hmr: bool = False) -> Dict[str, Any]:
         """
         Main pipeline for generating AMBER topology (.prmtop) and updated PDB from a PDB file.
+
+        hmr=True přerozdělí hmoty vodíků (viz app/services/hmr.py) - volí se
+        v Simulation panelu, protože se týká timestepu simulace, ale musí se
+        zapsat už do topologie.
         """
         try:
             # --- Ladění (Debug): Uložení příchozích dat ---
@@ -184,6 +190,9 @@ class TopologyService:
             # 6. Výpočet AMBER topologie z opravených dat
             logger.info("Running AMBER topology calculation...")
             topology_data = AMBER_topology.create_AMBER_topology(mol)
+            if hmr:
+                count = apply_hmr(topology_data)
+                logger.info(f"HMR applied: {count} hydrogens repartitioned to {DEFAULT_HMR_H_MASS} Da")
 
             # 7. Uložení souborů
             # A) Uložení .prmtop (Topologie)
@@ -207,7 +216,8 @@ class TopologyService:
 
             return {
                 "topology_file": prmtop_filename,
-                "coordinates_file": pdb_filename
+                "coordinates_file": pdb_filename,
+                "hmr": hmr,
             }
 
         except Exception as e:

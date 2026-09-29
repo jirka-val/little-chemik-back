@@ -8,6 +8,7 @@ from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse, FileResponse, PlainTextResponse
 from pydantic import BaseModel
 
+from app.api.v1.endpoints.simulation import AmberMdinRequest, render_amber_mdin, _mdin_filename
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.workspaces.manager import workspace_manager
 
@@ -48,6 +49,9 @@ class DownloadRequest(BaseModel):
     wants_pdb: bool = False
     wants_top: bool = False
     wants_crd: bool = False
+    # mdin se nikde na disk neukládá - generuje se tady z nastavení
+    # Simulation panelu (stejně jako /api/simulation/.../amber-mdin).
+    mdin: Optional[AmberMdinRequest] = None
     as_zip: bool = True
 
 
@@ -81,22 +85,36 @@ async def export_workspace_files(workspace_id: str, req: DownloadRequest):
     # Filtrace pouze existujících souborů
     valid_files = [f for f in files_to_pack if f.exists()]
 
-    if not valid_files:
+    if not valid_files and req.mdin is None:
         raise NotFoundError("Žádný z vybraných souborů nebyl ve workspace nalezen. Byla už vygenerována topologie?")
 
+    if req.mdin is not None and not valid_files and not req.as_zip:
+        # Jen mdin bez ZIPu - rovnou jako text.
+        filename = _mdin_filename(req.mdin)
+        return PlainTextResponse(
+            content=render_amber_mdin(req.mdin),
+            media_type="text/plain",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+
     # Pokud uživatel chce ZIP, NEBO vybral více souborů (přes HTTP nelze poslat více souborů najednou bez ZIPu)
-    if req.as_zip or len(valid_files) > 1:
+    if req.as_zip or len(valid_files) > 1 or req.mdin is not None:
         zip_buffer = io.BytesIO()
 
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
             for file_path in valid_files:
                 # Zapisujeme pouze název souboru, ne celou cestu na serveru
                 zip_file.write(file_path, file_path.name)
+            if req.mdin is not None:
+                zip_file.writestr(_mdin_filename(req.mdin), render_amber_mdin(req.mdin))
 
         # Vrácení ukazatele na začátek souboru, aby ho šlo přečíst
         zip_buffer.seek(0)
 
-        logger.info(f"Serving ZIP archive for workspace: {workspace_id} with files: {[f.name for f in valid_files]}")
+        logger.info(
+            f"Serving ZIP archive for workspace: {workspace_id} with files: {[f.name for f in valid_files]}"
+            f"{' + mdin' if req.mdin is not None else ''}"
+        )
         return StreamingResponse(
             zip_buffer,
             media_type="application/x-zip-compressed",
