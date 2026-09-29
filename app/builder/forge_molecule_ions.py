@@ -812,9 +812,14 @@ def _remove_selected_waters(molecule: Molecule, candidates: Sequence[_WaterCandi
     for chain_id in list(molecule.chains):
         chain = molecule.chains[chain_id]
         chain.residues = [residue for residue in chain.residues if id(residue) not in removed]
+        # LittleChemik: renumber only solvent/ion chains. Polymer chains keep
+        # their input numbering (D24 must stay D24 for the user and for
+        # residue-keyed choices such as protonation overrides).
+        has_polymer = any(residue.group in ("P", "R", "D") for residue in chain.residues)
         for index, residue in enumerate(chain.residues):
             residue.index_in_chain = index
-            residue.resseq = index + 1
+            if not has_polymer:
+                residue.resseq = index + 1
         if not chain.residues:
             del molecule.chains[chain_id]
 
