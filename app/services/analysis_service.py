@@ -142,13 +142,20 @@ def _pick_variant(group: Optional[str], pdb_resname: str, atoms: List[str], conv
     # 2. SESTAVENÍ KANDIDÁTŮ PRO KONCE ŘETĚZCŮ
     if group == "P":
         # Proteiny (skupina P) mají N-konec a C-konec (např. NALA, CALA, NHID, CHID)
-        if terminal == "5":
+        if terminal in ("5", "53"):
             candidates.append(f"N{search_group}")
         elif terminal == "3":
             candidates.append(f"C{search_group}")
     else:
-        # Nukleové kyseliny mají koncovky 5 a 3 (např. RU5, RU3)
-        if terminal == "5":
+        # Nukleové kyseliny mají koncovky 5 a 3 (např. RU5, RU3) a variantu N
+        # pro reziduum, které je 5'- i 3'-koncem zároveň (osamocený nukleotid,
+        # např. poslední reziduum za geometrickým zlomem). Samotná 5 nebo 3
+        # varianta by tam nechala neceločíselný náboj (OL3: 5' = -0.3081,
+        # 3' = -0.6919) a solvatace pak padá na "Fixed system charge ...
+        # is not sufficiently close to an integer".
+        if terminal == "53":
+            candidates.append(f"{search_group}N")
+        elif terminal == "5":
             candidates.append(f"{search_group}5")
         elif terminal == "3":
             candidates.append(f"{search_group}3")
@@ -354,11 +361,21 @@ def _reterminate_as_gap_end(
     nedostavuje (viz INTEGRATION_CONTRACT.md), takže tohle rozhodnutí musí padnout tady.
     """
     group = token["group"]
-    new_ff_resname, new_known, _ = _pick_variant(group, token["pdb_resname"], token["atoms"], conv, "3")
+    # Reziduum, které už je 5'-koncem (první v řetězci nebo hned za jiným
+    # zlomem), je teď osamocené - u nukleových kyselin potřebuje variantu N,
+    # jinak by přepis na 3' nechal neceločíselný náboj (viz _pick_variant).
+    already_5prime = token.get("terminal") in ("5", "53")
+    terminal = "53" if already_5prime and group != "P" else "3"
+    new_ff_resname, new_known, _ = _pick_variant(group, token["pdb_resname"], token["atoms"], conv, terminal)
     token["ff_resname"] = new_ff_resname
     token["known"] = new_known
+    token["terminal"] = terminal
     token["missing_atoms"] = _check_missing_atoms(group, new_ff_resname, token["atoms"], conv)
-    token["extra_atoms"] = _check_extra_atoms(group, new_ff_resname, token["atoms"], conv)
+    extra_atoms = _check_extra_atoms(group, new_ff_resname, token["atoms"], conv)
+    if terminal == "53":
+        allowed_extra_heavy = _TERMINAL_ALLOWED_EXTRA_HEAVY_ATOMS.get(group, set())
+        extra_atoms = [a for a in extra_atoms if a not in allowed_extra_heavy]
+    token["extra_atoms"] = extra_atoms
     conn_info = _check_connectivity_integrity(group, new_ff_resname, token["atoms"], conv)
     token["is_broken"] = conn_info["is_broken"]
     token["connectivity_parts"] = conn_info["components"]
@@ -583,11 +600,15 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
                 elif (resseq, icode) == last_main_key:
                     terminal = "3"
                     terminus_reason = "chain_end"
+                # Poslední reziduum řetězce hned za zlomem (nebo řetězec o
+                # jediném reziduu) je 5'- i 3'-koncem zároveň.
+                if terminal == "5" and (resseq, icode) == last_main_key:
+                    terminal = "53"
 
             ff_resname, known, search_group = _pick_variant(group, resname, atoms, conv, terminal)
             missing_atoms = _check_missing_atoms(group, ff_resname, atoms, conv)
             extra_atoms = _check_extra_atoms(group, ff_resname, atoms, conv)
-            if terminal == "5":
+            if terminal in ("5", "53"):
                 allowed_extra = _TERMINAL_ALLOWED_EXTRA_HEAVY_ATOMS.get(group, set())
                 extra_atoms = [a for a in extra_atoms if a not in allowed_extra]
 
@@ -624,7 +645,8 @@ def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps:
                 "extra_atoms": extra_atoms,
                 "is_broken": conn_info["is_broken"],
                 "connectivity_parts": conn_info["components"],
-                "terminus_reason": terminus_reason
+                "terminus_reason": terminus_reason,
+                "terminal": terminal,
             }
             tokens.append(token)
 

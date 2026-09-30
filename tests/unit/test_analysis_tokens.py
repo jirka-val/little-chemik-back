@@ -515,3 +515,41 @@ class TestHisVariantDetection:
         assert his2["group"] == "P" and his2["terminus_reason"] is None
         assert _by_resseq(tokens, 1)["terminus_reason"] == "chain_end"
         assert _by_resseq(tokens, 3)["terminus_reason"] == "chain_end"
+
+
+def _rna_gap_subset(pdb_text: str, keep_resseqs) -> str:
+    return "".join(
+        line + "\n"
+        for line in pdb_text.splitlines()
+        if not line.startswith(("ATOM", "HETATM")) or int(line[22:26]) in keep_resseqs
+    )
+
+
+class TestIsolatedNucleotideTerminus:
+    """
+    Nukleotid, který je 5'- i 3'-koncem zároveň (osamocený za zlomem), musí
+    dostat variantu N. Dřív dostal jen 5 nebo 3 a OL3 náboj systému pak
+    vyšel neceločíselný (-0.3081 / -0.6919 navíc) - solvatace 2TRA se
+    smíšenými altlocy padala na "Fixed system charge -56.691900 is not
+    sufficiently close to an integer".
+    """
+
+    def test_last_residue_right_after_gap_gets_n_variant(self, pdb_rna_gap):
+        tokens = _tokens(_rna_gap_subset(pdb_rna_gap, {1, 2, 3, 6}), "A")
+        u6 = _by_resseq(tokens, 6)
+        assert u6["ff_resname"] == "RUN"
+        assert u6["terminus_reason"] == "gap"
+        assert u6["extra_atoms"] == []
+
+    def test_residue_between_two_gaps_gets_n_variant(self, pdb_rna_gap):
+        tokens = _tokens(_rna_gap_subset(pdb_rna_gap, {1, 2, 3, 6, 8}), "A")
+        assert _by_resseq(tokens, 3)["ff_resname"] == "RA3"
+        u6 = _by_resseq(tokens, 6)
+        assert u6["ff_resname"] == "RUN"
+        assert u6["extra_atoms"] == []
+        assert _by_resseq(tokens, 8)["ff_resname"] == "RUN"
+
+    def test_first_residue_followed_by_gap_gets_n_variant(self, pdb_rna_gap):
+        tokens = _tokens(_rna_gap_subset(pdb_rna_gap, {1, 3}), "A")
+        assert _by_resseq(tokens, 1)["ff_resname"] == "RUN"
+        assert _by_resseq(tokens, 3)["ff_resname"] == "RAN"
