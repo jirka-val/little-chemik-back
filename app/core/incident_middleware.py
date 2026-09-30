@@ -27,7 +27,13 @@ _SKIP_PREFIXES = ("/api/incidents",)
 class IncidentJournalMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        if not history.enabled() or not path.startswith("/api/") or path.startswith(_SKIP_PREFIXES):
+        # OPTIONS = CORS preflight prohlížeče, nic neříká o krocích uživatele.
+        if (
+            not history.enabled()
+            or request.method == "OPTIONS"
+            or not path.startswith("/api/")
+            or path.startswith(_SKIP_PREFIXES)
+        ):
             return await call_next(request)
 
         body = None
