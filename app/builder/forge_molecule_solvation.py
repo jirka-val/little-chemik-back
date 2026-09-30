@@ -92,6 +92,7 @@ class SolvationReport:
     solvent_chain_ids: Tuple[str, ...] = ()
     environment_atoms: int = 0
     spatial_pair_checks: int = 0
+    waters_removed_by_periodic_images: int = 0
     timings_seconds: Dict[str, float] = field(default_factory=dict)
 
 
@@ -596,6 +597,98 @@ def _tile_template(
     ]
 
 
+# The source water box is periodic only in its own orthorhombic cell.  After
+# clipping it to the target cell, waters on opposite faces become neighbours
+# through the new periodic boundary at arbitrary, incommensurate distances
+# (for a truncated octahedron almost always, for a cube whenever its edge is
+# not a multiple of the template edge).  The thresholds sit just below the
+# closest contacts inside the equilibrated template itself (O-O 2.57 A, any
+# contact involving H 1.61 A), so the boundary density stays bulk-like.
+PERIODIC_WATER_OO_CUTOFF_ANGSTROM = 2.5
+PERIODIC_WATER_H_CONTACT_CUTOFF_ANGSTROM = 1.5
+
+
+def _water_atom_coords(water: WaterGeometry) -> np.ndarray:
+    return np.asarray(
+        [
+            water.oxygen,
+            water.oxygen + water.hydrogen_offsets[0],
+            water.oxygen + water.hydrogen_offsets[1],
+        ],
+        dtype=float,
+    )
+
+
+def _waters_clash(left: np.ndarray, right: np.ndarray) -> bool:
+    """left/right: (3, 3) O, H1, H2 coordinates already in the same image."""
+    delta = left[:, None, :] - right[None, :, :]
+    distances = np.sqrt(np.einsum("ijk,ijk->ij", delta, delta))
+    if distances[0, 0] < PERIODIC_WATER_OO_CUTOFF_ANGSTROM:
+        return True
+    distances[0, 0] = np.inf
+    return bool(distances.min() < PERIODIC_WATER_H_CONTACT_CUTOFF_ANGSTROM)
+
+
+def _remove_periodic_image_clashes(
+    candidates: Sequence[WaterGeometry], vectors: np.ndarray
+) -> tuple[list[WaterGeometry], int]:
+    """Drop template waters that overlap another water's periodic image.
+
+    Waters are visited in their deterministic tiling order; a water is kept
+    unless it clashes with an image of an already kept water.
+    """
+    if not candidates:
+        return [], 0
+    oxygens = np.asarray([water.oxygen for water in candidates], dtype=float)
+    max_h = max(
+        float(np.linalg.norm(offset))
+        for water in candidates
+        for offset in water.hydrogen_offsets
+    )
+    search = PERIODIC_WATER_OO_CUTOFF_ANGSTROM + 2.0 * max_h
+    radius = float(np.max(np.linalg.norm(oxygens, axis=1)))
+    lower = np.min(oxygens, axis=0) - search
+    upper = np.max(oxygens, axis=0) + search
+    translations = [
+        np.asarray(coeffs, dtype=float) @ vectors
+        for coeffs in product(range(-2, 3), repeat=3)
+        if coeffs != (0, 0, 0)
+    ]
+    translations = [
+        translation
+        for translation in translations
+        if float(np.linalg.norm(translation)) <= 2.0 * radius + search
+    ]
+
+    index = _SpatialHash(list(oxygens), search)
+    # neighbours[i] = [(j, translation)]: the image oxygens[j] + translation
+    # lies within the search radius of oxygens[i].
+    neighbours: Dict[int, list[tuple[int, np.ndarray]]] = {}
+    for translation in translations:
+        shifted = oxygens + translation
+        near = np.nonzero(np.all((shifted >= lower) & (shifted <= upper), axis=1))[0]
+        for j in near:
+            image = shifted[j]
+            for i in index.candidates(image, search):
+                delta = oxygens[i] - image
+                if float(delta @ delta) < search * search:
+                    neighbours.setdefault(int(i), []).append((int(j), translation))
+
+    removed: set[int] = set()
+    kept: list[WaterGeometry] = []
+    for i, water in enumerate(candidates):
+        if i in removed:
+            continue
+        kept.append(water)
+        own = _water_atom_coords(water)
+        for j, translation in neighbours.get(i, ()):
+            if j in removed or j <= i:
+                continue
+            if _waters_clash(own, _water_atom_coords(candidates[j]) + translation):
+                removed.add(j)
+    return kept, len(removed)
+
+
 def _complete_crystal_water_hydrogens(
     waters: list[_RetainedWater], candidates: Sequence[WaterGeometry]
 ) -> None:
@@ -880,6 +973,11 @@ def solvate_molecule(
     timings["water_tiling_and_clipping"] = perf_counter() - t0
 
     t0 = perf_counter()
+    tiled_count = len(candidates)
+    candidates, removed_by_images = _remove_periodic_image_clashes(candidates, vectors)
+    timings["periodic_image_clash_filter"] = perf_counter() - t0
+
+    t0 = perf_counter()
     if retained:
         _complete_crystal_water_hydrogens(retained, candidates)
     timings["crystal_water_completion"] = perf_counter() - t0
@@ -909,7 +1007,7 @@ def solvate_molecule(
         box_vectors=target.periodic_box.vectors,
         input_crystal_waters=input_crystal_count,
         retained_crystal_waters=len(retained),
-        template_candidates_in_box=len(candidates),
+        template_candidates_in_box=tiled_count,
         waters_removed_by_solute=removed_by_solute,
         generated_waters=len(generated),
         total_waters=len(retained) + len(generated),
@@ -917,6 +1015,7 @@ def solvate_molecule(
         solvent_chain_ids=solvent_chains,
         environment_atoms=len(environment_coords),
         spatial_pair_checks=spatial_pair_checks,
+        waters_removed_by_periodic_images=removed_by_images,
         timings_seconds=timings,
     )
     return target, report
@@ -939,6 +1038,7 @@ def solvation_report_text(report: SolvationReport) -> str:
             f"Input crystal waters: {report.input_crystal_waters}",
             f"Retained crystal waters: {report.retained_crystal_waters}",
             f"Template candidates inside box: {report.template_candidates_in_box}",
+            f"Waters removed by periodic-image clash: {report.waters_removed_by_periodic_images}",
             f"Waters removed by solute sigma clash: {report.waters_removed_by_solute}",
             f"Generated waters: {report.generated_waters}",
             f"Total W3/WAT waters: {report.total_waters}",
