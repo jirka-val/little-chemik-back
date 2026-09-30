@@ -746,26 +746,218 @@ def _check_connectivity_integrity(group: Optional[str], ff_name: str, atoms: Lis
 from typing import Dict, Any
 
 
+# ---------------------------------------------------------------------------
+# AltLoc doporučení podle geometrie
+# ---------------------------------------------------------------------------
+# Písmena altlocu ve dvou sousedních reziduích na sebe nemusí navazovat (a
+# stejné písmeno to taky nezaručuje) - rozhoduje skutečná vzdálenost
+# vazebných atomů přes rozhraní reziduí (O3'-P u nukleových kyselin, C-N u
+# proteinů, stejné meze jako _is_chemically_impossible_bond). Rezidua, jejichž
+# altloc atomy leží přímo na takové vazbě, tvoří jeden "kus", o kterém se
+# rozhoduje najednou: nejdřív co nejméně zlomů (i vůči sousedům bez altlocu),
+# teprve potom occupancy a B-faktor sečtené přes celý kus.
+
+_LINK_ATOMS_BY_GROUP = {"R": ("O3'", "P"), "P": ("C", "N")}
+
+AltlocResidueKey = Tuple[str, int, str, str]  # (chain, resseq, icode, resname)
+AltlocAtoms = Dict[AltlocResidueKey, Dict[str, Dict[str, Tuple[float, float, float]]]]
+
+
+def _altloc_selection_key(key: AltlocResidueKey) -> str:
+    # Stejný klíč, jaký posílá frontend a čte clean_pdb_altlocs.
+    chain, resseq, _icode, resname = key
+    return f"{chain}_{resseq}_{resname}"
+
+
+def _parse_altloc_geometry(pdb_text: str) -> Tuple[Dict[str, List[AltlocResidueKey]], AltlocAtoms]:
+    """
+    Souřadnice atomů prvního modelu po reziduích: {key: {atom: {altloc:
+    coord}}}, altloc " " = atom bez alternativ. Vrací i pořadí reziduí v
+    každém řetězci tak, jak jdou v souboru.
+    """
+    order: Dict[str, List[AltlocResidueKey]] = {}
+    atoms: AltlocAtoms = {}
+    for line in pdb_text.splitlines():
+        if line.startswith("ENDMDL"):
+            break
+        if not line.startswith(("ATOM", "HETATM")):
+            continue
+        try:
+            resseq = int(line[22:26])
+            coord = (float(line[30:38]), float(line[38:46]), float(line[46:54]))
+        except ValueError:
+            continue
+        chain = line[21].strip() or "?"
+        key = (chain, resseq, line[26].strip(), line[17:20].strip())
+        if key not in atoms:
+            atoms[key] = {}
+            order.setdefault(chain, []).append(key)
+        atom_name = line[12:16].strip().replace("*", "'")
+        atoms[key].setdefault(atom_name, {}).setdefault(line[16], coord)
+    return order, atoms
+
+
+def _atom_coord(variants: Dict[str, Tuple[float, float, float]], letter: Optional[str]):
+    if letter is not None and letter in variants:
+        return variants[letter]
+    if " " in variants:
+        return variants[" "]
+    return variants[sorted(variants)[0]]
+
+
+def _residue_links(order, atoms: AltlocAtoms) -> List[Tuple[AltlocResidueKey, AltlocResidueKey, str, str, float]]:
+    """(prev, curr, atom na prev, atom na curr, mez) pro sousedy v řetězci, které tvoří polymer."""
+    links = []
+    for keys in order.values():
+        for prev, curr in zip(keys, keys[1:]):
+            for group, (prev_atom, curr_atom) in _LINK_ATOMS_BY_GROUP.items():
+                if prev_atom in atoms[prev] and curr_atom in atoms[curr]:
+                    links.append((prev, curr, prev_atom, curr_atom, _BOND_DISTANCE_LIMIT_ANGSTROM[group]))
+                    break
+    return links
+
+
+def _link_is_broken(atoms: AltlocAtoms, link, prev_letter: Optional[str], curr_letter: Optional[str]) -> bool:
+    prev, curr, prev_atom, curr_atom, limit = link
+    p = _atom_coord(atoms[prev][prev_atom], prev_letter)
+    c = _atom_coord(atoms[curr][curr_atom], curr_letter)
+    return sum((a - b) ** 2 for a, b in zip(p, c)) ** 0.5 > limit
+
+
+def _link_letters(atoms: AltlocAtoms, key: AltlocResidueKey, atom_name: str) -> List[str]:
+    return sorted(letter for letter in atoms[key][atom_name] if letter != " ")
+
+
+def _recommend_altlocs(
+    residue_stats: Dict[AltlocResidueKey, Dict[str, Dict[str, float]]],
+    order,
+    atoms: AltlocAtoms,
+) -> Dict[AltlocResidueKey, str]:
+    """Doporučené písmeno pro každé altloc reziduum (viz komentář nad sekcí)."""
+    links = _residue_links(order, atoms)
+    links_by_residue: Dict[AltlocResidueKey, List] = {}
+    for link in links:
+        links_by_residue.setdefault(link[0], []).append(link)
+        links_by_residue.setdefault(link[1], []).append(link)
+
+    # Kusy: sousední altloc rezidua spojená vazbou, na které má altloc aspoň
+    # jeden z obou vazebných atomů.
+    parent = {key: key for key in residue_stats}
+
+    def find(key):
+        while parent[key] != key:
+            parent[key] = parent[parent[key]]
+            key = parent[key]
+        return key
+
+    for prev, curr, prev_atom, curr_atom, _limit in links:
+        if prev in parent and curr in parent and (
+            _link_letters(atoms, prev, prev_atom) or _link_letters(atoms, curr, curr_atom)
+        ):
+            parent[find(prev)] = find(curr)
+
+    chain_position = {key: index for keys in order.values() for index, key in enumerate(keys)}
+    pieces: Dict[AltlocResidueKey, List[AltlocResidueKey]] = {}
+    for key in residue_stats:
+        pieces.setdefault(find(key), []).append(key)
+
+    recommended: Dict[AltlocResidueKey, str] = {}
+    for members in pieces.values():
+        members.sort(key=lambda k: (k[0], chain_position.get(k, 0)))
+        member_set = set(members)
+
+        def node_cost(key, letter):
+            stats = residue_stats[key][letter]
+            breaks = 0
+            for link in links_by_residue.get(key, ()):
+                other = link[1] if link[0] == key else link[0]
+                if other in member_set:
+                    continue
+                letters = (letter, None) if link[0] == key else (None, letter)
+                breaks += _link_is_broken(atoms, link, *letters)
+            return (breaks, -stats["occupancy"], stats["bFactor"])
+
+        def edge_breaks(prev, prev_letter, curr, curr_letter):
+            return sum(
+                _link_is_broken(atoms, link, prev_letter, curr_letter)
+                for link in links_by_residue.get(prev, ())
+                if link[0] == prev and link[1] == curr
+            )
+
+        # Viterbi po řetězci: lexikografický součet (zlomy, -occupancy, B).
+        best: Dict[str, Tuple[Tuple[float, float, float], List[str]]] = {}
+        for index, key in enumerate(members):
+            new_best = {}
+            for letter in sorted(residue_stats[key]):
+                own = node_cost(key, letter)
+                if index == 0:
+                    new_best[letter] = (own, [letter])
+                    continue
+                prev_key = members[index - 1]
+                candidates = []
+                for prev_letter, (cost, path) in best.items():
+                    extra = edge_breaks(prev_key, prev_letter, key, letter)
+                    total = (cost[0] + own[0] + extra, cost[1] + own[1], cost[2] + own[2])
+                    candidates.append((total, path + [letter]))
+                new_best[letter] = min(candidates, key=lambda item: (item[0], item[1]))
+            best = new_best
+        _cost, path = min(best.values(), key=lambda item: (item[0], item[1]))
+        recommended.update(zip(members, path))
+    return recommended
+
+
+def find_altloc_selection_breaks(pdb_text: str, selection: Dict[str, str]) -> List[Dict[str, Any]]:
+    """
+    Zlomy řetězce, které vytvoří daný výběr altloců a kterým by šlo jinou
+    volbou u dotčených reziduí předejít. Zlomy, které vzniknou při jakékoli
+    volbě (skutečná mezera ve struktuře), se nehlásí.
+    """
+    order, atoms = _parse_altloc_geometry(pdb_text)
+
+    def chosen(key):
+        return selection.get(_altloc_selection_key(key))
+
+    def options(key, atom_name):
+        return _link_letters(atoms, key, atom_name) or [None]
+
+    breaks = []
+    for link in _residue_links(order, atoms):
+        prev, curr, prev_atom, curr_atom, _limit = link
+        if not (_link_letters(atoms, prev, prev_atom) or _link_letters(atoms, curr, curr_atom)):
+            continue
+        if not _link_is_broken(atoms, link, chosen(prev), chosen(curr)):
+            continue
+        avoidable = any(
+            not _link_is_broken(atoms, link, p, c)
+            for p in options(prev, prev_atom)
+            for c in options(curr, curr_atom)
+        )
+        if avoidable:
+            breaks.append({
+                "chain": prev[0],
+                "prev": {"resseq": prev[1], "icode": prev[2], "resname": prev[3], "altloc": chosen(prev)},
+                "next": {"resseq": curr[1], "icode": curr[2], "resname": curr[3], "altloc": chosen(curr)},
+            })
+    return breaks
+
+
 def analyze_pdb_altlocs(pdb_text: str) -> Dict[str, Any]:
     """
     PROJDE PDB SOUBOR A IDENTIFIKUJE VŠECHNY ALTERNATIVNÍ POZICE (ALTLOCS),
-    JEJICH OBSAZENOST A B-FAKTOR. VRACÍ STRUKTUROVANÝ DICT (JSON) PRO FRONTEND.
-    NAVÍC ANALYZUJE KONEKTIVITU (BLOKY NA SEBE NAVAZUJÍCÍCH AMINOKYSELIN)
-    A DOPORUČUJE NEJLEPŠÍ TRASU PRO ZACHOVÁNÍ PEPTIDOVÉ VAZBY.
+    JEJICH OBSAZENOST A B-FAKTOR (PRŮMĚR PŘES ATOMY DANÉ VARIANTY). VRACÍ
+    STRUKTUROVANÝ DICT (JSON) PRO FRONTEND. DOPORUČENÍ (recommended_alt) SE
+    ŘÍDÍ NEJDŘÍV GEOMETRIÍ - VIZ _recommend_altlocs.
 
     NOVĚ: DETEKUJE PŘÍTOMNOST VÍCE MODELŮ A SYMETRIE (REMARK 350).
     """
-    altloc_data = {}
     models = []
     has_symmetry = False
+    # key -> altloc -> [součet occupancy, součet B, počet atomů]
+    sums: Dict[AltlocResidueKey, Dict[str, List[float]]] = {}
 
-    # Projdeme soubor řádek po řádku
     for line in pdb_text.splitlines():
-
-        # --- NOVÉ: Detekce více modelů ---
         if line.startswith("MODEL "):
             try:
-                # Ořízneme slovo "MODEL" a zkusíme získat číslo
                 model_num = int(line[6:].strip())
                 if model_num not in models:
                     models.append(model_num)
@@ -773,134 +965,191 @@ def analyze_pdb_altlocs(pdb_text: str) -> Dict[str, Any]:
                 pass
             continue
 
-        # --- NOVÉ: Detekce Biological Assembly (Symetrie) ---
-        # Hledáme řádek REMARK 350, který obsahuje transformační matici BIOMT
+        # Biological Assembly: REMARK 350 s transformační maticí BIOMT
         if line.startswith("REMARK 350") and "BIOMT" in line:
             has_symmetry = True
             continue
 
-        # --- PŮVODNÍ: Detekce AltLocs ---
-        if line.startswith("ATOM") or line.startswith("HETATM"):
-            # Index 16 je sloupec 17 v PDB (AltLoc)
-            alt_loc = line[16]
+        if line.startswith(("ATOM", "HETATM")) and line[16] != " ":
+            try:
+                resseq = int(line[22:26].strip())
+            except ValueError:
+                continue
+            try:
+                occupancy = float(line[54:60].strip())
+            except ValueError:
+                occupancy = 1.0
+            try:
+                b_factor = float(line[60:66].strip())
+            except ValueError:
+                b_factor = 0.0
+            key = (line[21].strip() or "?", resseq, line[26].strip(), line[17:20].strip())
+            acc = sums.setdefault(key, {}).setdefault(line[16], [0.0, 0.0, 0])
+            acc[0] += occupancy
+            acc[1] += b_factor
+            acc[2] += 1
 
-            # Pokud to není mezera, našli jsme alternativní pozici
-            if alt_loc != ' ':
-                chain = line[21].strip() or "?"
-                resseq_raw = line[22:26].strip()
-                resname = line[17:20].strip()
-
-                try:
-                    resseq = int(resseq_raw)
-                except ValueError:
-                    continue
-
-                # Sloupce 55-60 (index 54:60) pro Occupancy
-                try:
-                    occupancy = float(line[54:60].strip())
-                except ValueError:
-                    occupancy = 1.0
-
-                # Sloupce 61-66 (index 60:66) pro B-faktor
-                try:
-                    b_factor = float(line[60:66].strip())
-                except ValueError:
-                    b_factor = 0.0
-
-                # Unikátní klíč pro konkrétní aminokyselinu
-                key = (chain, resseq, resname)
-
-                if key not in altloc_data:
-                    altloc_data[key] = {}
-
-                if alt_loc not in altloc_data[key]:
-                    altloc_data[key][alt_loc] = {
-                        "occupancy": round(occupancy * 100, 1),
-                        "bFactor": b_factor
-                    }
-
-    # Nyní to přetavíme do pole pro Frontend
-    result_residues = []
-    for (chain, resseq, resname), alt_locs in altloc_data.items():
-        if len(alt_locs) > 0:
-            result_residues.append({
-                "chain": chain,
-                "resseq": resseq,
-                "resname": resname,
-                "altLocs": alt_locs
-            })
-
-    # Seřadíme podle řetězce a čísla zbytku
-    result_residues.sort(key=lambda x: (x["chain"], x["resseq"]))
-
-    if result_residues:
-        blocks = []
-        current_block = [result_residues[0]]
-
-        # 1. Seskládáme rezidua do bloků (pokud po sobě následují v číslování)
-        for i in range(1, len(result_residues)):
-            prev_res = current_block[-1]
-            curr_res = result_residues[i]
-
-            if curr_res["chain"] == prev_res["chain"] and curr_res["resseq"] == prev_res["resseq"] + 1:
-                current_block.append(curr_res)
-            else:
-                blocks.append(current_block)
-                current_block = [curr_res]
-
-        blocks.append(current_block)
-
-        # 2. Pro každý blok určíme vítěznou trasu
-        for block in blocks:
-            paths_stats = {}
-
-            # Nasbíráme součty z celého bloku
-            for res in block:
-                for alt, info in res["altLocs"].items():
-                    if alt not in paths_stats:
-                        paths_stats[alt] = {"occ": 0.0, "bfact": 0.0, "count": 0}
-                    paths_stats[alt]["occ"] += info["occupancy"]
-                    paths_stats[alt]["bfact"] += info["bFactor"]
-                    paths_stats[alt]["count"] += 1
-
-            best_alt = None
-            best_occ = -1.0
-            best_bfact = float('inf')
-
-            # Spočítáme průměry a vybereme vítěze pro daný řetězec
-            for alt, stats in paths_stats.items():
-                avg_occ = stats["occ"] / stats["count"]
-                avg_bfact = stats["bfact"] / stats["count"]
-
-                # Vyhrává vyšší occupancy. Pokud je 50 na 50 (remíza), vyhrává nižší B-faktor!
-                if avg_occ > best_occ:
-                    best_occ = avg_occ
-                    best_bfact = avg_bfact
-                    best_alt = alt
-                elif avg_occ == best_occ:
-                    if avg_bfact < best_bfact:
-                        best_bfact = avg_bfact
-                        best_alt = alt
-
-            # 3. Zapíšeme vítěznou volbu do dat pro frontend
-            for res in block:
-                # Ošetření: zkontrolujeme, zda tuto trasu reziduum reálně obsahuje
-                if best_alt in res["altLocs"]:
-                    res["recommended_alt"] = best_alt
-                else:
-                    # Fallback na lokální maximum, pokud by vítězná trasa u tohoto rezidua nebyla
-                    local_best = max(res["altLocs"].keys(),
-                                     key=lambda k: (res["altLocs"][k]["occupancy"], -res["altLocs"][k]["bFactor"]))
-                    res["recommended_alt"] = local_best
-    # -------------------------------------------------------------------
-
-    # Vracíme obohacený JSON
-    return {
-        "models": models,  # Přidáno: Pole s čísly modelů (např. [1, 2, 3])
-        "hasSymmetry": has_symmetry,  # Přidáno: True/False, pokud existuje BIOMT matice
-        "hasAltLocs": len(result_residues) > 0,
-        "residues": result_residues
+    residue_stats = {
+        key: {
+            letter: {"occupancy": occ / count, "bFactor": b / count}
+            for letter, (occ, b, count) in letters.items()
+        }
+        for key, letters in sums.items()
     }
+
+    order, atoms = _parse_altloc_geometry(pdb_text)
+    # Rezidua jen z dalších modelů geometrii prvního modelu nemají - rozhodne occupancy/B.
+    for key in residue_stats:
+        if key not in atoms:
+            atoms[key] = {}
+            order.setdefault(key[0], []).append(key)
+    recommended = _recommend_altlocs(residue_stats, order, atoms)
+
+    result_residues = []
+    for key in sorted(residue_stats, key=lambda k: (k[0], k[1], k[2])):
+        chain, resseq, _icode, resname = key
+        result_residues.append({
+            "chain": chain,
+            "resseq": resseq,
+            "resname": resname,
+            "altLocs": {
+                letter: {"occupancy": round(stats["occupancy"] * 100, 1), "bFactor": round(stats["bFactor"], 2)}
+                for letter, stats in residue_stats[key].items()
+            },
+            "recommended_alt": recommended[key],
+        })
+
+    return {
+        "models": models,  # Pole s čísly modelů (např. [1, 2, 3])
+        "hasSymmetry": has_symmetry,  # True/False, pokud existuje BIOMT matice
+        "hasAltLocs": len(result_residues) > 0,
+        "residues": result_residues,
+        "copyGroups": find_identical_chain_copies(pdb_text),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Identické kopie molekuly v jednom PDB (např. 3SKR: řetězce A a B jsou dvě
+# kopie téhož riboswitche v asymetrické jednotce, REMARK 350 je uvádí jako
+# dvě samostatné monomerní biologické jednotky). Inverzní operace k
+# rozbalení symetrie - uživatel si může ponechat jen jednu kopii.
+# ---------------------------------------------------------------------------
+
+_NON_POLYMER_RESNAMES = {"HOH", "WAT", "SOL", "DOD"}
+
+
+def _chain_sequences(pdb_text: str) -> Tuple[Dict[str, Tuple[str, ...]], bool]:
+    """Sekvence řetězců: SEQRES, pokud je v souboru, jinak pozorovaná rezidua."""
+    seqres: Dict[str, List[str]] = {}
+    for line in pdb_text.splitlines():
+        if line.startswith("SEQRES"):
+            seqres.setdefault(line[11].strip() or "?", []).extend(line[19:].split())
+    if seqres:
+        return {chain: tuple(names) for chain, names in seqres.items()}, True
+
+    observed: Dict[str, List[str]] = {}
+    seen = set()
+    for line in pdb_text.splitlines():
+        if line.startswith("ENDMDL"):
+            break
+        if not line.startswith("ATOM"):
+            continue
+        chain = line[21].strip() or "?"
+        key = (chain, line[22:27])
+        if key in seen:
+            continue
+        seen.add(key)
+        observed.setdefault(chain, []).append(line[17:20].strip())
+    return {chain: tuple(names) for chain, names in observed.items()}, False
+
+
+def _biomolecule_chains(pdb_text: str) -> List[Set[str]]:
+    """Řetězce jednotlivých BIOMOLECULE z REMARK 350 (APPLY THE FOLLOWING TO CHAINS)."""
+    units: List[Set[str]] = []
+    for line in pdb_text.splitlines():
+        if not line.startswith("REMARK 350"):
+            continue
+        text = line[10:].strip()
+        if text.startswith("BIOMOLECULE:"):
+            units.append(set())
+        elif units and ("APPLY THE FOLLOWING TO CHAINS:" in text or text.startswith("AND CHAINS:")):
+            listed = text.split(":", 1)[1]
+            units[-1].update(c.strip() for c in listed.split(",") if c.strip())
+    return units
+
+
+def find_identical_chain_copies(pdb_text: str) -> List[Dict[str, Any]]:
+    """
+    Skupiny řetězců se stejnou sekvencí. Ke každému řetězci statistiky
+    polymeru (pozorovaná rezidua, atomy, průměrný B-faktor a occupancy) a
+    počet navázaných heteroskupin (ionty/ligandy/vody se stejným chain ID).
+    Doporučená kopie: nejúplnější, pak nejnižší průměrný B-faktor, pak
+    nejvyšší occupancy.
+    """
+    sequences, from_seqres = _chain_sequences(pdb_text)
+    groups: Dict[Tuple[str, ...], List[str]] = {}
+    for chain, sequence in sequences.items():
+        if len(sequence) >= 2:
+            groups.setdefault(sequence, []).append(chain)
+    groups = {seq: chains for seq, chains in groups.items() if len(chains) > 1}
+    if not groups:
+        return []
+
+    stats: Dict[str, Dict[str, Any]] = {}
+    for line in pdb_text.splitlines():
+        if line.startswith("ENDMDL"):
+            break
+        if not line.startswith(("ATOM", "HETATM")):
+            continue
+        chain = line[21].strip() or "?"
+        if chain not in sequences:
+            continue
+        resname = line[17:20].strip()
+        entry = stats.setdefault(chain, {"residues": set(), "atoms": 0, "b": 0.0, "occ": 0.0, "hetero": set()})
+        is_polymer = line.startswith("ATOM") or (resname in sequences[chain] and resname not in _NON_POLYMER_RESNAMES)
+        if not is_polymer:
+            entry["hetero"].add(line[17:27])
+            continue
+        entry["residues"].add(line[22:27])
+        entry["atoms"] += 1
+        try:
+            entry["b"] += float(line[60:66])
+        except ValueError:
+            pass
+        try:
+            entry["occ"] += float(line[54:60])
+        except ValueError:
+            entry["occ"] += 1.0
+
+    units = _biomolecule_chains(pdb_text)
+    result = []
+    for sequence, chains in groups.items():
+        rows = []
+        for chain in chains:
+            entry = stats.get(chain)
+            if not entry or not entry["atoms"]:
+                continue
+            rows.append({
+                "chain": chain,
+                "observedResidues": len(entry["residues"]),
+                "atoms": entry["atoms"],
+                "bFactor": round(entry["b"] / entry["atoms"], 1),
+                "occupancy": round(entry["occ"] / entry["atoms"] * 100, 1),
+                "heteroGroups": len(entry["hetero"]),
+            })
+        if len(rows) < 2:
+            continue
+        best = min(rows, key=lambda r: (-r["observedResidues"], -r["atoms"], r["bFactor"], -r["occupancy"], r["chain"]))
+        in_units = [next((i for i, unit in enumerate(units) if r["chain"] in unit), None) for r in rows]
+        result.append({
+            "chains": rows,
+            "recommended": best["chain"],
+            "sequenceLength": len(sequence),
+            # REMARK 350 řadí každou kopii do jiné biologické jednotky.
+            "separateBiologicalUnits": None not in in_units and len(set(in_units)) == len(rows),
+            "fromSeqres": from_seqres,
+        })
+    return result
 
 
 def clean_pdb_altlocs(pdb_text: str, user_selection: dict) -> str:
@@ -949,15 +1198,24 @@ def clean_pdb_altlocs(pdb_text: str, user_selection: dict) -> str:
     return '\n'.join(cleaned_lines)
 
 
-def process_structure(pdb_text: str, target_model: int, apply_symmetry: bool, selection: dict) -> str:
+def process_structure(
+    pdb_text: str,
+    target_model: int,
+    apply_symmetry: bool,
+    selection: dict,
+    remove_chains: Optional[List[str]] = None,
+) -> str:
     """
     Kombinovaná funkce pro kompletní fyzickou přípravu PDB souboru:
     1. Ponechá pouze vybraný MODEL (např. NMR ensemble).
     2. Vymaže nevybrané alternativní pozice a upraví obsazenost na 1.0.
-    3. Pokud apply_symmetry=True, vybuduje plnou biologickou jednotku (Biological Assembly)
+    3. Odstraní řetězce z remove_chains (nechtěné identické kopie molekuly,
+       viz find_identical_chain_copies) včetně jejich iontů/ligandů/vod.
+    4. Pokud apply_symmetry=True, vybuduje plnou biologickou jednotku (Biological Assembly)
        pomocí BIOMT matic a matematicky dopočítá atomy.
     """
     lines = pdb_text.splitlines()
+    removed_chains = {c.strip() or "?" for c in (remove_chains or [])}
 
     # --- KROK 1: Přečtení BIOMT matic z REMARK 350 ---
     matrices = {}
@@ -1003,6 +1261,8 @@ def process_structure(pdb_text: str, target_model: int, apply_symmetry: bool, se
         if in_model and (line.startswith("ATOM  ") or line.startswith("HETATM")):
             alt_loc = line[16]
             chain = line[21]
+            if (chain.strip() or "?") in removed_chains:
+                continue
             resseq = line[22:26].strip()
             resname = line[17:20].strip()
 

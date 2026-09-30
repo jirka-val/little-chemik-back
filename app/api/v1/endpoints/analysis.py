@@ -5,13 +5,18 @@ from fastapi import APIRouter
 from fastapi.concurrency import run_in_threadpool
 
 from pydantic import BaseModel
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from app.core.exceptions import ExternalServiceError, InternalError, RemoteMoleculeNotFoundError
 from app.core.http_client import external_http_client
 from app.workspaces.manager import workspace_manager
 # ZMĚNA 1: Importujeme novou funkci process_structure místo původní clean_pdb_altlocs
-from app.services.analysis_service import build_sequence_tokens, analyze_pdb_altlocs, process_structure
+from app.services.analysis_service import (
+    build_sequence_tokens,
+    analyze_pdb_altlocs,
+    find_altloc_selection_breaks,
+    process_structure,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -21,6 +26,12 @@ router = APIRouter()
 class StructurePrepRequest(BaseModel):
     model: int = 1
     apply_symmetry: bool = False
+    selection: Dict[str, str] = {}
+    # Řetězce k odstranění - nechtěné identické kopie molekuly (viz copyGroups v /altlocs).
+    remove_chains: List[str] = []
+
+
+class AltlocSelectionRequest(BaseModel):
     selection: Dict[str, str] = {}
 
 
@@ -107,9 +118,11 @@ async def analyze_remote_pdb(pdb_code: str, chain: str | None = None, fill_gaps:
                 resname = alt_item.get("resname", "")
                 key = f"{chain_id}_{resseq}_{resname}"
 
+                # Stejné doporučení jako v AltLoc panelu (geometrie, pak
+                # occupancy/B) - dřív se tu brala prostě první varianta.
                 alt_locs_dict = alt_item.get("altLocs", {})
                 variants = list(alt_locs_dict.keys())
-                chosen_variant = variants[0] if variants else None
+                chosen_variant = alt_item.get("recommended_alt") or (variants[0] if variants else None)
 
                 if key and chosen_variant:
                     auto_selection[key] = chosen_variant
@@ -178,6 +191,28 @@ async def analyze_altlocs(workspace_id: str):
         raise InternalError("Internal server error while analyzing structure.")
 
 
+@router.post("/altloc-breaks/{workspace_id}", summary="Zlomy řetězce, které vytvoří daný výběr AltLocs")
+async def check_altloc_breaks(workspace_id: str, payload: AltlocSelectionRequest):
+    """
+    Pro výběr AltLoc variant vrátí místa, kde se řetězec chemicky přeruší
+    (O3'-P / C-N mimo vazebnou vzdálenost), ačkoli by jiná volba u dotčených
+    reziduí vazbu zachovala. Frontend podle toho ukáže varování před Apply.
+    """
+    workspace_manager.require_workspace(workspace_id)
+
+    try:
+        file_path = workspace_manager.get_file_path(workspace_id, "structure.pdb")
+        async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+            pdb_text = await f.read()
+
+        breaks = await run_in_threadpool(find_altloc_selection_breaks, pdb_text, payload.selection)
+        return {"breaks": breaks}
+
+    except Exception as e:
+        logger.exception(f"Error checking altloc breaks for workspace {workspace_id}: {str(e)}")
+        raise InternalError("Internal server error while checking AltLoc selection.")
+
+
 @router.post("/clean-altlocs/{workspace_id}", summary="Aplikuje výběr Modelu, Symetrie a AltLocs")
 async def apply_clean_altlocs(workspace_id: str, payload: StructurePrepRequest):
     """
@@ -206,7 +241,8 @@ async def apply_clean_altlocs(workspace_id: str, payload: StructurePrepRequest):
             pdb_text=pdb_text,
             target_model=payload.model,
             apply_symmetry=payload.apply_symmetry,
-            selection=payload.selection
+            selection=payload.selection,
+            remove_chains=payload.remove_chains,
         )
 
         # Přepsání PDB souboru vyčištěnou strukturou
