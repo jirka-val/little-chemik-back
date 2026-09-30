@@ -10,6 +10,7 @@ from app.core.exceptions import AppBaseException, BadRequestError, InternalError
 from app.services.pdb_service import PDBService, remove_residue_from_pdb
 from app.workspaces.manager import workspace_manager
 from app.services.structure.forge_service import ForgeStructureService
+from app.services.incidents import history as incident_history
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -28,6 +29,7 @@ async def upload_molecule(file: UploadFile = File(...)):
     try:
         workspace_id = await workspace_manager.create_from_upload(file)
         logger.info(f"Successfully created workspace {workspace_id} from {file.filename}")
+        await run_in_threadpool(incident_history.record_workspace_created, workspace_id, f"upload:{file.filename}")
 
         return {
             "workspace_id": workspace_id,
@@ -51,6 +53,7 @@ async def fetch_pdb_by_code(pdb_code: str):
 
         workspace_id = workspace_manager.create_from_string(pdb_content)
         logger.info(f"Successfully fetched and created workspace {workspace_id} for {pdb_code}")
+        await run_in_threadpool(incident_history.record_workspace_created, workspace_id, f"rcsb:{pdb_code}")
 
         return {
             "workspace_id": workspace_id,

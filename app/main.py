@@ -6,6 +6,7 @@ from app.core.logging import setup_logging
 from app.core.exceptions import AppBaseException, app_exception_handler
 from app.core.config import settings
 from app.core.http_client import close_external_http_client
+from app.core.incident_middleware import IncidentJournalMiddleware
 
 # <-- NOVÉ: Import naší vytvořené uklízečky
 from app.workspaces.tasks.garbage_collector import cleanup_old_workspaces
@@ -31,7 +32,8 @@ app.add_middleware(
     expose_headers=["Content-Disposition"],
 )
 
-# ... horní část kódu zůstává stejná (importy, middleware, atd.) ...
+# Deník akcí a snímky struktury pro hlášení chyb (INCIDENT_REPORTS_ENABLED).
+app.add_middleware(IncidentJournalMiddleware)
 
 app.add_exception_handler(AppBaseException, app_exception_handler)
 

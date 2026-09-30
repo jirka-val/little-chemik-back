@@ -43,6 +43,19 @@ class Settings(BaseSettings):
     # bezpečnější výchozí stav než "otevřeno pro každého".
     ADMIN_TOKEN: str = ""
 
+    # Hlášení chyb (viz app/services/incidents/). Vypnutí přes .env
+    # INCIDENT_REPORTS_ENABLED=false vypne deník akcí, snímky PDB i příjem
+    # reportů. Reporty se ukládají jen se souhlasem uživatele, mimo
+    # temp_workspaces (ty maže garbage collector) - v Dockeru musí být
+    # INCIDENTS_DIR připojený jako volume, jinak zmizí s každým nasazením.
+    INCIDENT_REPORTS_ENABLED: bool = True
+    INCIDENTS_DIR: Path = BASE_DIR / "data" / "incidents"
+    # Strop pro všechny reporty dohromady; po jeho dosažení se nové reporty
+    # odmítají (nic se nemaže automaticky).
+    INCIDENTS_MAX_TOTAL_MB: int = 5000
+    # Strop pro jeden report - snímky PDB nad něj se vynechají (od nejstarších).
+    INCIDENT_MAX_MB: int = 300
+
     class Config:
         env_file = ".env"
         case_sensitive = True

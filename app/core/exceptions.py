@@ -18,6 +18,7 @@ opakující se případ.
 from fastapi import Request
 from fastapi.responses import JSONResponse
 import logging
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,11 @@ async def app_exception_handler(request: Request, exc: AppBaseException):
     # přesně v datech problém je, aniž by uživatel navíc poslal celou odpověď API.
     detail = f" | {exc.payload}" if exc.payload else ""
     logger.error(f"Chyba aplikace na {request.url.path}: {exc.message}{detail}")
+    if exc.status_code >= 500:
+        # Pro deník chyb (app/core/incident_middleware.py) - traceback včetně
+        # původní výjimky, kterou endpoint zabalil do InternalError.
+        request.state.incident_error_message = exc.message
+        request.state.incident_traceback = "".join(traceback.format_exception(exc))
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": exc.__class__.__name__, "code": exc.code, "message": exc.message, **exc.payload}

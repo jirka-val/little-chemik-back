@@ -21,3 +21,5 @@ data/pdb_files/
 
 # Env
 .env
+# Nahlášené chyby (runtime data, viz app/services/incidents/)
+data/incidents/
