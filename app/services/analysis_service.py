@@ -1280,6 +1280,8 @@ def process_structure(
             base_atoms.append(line)
 
     # --- KROK 3: Fyzické budování biologické jednotky a přečíslování ---
+    # Serial má v PDB jen 5 sloupců; nad 99999 se přetáčí (jako AMBER/FORGE),
+    # jinak by se posunuly všechny další sloupce (incident 20261001-061334-ce249e).
     final_lines = []
 
     if apply_symmetry and len(biomt_list) > 1:
@@ -1327,7 +1329,7 @@ def process_structure(
                     # Složení nového řádku zpět podle striktního PDB formátu
                     new_line = (
                             line[:6] +
-                            f"{atom_serial:5d}" +
+                            f"{atom_serial % 100000:5d}" +
                             line[11:21] +
                             new_ch +
                             line[22:30] +
@@ -1343,7 +1345,7 @@ def process_structure(
         atom_serial = 1
         for line in base_atoms:
             try:
-                new_line = line[:6] + f"{atom_serial:5d}" + line[11:]
+                new_line = line[:6] + f"{atom_serial % 100000:5d}" + line[11:]
                 final_lines.append(new_line)
                 atom_serial += 1
             except Exception:

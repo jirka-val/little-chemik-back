@@ -180,10 +180,13 @@ class PDBService:
                 else:
                     element = clean_name[0].upper()
 
-        # Sestavení řádku přesně na fixní pozice znaků
+        # Sestavení řádku přesně na fixní pozice znaků. Serial má v PDB jen
+        # 5 sloupců - nad 99999 by posunul všechny další sloupce a topologie
+        # i crd by takové řádky tiše zahodily (incident 20261001-061334-ce249e),
+        # proto přetáčíme jako forge_service/AMBER.
         return (
             f"{record_type:<6}"
-            f"{new_serial:>5} "
+            f"{new_serial % 100000:>5} "
             f"{name:<4}"
             f"{alt_loc:1}"
             f"{res_name:>3} "
@@ -271,7 +274,7 @@ class PDBService:
 
             return (
                 f"HETATM"
-                f"{a_id:>5} "
+                f"{a_id % 100000:>5} "
                 f"{ep_n:<4}"
                 f" "
                 f"{r_n:>3} "
