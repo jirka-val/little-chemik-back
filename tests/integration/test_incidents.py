@@ -120,6 +120,24 @@ def test_admin_list_and_download(client, incidents_tmp):
     assert download.headers["content-type"] == "application/zip"
 
 
+def test_admin_delete(client, incidents_tmp):
+    incident_id = client.post("/api/incidents", json={"kind": "manual", "description": "x", "consent": True}).json()["incident_id"]
+    admin = {"X-Admin-Token": "secret"}
+
+    assert client.delete(f"/api/incidents/{incident_id}").status_code == 403
+    assert (incidents_tmp / incident_id).is_dir()
+
+    response = client.delete(f"/api/incidents/{incident_id}", headers=admin)
+    assert response.status_code == 200
+    assert response.json() == {"deleted": incident_id}
+    assert not (incidents_tmp / incident_id).exists()
+    assert client.get("/api/incidents", headers=admin).json()["incidents"] == []
+
+    assert client.delete(f"/api/incidents/{incident_id}", headers=admin).status_code == 404
+    # ID mimo formát (např. pokus o cestu ven ze složky) se nesmaže
+    assert client.delete("/api/incidents/..", headers=admin).status_code in (404, 405)
+
+
 def test_storage_limit_rejects_new_reports(client, incidents_tmp, monkeypatch):
     monkeypatch.setattr(settings, "INCIDENTS_MAX_TOTAL_MB", 0)
     response = client.post("/api/incidents", json={"kind": "manual", "description": "x", "consent": True})

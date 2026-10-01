@@ -9,6 +9,7 @@ z FORGE_URL (výchozí http://147.251.115.223).
     python scripts/incidents.py list
     python scripts/incidents.py download 20261001-101500-abc123
     python scripts/incidents.py download --all --out problem-pdb/incidents
+    python scripts/incidents.py delete 20261001-101500-abc123   # vyřešený report
 
 Stažený report se rovnou rozbalí do složky <out>/<id>/. Jen standardní knihovna.
 """
@@ -26,8 +27,10 @@ from pathlib import Path
 DEFAULT_URL = "http://147.251.115.223"
 
 
-def _request(base_url: str, token: str, path: str) -> bytes:
-    request = urllib.request.Request(f"{base_url.rstrip('/')}{path}", headers={"X-Admin-Token": token})
+def _request(base_url: str, token: str, path: str, method: str = "GET") -> bytes:
+    request = urllib.request.Request(
+        f"{base_url.rstrip('/')}{path}", headers={"X-Admin-Token": token}, method=method
+    )
     try:
         with urllib.request.urlopen(request, timeout=120) as response:
             return response.read()
@@ -61,6 +64,11 @@ def download(base_url: str, token: str, incident_id: str, out_dir: Path) -> Path
     return target
 
 
+def delete(base_url: str, token: str, incident_id: str) -> None:
+    _request(base_url, token, f"/api/incidents/{incident_id}", method="DELETE")
+    print(f"{incident_id} deleted")
+
+
 def _token_from_env_file() -> str:
     env_file = Path(__file__).resolve().parent.parent / ".env"
     try:
@@ -75,7 +83,7 @@ def _token_from_env_file() -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="List / download FORGE error reports.")
+    parser = argparse.ArgumentParser(description="List / download / delete FORGE error reports.")
     parser.add_argument("--url", default=os.environ.get("FORGE_URL", DEFAULT_URL))
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("list", help="list all reports")
@@ -83,6 +91,8 @@ def main() -> None:
     dl.add_argument("ids", nargs="*", help="report IDs")
     dl.add_argument("--all", action="store_true", help="download every report")
     dl.add_argument("--out", default="incidents", help="target directory (default ./incidents)")
+    rm = sub.add_parser("delete", help="delete resolved reports on the server (no --all on purpose)")
+    rm.add_argument("ids", nargs="+", help="report IDs")
     args = parser.parse_args()
 
     token = os.environ.get("FORGE_ADMIN_TOKEN", "") or _token_from_env_file()
@@ -91,6 +101,10 @@ def main() -> None:
 
     if args.command == "list":
         list_incidents(args.url, token)
+        return
+    if args.command == "delete":
+        for incident_id in args.ids:
+            delete(args.url, token, incident_id)
         return
 
     ids = list(args.ids)

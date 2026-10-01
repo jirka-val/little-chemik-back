@@ -6,6 +6,7 @@ Hlášení chyb od uživatelů (viz app/services/incidents/store.py).
 - POST /api/incidents                 - odeslání reportu; jen se souhlasem
 - GET  /api/incidents                 - (admin) seznam reportů
 - GET  /api/incidents/{id}/download   - (admin) celý report jako ZIP
+- DELETE /api/incidents/{id}          - (admin) smaže vyřešený report
 
 Admin endpointy chrání Settings.ADMIN_TOKEN (hlavička X-Admin-Token), stejně
 jako přeřazování force fieldů.
@@ -113,3 +114,11 @@ async def download_incident(incident_id: str, x_admin_token: str = Header(defaul
         media_type="application/zip",
         headers={"Content-Disposition": f"attachment; filename=incident_{incident_id}.zip"},
     )
+
+
+@router.delete("/{incident_id}", summary="(admin) Smaže vyřešený report")
+async def delete_incident(incident_id: str, x_admin_token: str = Header(default="")):
+    _require_admin(x_admin_token)
+    if not await run_in_threadpool(store.delete_incident, incident_id):
+        raise NotFoundError(f"Incident {incident_id} not found.")
+    return {"deleted": incident_id}

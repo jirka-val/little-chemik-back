@@ -15,7 +15,8 @@ kterou aplikace nepoznala, ale uživatel ji vidí). Každý incident je složka
         current/           - aktuální soubory workspace v okamžiku reportu
 
 Nic se nemaže automaticky: po dosažení INCIDENTS_MAX_TOTAL_MB se nové
-reporty odmítnou a v logu je chyba, ať si toho správce všimne.
+reporty odmítnou a v logu je chyba, ať si toho správce všimne. Vyřešené
+reporty maže správce ručně (DELETE /api/incidents/{id}, scripts/incidents.py delete).
 """
 
 from __future__ import annotations
@@ -185,3 +186,14 @@ def incident_zip(incident_id: str) -> Optional[bytes]:
             if file.is_file():
                 zf.write(file, f"{incident_id}/{file.relative_to(path).as_posix()}")
     return buffer.getvalue()
+
+
+def delete_incident(incident_id: str) -> bool:
+    if not _INCIDENT_ID_RE.match(incident_id):
+        return False
+    path = incidents_dir() / incident_id
+    if not path.is_dir():
+        return False
+    shutil.rmtree(path)
+    logger.info(f"Incident {incident_id} deleted")
+    return True
