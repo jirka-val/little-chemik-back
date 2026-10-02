@@ -4,6 +4,7 @@
 .idea
 .venv
 .pytest_cache
+.ruff_cache
 **/__pycache__
 temp_workspaces
 data/incidents
