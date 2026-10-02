@@ -28,7 +28,7 @@ class TestSolvationCreatesBox:
     def test_solvation_produces_periodic_box_and_waters(self, client, offline_forge_ff):
         ws_id = client.get("/api/molecules/fetch-pdb/1RNA").json()["workspace_id"]
 
-        response = client.post("/api/validation/prepare", json={
+        response = client.post(f"/api/sidechains/start/{ws_id}", json={
             "workspace_id": ws_id,
             "ff_selections": {
                 "R": {"display_name": "OL3"},

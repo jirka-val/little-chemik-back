@@ -167,26 +167,6 @@
     },
     "type": "object"
    },
-   "Body_add_hydrogens_api_molecules_add_hydrogens__workspace_id__post": {
-    "properties": {
-     "ff_selections": {
-      "additionalProperties": true,
-      "type": "object"
-     },
-     "optimize": {
-      "default": false,
-      "type": "boolean"
-     },
-     "ph": {
-      "default": 7.0,
-      "type": "number"
-     }
-    },
-    "required": [
-     "ff_selections"
-    ],
-    "type": "object"
-   },
    "Body_upload_molecule_api_molecules_upload_post": {
     "properties": {
      "file": {
@@ -1629,53 +1609,6 @@
     ]
    }
   },
-  "/api/molecules/add-hydrogens/{workspace_id}": {
-   "post": {
-    "deprecated": true,
-    "operationId": "add_hydrogens_api_molecules_add_hydrogens__workspace_id__post",
-    "parameters": [
-     {
-      "in": "path",
-      "name": "workspace_id",
-      "required": true,
-      "schema": {
-       "type": "string"
-      }
-     }
-    ],
-    "requestBody": {
-     "content": {
-      "application/json": {
-       "schema": {
-        "$ref": "#/components/schemas/Body_add_hydrogens_api_molecules_add_hydrogens__workspace_id__post"
-       }
-      }
-     },
-     "required": true
-    },
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
-       }
-      }
-     }
-    },
-    "tags": [
-     "molecules"
-    ]
-   }
-  },
   "/api/molecules/fetch-pdb/{pdb_code}": {
    "get": {
     "operationId": "fetch_pdb_by_code_api_molecules_fetch_pdb__pdb_code__get",
@@ -2236,42 +2169,6 @@
       "content": {
        "application/json": {
         "schema": {}
-       }
-      }
-     }
-    },
-    "tags": [
-     "validation"
-    ]
-   }
-  },
-  "/api/validation/prepare": {
-   "post": {
-    "operationId": "prepare_molecule_api_validation_prepare_post",
-    "requestBody": {
-     "content": {
-      "application/json": {
-       "schema": {
-        "$ref": "#/components/schemas/PreparationRequest"
-       }
-      }
-     },
-     "required": true
-    },
-    "responses": {
-     "200": {
-      "content": {
-       "application/json": {
-        "schema": {}
-       }
-      }
-     },
-     "422": {
-      "content": {
-       "application/json": {
-        "schema": {
-         "$ref": "#/components/schemas/HTTPValidationError"
-        }
        }
       }
      }

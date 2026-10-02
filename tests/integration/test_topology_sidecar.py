@@ -1,5 +1,5 @@
 """
-Integrační test pro propojení /api/validation/prepare -> structure.forge_meta.json
+Integrační test pro propojení /api/sidechains/start -> structure.forge_meta.json
 -> TopologyService._load_forge_meta (Fáze 6).
 
 Záměrně NEspouští celou generate_topology()/AMBER_topology pipeline - ta by si
@@ -22,7 +22,7 @@ class TestSidecarRoundTrip:
         self, client, offline_forge_ff, make_workspace, pdb_rna_gap
     ):
         ws_id = make_workspace(pdb_rna_gap)
-        response = client.post("/api/validation/prepare", json={
+        response = client.post(f"/api/sidechains/start/{ws_id}", json={
             "workspace_id": ws_id,
             "ff_selections": {"R": {"display_name": "OL3"}},
             "ph": 7.0,

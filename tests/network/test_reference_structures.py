@@ -7,7 +7,7 @@ minimální smoke sada pro přijetí nové verze builderu:
 - jeden příklad se strukturálním iontem (2HO7 nebo 6N65)
 - jeden očekávaný missing-DOF příklad
 
-Tyhle testy stahují ze RCSB (network) a pouští celý /api/validation/prepare
+Tyhle testy stahují ze RCSB (network) a pouští celý /api/sidechains/start
 pipeline. Používají `offline_forge_ff`, takže potřebují mít odpovídající
 silové pole už jednou stažené do data/ff_cache/ (přes IDA API) - jinak se
 korektně přeskočí. V tomhle repu je dnes lokálně k dispozici jen RNA/DNA
@@ -27,7 +27,7 @@ def _fetch_and_prepare(client, offline_forge_ff, pdb_code: str, ff_selections: d
     assert fetch.status_code == 200, f"Could not fetch {pdb_code} from RCSB"
     ws_id = fetch.json()["workspace_id"]
 
-    response = client.post("/api/validation/prepare", json={
+    response = client.post(f"/api/sidechains/start/{ws_id}", json={
         "workspace_id": ws_id,
         "ff_selections": ff_selections,
         "ph": 7.0,

@@ -1,9 +1,10 @@
 # app/api/v1/endpoints/sidechains.py
 """
-Interaktivní dostavování bezpečných side-chain větví (missing_dof z
-/api/validation/prepare, které builder umí bezpečně dostavět přes GUI slidery
-místo tvrdého 409 dead-endu) - viz app/builder/INTEGRATION_CONTRACT.md a
-app/services/structure/sidechain_service.py.
+Příprava struktury (FORGE builder) včetně interaktivního dostavování
+bezpečných side-chain větví (missing_dof), které builder umí dostavět přes GUI
+slidery místo tvrdého 409 dead-endu - viz app/builder/INTEGRATION_CONTRACT.md
+a app/services/structure/sidechain_service.py. Tohle je jediná cesta
+přípravy, kterou frontend používá.
 
 start -> libovolně mnoho update/optimize -> commit (nebo cancel). Mezi
 jednotlivými voláními drží stav sidechain_session_service (in-memory,
@@ -19,7 +20,7 @@ from fastapi import APIRouter
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
-from app.api.v1.endpoints.validation import PreparationRequest, _BOX_SHAPE_MAP, build_request_salt_specs
+from app.api.v1.schemas.preparation import BOX_SHAPE_MAP, PreparationRequest, build_request_salt_specs
 from app.core.exceptions import AppBaseException, InternalError
 from app.services.structure.reports import build_preparation_summary
 from app.services.structure.sidechain_service import sidechain_session_service
@@ -46,8 +47,8 @@ class SidechainOptimizeRequest(BaseModel):
 @router.post("/start/{workspace_id}", summary="Spustí přípravu; otevře GUI relaci, pokud narazí na bezpečný missing DOF")
 async def start_sidechain_session(workspace_id: str, request: PreparationRequest):
     """
-    Stejný vstup jako /api/validation/prepare. Pokud struktura žádnou
-    interaktivní volbu nepotřebuje, chová se identicky (rovnou hotovo).
+    Spustí kompletní přípravu (protonace, stavba atomů, solvatace, ionty).
+    Pokud struktura žádnou interaktivní volbu nepotřebuje, je rovnou hotovo.
     Jinak založí side-chain relaci a vrátí gui_payload pro slidery + jméno
     PDB souboru s počátečním FF-optimálním náhledem (pro první plné načtení
     do Mol* - další updaty už jdou přes malé coordinate patche z /update
@@ -72,7 +73,7 @@ async def start_sidechain_session(workspace_id: str, request: PreparationRequest
             ph=request.ph,
             add_solvent_and_ions=request.add_solvent,
             salts=build_request_salt_specs(request),
-            box_shape=_BOX_SHAPE_MAP.get(request.box_shape),
+            box_shape=BOX_SHAPE_MAP.get(request.box_shape),
             box_padding_angstrom=request.box_padding_nm * 10.0,
             keep_crystal_waters=request.crystal_water_mode != "remove_all",
             crystal_water_mode=request.crystal_water_mode,
@@ -211,8 +212,8 @@ async def commit_sidechains(workspace_id: str):
             "preparation_summary": build_preparation_summary(prepared),
         }
     except AppBaseException:
-        # ForgeMissingDOFError (další, ne-bezpečný missing DOF) apod. - stejný
-        # 409 kontrakt jako /api/validation/prepare, session zůstává zachovaná.
+        # ForgeMissingDOFError (další, ne-bezpečný missing DOF) apod. - 409
+        # přes globální handler, session zůstává zachovaná.
         raise
     except Exception as e:
         logger.exception(f"Sidechain commit failed for workspace {workspace_id}: {e}")

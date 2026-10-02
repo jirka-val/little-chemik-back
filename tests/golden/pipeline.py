@@ -8,7 +8,7 @@ Guided mode, step by step (see little-chemik-front/src):
   3. auto-apply recommended    altloc-panel.ts::autoApplyRecommended -> POST /analysis/clean-altlocs
   4. force fields              GET /forcefields?mode=guided, take every `is_default` entry
   5. validation                POST /validation/check
-  6. prepare                   hydrogen-panel.ts -> POST /validation/prepare
+  6. prepare                   hydrogen-panel.ts -> POST /sidechains/start (+ /commit)
   7. topology                  export-modal.ts -> POST /topology/{ws}/generate
   8. export                    POST /download/{ws}/export (pdb + prmtop + crd + mdin as ZIP)
 
