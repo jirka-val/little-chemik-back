@@ -3,7 +3,7 @@
 #   0. backend lint (ruff)
 #   1. backend unit + integration tests (incl. the OpenAPI contract snapshot)
 #   2. golden pipeline tests (whole preparation pipeline vs. recorded baseline)
-#   3. frontend type check and production build
+#   3. frontend type check, DOM id contract and production build
 #
 # Usage (from anywhere):  bash little-chemik-back/scripts/check_all.sh [--skip-golden]
 set -euo pipefail
@@ -34,6 +34,8 @@ fi
 cd "$FRONT"
 echo "== frontend: type check"
 node_modules/.bin/tsc --noEmit
+echo "== frontend: DOM id contract"
+node scripts/check-dom-contract.mjs > /dev/null
 echo "== frontend: build"
 node_modules/.bin/vite build --outDir "$(mktemp -d)" --emptyOutDir > /dev/null
 
