@@ -1,0 +1,62 @@
+{
+ "export/amber_nvt_production_100ns.mdin": {
+  "atoms": 0,
+  "lines": 12,
+  "sha256": "e18fcaf3c58e6f5bc60ee48ce2820bd3ec2a28c4bd821baf4288bbef179d4acf"
+ },
+ "export/structure.crd": {
+  "atoms": 0,
+  "lines": 4724,
+  "sha256": "c59abb64dc9f4957c07c42126f3cb78e8ca8274c50056188f7d27d416ffde65f"
+ },
+ "export/structure.pdb": {
+  "atoms": 9442,
+  "lines": 9444,
+  "sha256": "2498c8bda5d2a2c49ef10ffc8fc05dcd522cc5b381d627c76b5f4848320ff04c"
+ },
+ "export/structure.prmtop": {
+  "atoms": 0,
+  "lines": 20436,
+  "sha256": "32dbf36b1bcd6f65fe7d6bc7ed9ceebc54957f6b7e3097571981df69f1e86161"
+ },
+ "prepared.pdb": {
+  "atoms": 9442,
+  "lines": 9445,
+  "sha256": "94f32750e853ee6d125030a4104b5c3e2f79b317b325f33dddf7703c65097f5c"
+ },
+ "production.mdin": {
+  "atoms": 0,
+  "lines": 12,
+  "sha256": "e18fcaf3c58e6f5bc60ee48ce2820bd3ec2a28c4bd821baf4288bbef179d4acf"
+ },
+ "structure.crd": {
+  "atoms": 0,
+  "lines": 4724,
+  "sha256": "c59abb64dc9f4957c07c42126f3cb78e8ca8274c50056188f7d27d416ffde65f"
+ },
+ "structure.forge_meta.json": {
+  "atoms": 0,
+  "lines": 0,
+  "sha256": "93781e58c5e456eda7a63f7090df3bae5dde8af771e7bb0c62ca4306f81a7e5b"
+ },
+ "structure.pdb": {
+  "atoms": 9442,
+  "lines": 9444,
+  "sha256": "2498c8bda5d2a2c49ef10ffc8fc05dcd522cc5b381d627c76b5f4848320ff04c"
+ },
+ "structure.prmtop": {
+  "atoms": 0,
+  "lines": 20436,
+  "sha256": "32dbf36b1bcd6f65fe7d6bc7ed9ceebc54957f6b7e3097571981df69f1e86161"
+ },
+ "viewer_light_false.pdb": {
+  "atoms": 9442,
+  "lines": 9444,
+  "sha256": "2498c8bda5d2a2c49ef10ffc8fc05dcd522cc5b381d627c76b5f4848320ff04c"
+ },
+ "viewer_light_true.pdb": {
+  "atoms": 658,
+  "lines": 659,
+  "sha256": "b91129c0ce85ad03874e657c3dcb611451a45a1e0009b0e2825d939eed5985ef"
+ }
+}

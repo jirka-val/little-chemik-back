@@ -1,0 +1,62 @@
+{
+ "export/amber_nvt_production_100ns.mdin": {
+  "atoms": 0,
+  "lines": 12,
+  "sha256": "e18fcaf3c58e6f5bc60ee48ce2820bd3ec2a28c4bd821baf4288bbef179d4acf"
+ },
+ "export/structure.crd": {
+  "atoms": 0,
+  "lines": 18042,
+  "sha256": "2d44f8e29d45af762e50f5f258359819cda16f60832b7e163feeefa3c67a759c"
+ },
+ "export/structure.pdb": {
+  "atoms": 36078,
+  "lines": 36080,
+  "sha256": "395f177da3baeac979e4c354c69eb14d1062984d63a602721d4053117aceb3d9"
+ },
+ "export/structure.prmtop": {
+  "atoms": 0,
+  "lines": 76164,
+  "sha256": "cf64047724d587898e9a7eaa4cd65c736359ed86edbcbefead3cd6a7cfced59b"
+ },
+ "prepared.pdb": {
+  "atoms": 36078,
+  "lines": 36081,
+  "sha256": "e881b8bc7dc5eab0555809420d2552734feffffd447a41432609ef7added6785"
+ },
+ "production.mdin": {
+  "atoms": 0,
+  "lines": 12,
+  "sha256": "e18fcaf3c58e6f5bc60ee48ce2820bd3ec2a28c4bd821baf4288bbef179d4acf"
+ },
+ "structure.crd": {
+  "atoms": 0,
+  "lines": 18042,
+  "sha256": "2d44f8e29d45af762e50f5f258359819cda16f60832b7e163feeefa3c67a759c"
+ },
+ "structure.forge_meta.json": {
+  "atoms": 0,
+  "lines": 0,
+  "sha256": "a76a2111da73f332512ce20cc259d9ff3432d3d65efb84f0384c4c4ac88a7aa6"
+ },
+ "structure.pdb": {
+  "atoms": 36078,
+  "lines": 36080,
+  "sha256": "395f177da3baeac979e4c354c69eb14d1062984d63a602721d4053117aceb3d9"
+ },
+ "structure.prmtop": {
+  "atoms": 0,
+  "lines": 76164,
+  "sha256": "cf64047724d587898e9a7eaa4cd65c736359ed86edbcbefead3cd6a7cfced59b"
+ },
+ "viewer_light_false.pdb": {
+  "atoms": 36078,
+  "lines": 36080,
+  "sha256": "395f177da3baeac979e4c354c69eb14d1062984d63a602721d4053117aceb3d9"
+ },
+ "viewer_light_true.pdb": {
+  "atoms": 2169,
+  "lines": 2170,
+  "sha256": "6a5404cf853f6dd781ce4007437443169fc83ce71d8aed347f7b49426b50fa44"
+ }
+}

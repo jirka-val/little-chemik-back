@@ -1,0 +1,16 @@
+{
+ "altlocs": "efad25efa6b15664a4c06cca1b94a9db2e76d30fc4d5fb425cb1a99c293c45f9",
+ "clean_altlocs": "10318675687d835dc7777b2c92074e3a28f29259ce4a26f57770b46b0c83684e",
+ "clean_altlocs_request": "861331a350ef0e568fb813ce796c917febff440b81b1f01cf37fe473f030cdfd",
+ "export_zip": "9aa54ebfa2e210217df6680c88a9fcb503b3aea84ff0d4fb453730d415c2d4b1",
+ "ff_selections": "b54427c45608df2a299bda3726b72a3fb74b8e42fdcc9941ae51bb5e669f45f6",
+ "forcefields": "d255cb703a50f9aca2084d8e0f8700e26123046146308fd94bbeacab39b78927",
+ "mdin_headers": "8fc405c78bcd131c4463bb56a4513964f9cd7f5eb64dd8aa7c1c89a34dc7e5d7",
+ "prepare": "37b5a7b44abebe613bdb4cc9cbe26b1a45fe86839c48b90e11fdc01fe467bbf1",
+ "sequence_after_clean": "b586fc081cfa11ad27c2b7417fdfac6d1a71490acee92d7fedeb79960c9d2f55",
+ "sequence_initial": "b586fc081cfa11ad27c2b7417fdfac6d1a71490acee92d7fedeb79960c9d2f55",
+ "sequence_prepared": "43800279256705d350c329a2a2aa9b6f34bc409748e9e3015993cb217533b36d",
+ "topology": "b537b9611a05e5bb2bec59d748b7aacd77d2067556f1754a811c08c5503044c0",
+ "upload": "1ee00f1fec89ccc26ca42db4ba5a467fa37fdb2cca121e924996df394d88ef19",
+ "validation_check": "389f15ef8c4949f775b9a68cef55539deefbcd03d4423c7992dd8e8ba112191d"
+}

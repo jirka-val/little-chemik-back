@@ -1,0 +1,2289 @@
+{
+ "components": {
+  "schemas": {
+   "AltlocSelectionRequest": {
+    "properties": {
+     "selection": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "default": {},
+      "type": "object"
+     }
+    },
+    "type": "object"
+   },
+   "AmberMdinRequest": {
+    "properties": {
+     "barostat": {
+      "anyOf": [
+       {
+        "enum": [
+         "none",
+         "monte-carlo",
+         "berendsen"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "constraints": {
+      "default": "h-bonds",
+      "enum": [
+       "none",
+       "h-bonds",
+       "all-bonds"
+      ],
+      "type": "string"
+     },
+     "cut": {
+      "default": 10.0,
+      "type": "number"
+     },
+     "dt_fs": {
+      "default": 2.0,
+      "exclusiveMinimum": 0.0,
+      "type": "number"
+     },
+     "duration_ns": {
+      "default": 100.0,
+      "exclusiveMinimum": 0.0,
+      "type": "number"
+     },
+     "ensemble": {
+      "default": "NVT",
+      "enum": [
+       "NVE",
+       "NVT",
+       "NPT"
+      ],
+      "type": "string"
+     },
+     "gamma_ln": {
+      "default": 1.0,
+      "minimum": 0.0,
+      "type": "number"
+     },
+     "hmr": {
+      "default": false,
+      "type": "boolean"
+     },
+     "ioutfm": {
+      "default": 1,
+      "enum": [
+       0,
+       1
+      ],
+      "type": "integer"
+     },
+     "iwrap": {
+      "default": 1,
+      "enum": [
+       0,
+       1
+      ],
+      "type": "integer"
+     },
+     "log_interval_ps": {
+      "default": 10.0,
+      "exclusiveMinimum": 0.0,
+      "type": "number"
+     },
+     "ntxo": {
+      "default": 2,
+      "enum": [
+       1,
+       2
+      ],
+      "type": "integer"
+     },
+     "pres0": {
+      "default": 1.0,
+      "type": "number"
+     },
+     "restart_interval_ps": {
+      "default": 1000.0,
+      "exclusiveMinimum": 0.0,
+      "type": "number"
+     },
+     "run_type": {
+      "default": "new",
+      "enum": [
+       "new",
+       "continue"
+      ],
+      "type": "string"
+     },
+     "taup": {
+      "default": 2.0,
+      "type": "number"
+     },
+     "tautp": {
+      "default": 1.0,
+      "exclusiveMinimum": 0.0,
+      "type": "number"
+     },
+     "temp0": {
+      "default": 298.16,
+      "type": "number"
+     },
+     "thermostat": {
+      "anyOf": [
+       {
+        "enum": [
+         "none",
+         "langevin",
+         "berendsen",
+         "andersen"
+        ],
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "tol": {
+      "default": 1e-05,
+      "type": "number"
+     },
+     "traj_interval_ps": {
+      "default": 10.0,
+      "exclusiveMinimum": 0.0,
+      "type": "number"
+     },
+     "vrand": {
+      "default": 1000,
+      "exclusiveMinimum": 0.0,
+      "type": "integer"
+     },
+     "write_energy_file": {
+      "default": false,
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "Body_add_hydrogens_api_molecules_add_hydrogens__workspace_id__post": {
+    "properties": {
+     "ff_selections": {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     "optimize": {
+      "default": false,
+      "type": "boolean"
+     },
+     "ph": {
+      "default": 7.0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "ff_selections"
+    ],
+    "type": "object"
+   },
+   "Body_upload_molecule_api_molecules_upload_post": {
+    "properties": {
+     "file": {
+      "contentMediaType": "application/octet-stream",
+      "type": "string"
+     }
+    },
+    "required": [
+     "file"
+    ],
+    "type": "object"
+   },
+   "DownloadRequest": {
+    "properties": {
+     "as_zip": {
+      "default": true,
+      "type": "boolean"
+     },
+     "mdin": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/AmberMdinRequest"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "wants_crd": {
+      "default": false,
+      "type": "boolean"
+     },
+     "wants_pdb": {
+      "default": false,
+      "type": "boolean"
+     },
+     "wants_top": {
+      "default": false,
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "FixAltLocRequest": {
+    "properties": {
+     "selections": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "workspace_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "workspace_id",
+     "selections"
+    ],
+    "type": "object"
+   },
+   "HTTPValidationError": {
+    "properties": {
+     "detail": {
+      "items": {
+       "$ref": "#/components/schemas/ValidationError"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "IncidentReport": {
+    "properties": {
+     "client_log": {
+      "items": {},
+      "maxItems": 1000,
+      "type": "array"
+     },
+     "consent": {
+      "type": "boolean"
+     },
+     "error": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "kind": {
+      "enum": [
+       "error",
+       "manual"
+      ],
+      "type": "string"
+     },
+     "page": {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     "screenshot": {
+      "anyOf": [
+       {
+        "maxLength": 14000000,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "workspace_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "kind",
+     "consent"
+    ],
+    "type": "object"
+   },
+   "MutateRequest": {
+    "properties": {
+     "chain_id": {
+      "type": "string"
+     },
+     "mutate_to": {
+      "type": "string"
+     },
+     "residue_number": {
+      "type": "integer"
+     },
+     "workspace_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "workspace_id",
+     "chain_id",
+     "residue_number",
+     "mutate_to"
+    ],
+    "type": "object"
+   },
+   "PreparationRequest": {
+    "properties": {
+     "add_solvent": {
+      "default": false,
+      "type": "boolean"
+     },
+     "additional_salts": {
+      "items": {
+       "$ref": "#/components/schemas/SaltStep"
+      },
+      "type": "array"
+     },
+     "auto_amide_flips": {
+      "default": false,
+      "type": "boolean"
+     },
+     "box_padding_nm": {
+      "default": 1.0,
+      "type": "number"
+     },
+     "box_shape": {
+      "default": "cube",
+      "enum": [
+       "cube",
+       "octahedron",
+       "truncated octahedron"
+      ],
+      "type": "string"
+     },
+     "clean_crystal_ions": {
+      "default": true,
+      "type": "boolean"
+     },
+     "concentration_mode": {
+      "default": "water_ratio",
+      "enum": [
+       "water_ratio",
+       "box_volume"
+      ],
+      "type": "string"
+     },
+     "crystal_water_mode": {
+      "default": "remove_all",
+      "enum": [
+       "remove_all",
+       "keep_water",
+       "keep_all"
+      ],
+      "type": "string"
+     },
+     "ff_selections": {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     "ionic_strength": {
+      "default": 0.15,
+      "type": "number"
+     },
+     "negative_ion": {
+      "default": "Cl-",
+      "type": "string"
+     },
+     "ph": {
+      "default": 7.0,
+      "type": "number"
+     },
+     "positive_ion": {
+      "default": "Na+",
+      "type": "string"
+     },
+     "protonation_overrides": {
+      "items": {
+       "$ref": "#/components/schemas/ProtonationOverride"
+      },
+      "type": "array"
+     },
+     "replace_structural_multivalent_with_mg": {
+      "default": false,
+      "type": "boolean"
+     },
+     "review_structure": {
+      "default": false,
+      "type": "boolean"
+     },
+     "structure_decisions": {
+      "$ref": "#/components/schemas/StructureDecisionsPayload"
+     },
+     "workspace_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "workspace_id",
+     "ff_selections"
+    ],
+    "type": "object"
+   },
+   "ProtonationOverride": {
+    "properties": {
+     "chain": {
+      "type": "string"
+     },
+     "icode": {
+      "default": "",
+      "type": "string"
+     },
+     "resseq": {
+      "type": "integer"
+     },
+     "state": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "chain",
+     "resseq",
+     "state"
+    ],
+    "type": "object"
+   },
+   "RemoveAtomRequest": {
+    "properties": {
+     "atom_name": {
+      "type": "string"
+     },
+     "chain_id": {
+      "type": "string"
+     },
+     "residue_number": {
+      "type": "integer"
+     },
+     "workspace_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "workspace_id",
+     "chain_id",
+     "residue_number",
+     "atom_name"
+    ],
+    "type": "object"
+   },
+   "RenameAtomRequest": {
+    "properties": {
+     "chain_id": {
+      "type": "string"
+     },
+     "new_atom_name": {
+      "maxLength": 4,
+      "type": "string"
+     },
+     "old_atom_name": {
+      "type": "string"
+     },
+     "residue_number": {
+      "type": "integer"
+     },
+     "workspace_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "workspace_id",
+     "chain_id",
+     "residue_number",
+     "old_atom_name",
+     "new_atom_name"
+    ],
+    "type": "object"
+   },
+   "RenameResidueRequest": {
+    "properties": {
+     "chain_id": {
+      "type": "string"
+     },
+     "new_res_name": {
+      "maxLength": 3,
+      "type": "string"
+     },
+     "residue_number": {
+      "type": "integer"
+     },
+     "workspace_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "workspace_id",
+     "chain_id",
+     "residue_number",
+     "new_res_name"
+    ],
+    "type": "object"
+   },
+   "ResidueDecision": {
+    "properties": {
+     "apply": {
+      "type": "boolean"
+     },
+     "chain": {
+      "type": "string"
+     },
+     "icode": {
+      "default": "",
+      "type": "string"
+     },
+     "resseq": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "chain",
+     "resseq",
+     "apply"
+    ],
+    "type": "object"
+   },
+   "SaltStep": {
+    "properties": {
+     "ionic_strength": {
+      "minimum": 0.0,
+      "type": "number"
+     },
+     "negative_ion": {
+      "type": "string"
+     },
+     "positive_ion": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "positive_ion",
+     "negative_ion",
+     "ionic_strength"
+    ],
+    "type": "object"
+   },
+   "SidechainOptimizeRequest": {
+    "properties": {
+     "residue": {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     "sidechain_data": {
+      "additionalProperties": true,
+      "type": "object"
+     }
+    },
+    "required": [
+     "sidechain_data",
+     "residue"
+    ],
+    "type": "object"
+   },
+   "SidechainUpdateRequest": {
+    "properties": {
+     "changed_dof_keys": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "sidechain_data": {
+      "additionalProperties": true,
+      "type": "object"
+     }
+    },
+    "required": [
+     "sidechain_data",
+     "changed_dof_keys"
+    ],
+    "type": "object"
+   },
+   "StructureDecisionsPayload": {
+    "properties": {
+     "acknowledged_heterogens": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "amide_flips": {
+      "items": {
+       "$ref": "#/components/schemas/ResidueDecision"
+      },
+      "type": "array"
+     },
+     "zero_occupancy": {
+      "items": {
+       "$ref": "#/components/schemas/ResidueDecision"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "StructurePrepRequest": {
+    "properties": {
+     "apply_symmetry": {
+      "default": false,
+      "type": "boolean"
+     },
+     "model": {
+      "default": 1,
+      "type": "integer"
+     },
+     "remove_chains": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "selection": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "default": {},
+      "type": "object"
+     }
+    },
+    "type": "object"
+   },
+   "TopologyRequest": {
+    "properties": {
+     "ff_selections": {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     "hmr": {
+      "default": false,
+      "type": "boolean"
+     },
+     "pdb_filename": {
+      "default": "structure.pdb",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ff_selections"
+    ],
+    "type": "object"
+   },
+   "ValidationError": {
+    "properties": {
+     "ctx": {
+      "type": "object"
+     },
+     "input": {},
+     "loc": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ]
+      },
+      "type": "array"
+     },
+     "msg": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "loc",
+     "msg",
+     "type"
+    ],
+    "type": "object"
+   },
+   "ValidationRequest": {
+    "properties": {
+     "label": {
+      "default": "molecule_from_front",
+      "type": "string"
+     },
+     "workspace_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "workspace_id"
+    ],
+    "type": "object"
+   }
+  }
+ },
+ "paths": {
+  "/": {
+   "get": {
+    "operationId": "root__get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    },
+    "tags": [
+     "Health Check"
+    ]
+   }
+  },
+  "/api/analysis/altloc-breaks/{workspace_id}": {
+   "post": {
+    "operationId": "check_altloc_breaks_api_analysis_altloc_breaks__workspace_id__post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AltlocSelectionRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "analysis"
+    ]
+   }
+  },
+  "/api/analysis/altlocs/{workspace_id}": {
+   "get": {
+    "operationId": "analyze_altlocs_api_analysis_altlocs__workspace_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "analysis"
+    ]
+   }
+  },
+  "/api/analysis/analyze-pdb/{pdb_code}": {
+   "get": {
+    "operationId": "analyze_remote_pdb_api_analysis_analyze_pdb__pdb_code__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "pdb_code",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "chain",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      }
+     },
+     {
+      "in": "query",
+      "name": "fill_gaps",
+      "required": false,
+      "schema": {
+       "default": true,
+       "type": "boolean"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "analysis"
+    ]
+   }
+  },
+  "/api/analysis/clean-altlocs/{workspace_id}": {
+   "post": {
+    "operationId": "apply_clean_altlocs_api_analysis_clean_altlocs__workspace_id__post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/StructurePrepRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "analysis"
+    ]
+   }
+  },
+  "/api/analysis/sequence/{workspace_id}": {
+   "get": {
+    "operationId": "analyze_sequence_api_analysis_sequence__workspace_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "chain",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      }
+     },
+     {
+      "in": "query",
+      "name": "fill_gaps",
+      "required": false,
+      "schema": {
+       "default": true,
+       "type": "boolean"
+      }
+     },
+     {
+      "in": "query",
+      "name": "filename",
+      "required": false,
+      "schema": {
+       "default": "structure.pdb",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "analysis"
+    ]
+   }
+  },
+  "/api/download/{workspace_id}": {
+   "get": {
+    "operationId": "download_workspace_single_file_api_download__workspace_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "format",
+      "required": false,
+      "schema": {
+       "default": "pdb",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "light",
+      "required": false,
+      "schema": {
+       "default": false,
+       "type": "boolean"
+      }
+     },
+     {
+      "in": "query",
+      "name": "filename",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "download"
+    ]
+   }
+  },
+  "/api/download/{workspace_id}/export": {
+   "post": {
+    "operationId": "export_workspace_files_api_download__workspace_id__export_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DownloadRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "download"
+    ]
+   }
+  },
+  "/api/editor/mutate": {
+   "post": {
+    "operationId": "mutate_residue_api_editor_mutate_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MutateRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "editor"
+    ]
+   }
+  },
+  "/api/editor/remove-atom": {
+   "post": {
+    "operationId": "remove_atom_api_editor_remove_atom_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RemoveAtomRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "editor"
+    ]
+   }
+  },
+  "/api/editor/rename-atom": {
+   "post": {
+    "operationId": "rename_atom_api_editor_rename_atom_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RenameAtomRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "editor"
+    ]
+   }
+  },
+  "/api/editor/rename-residue": {
+   "post": {
+    "operationId": "rename_residue_api_editor_rename_residue_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RenameResidueRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "editor"
+    ]
+   }
+  },
+  "/api/forcefields/catalog/refresh": {
+   "post": {
+    "operationId": "refresh_catalog_api_forcefields_catalog_refresh_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    },
+    "tags": [
+     "Force Fields"
+    ]
+   }
+  },
+  "/api/forcefields/classification": {
+   "patch": {
+    "operationId": "patch_classification_api_forcefields_classification_patch",
+    "parameters": [
+     {
+      "in": "header",
+      "name": "x-admin-token",
+      "required": false,
+      "schema": {
+       "default": "",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "additionalProperties": {
+         "type": "string"
+        },
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "Force Fields"
+    ]
+   }
+  },
+  "/api/forcefields/{workspace_id}": {
+   "get": {
+    "operationId": "get_my_forcefields_api_forcefields__workspace_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "mode",
+      "required": false,
+      "schema": {
+       "default": "standard",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "positive_ion",
+      "required": false,
+      "schema": {
+       "default": "Na+",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "negative_ion",
+      "required": false,
+      "schema": {
+       "default": "Cl-",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "replace_structural_multivalent_with_mg",
+      "required": false,
+      "schema": {
+       "default": false,
+       "type": "boolean"
+      }
+     },
+     {
+      "in": "query",
+      "name": "extra_positive_ions",
+      "required": false,
+      "schema": {
+       "default": [],
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      }
+     },
+     {
+      "in": "query",
+      "name": "extra_negative_ions",
+      "required": false,
+      "schema": {
+       "default": [],
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "Force Fields"
+    ]
+   }
+  },
+  "/api/incidents": {
+   "get": {
+    "operationId": "list_incidents_api_incidents_get",
+    "parameters": [
+     {
+      "in": "header",
+      "name": "x-admin-token",
+      "required": false,
+      "schema": {
+       "default": "",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "incidents"
+    ]
+   },
+   "post": {
+    "operationId": "submit_incident_api_incidents_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/IncidentReport"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "incidents"
+    ]
+   }
+  },
+  "/api/incidents/config": {
+   "get": {
+    "operationId": "incidents_config_api_incidents_config_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    },
+    "tags": [
+     "incidents"
+    ]
+   }
+  },
+  "/api/incidents/{incident_id}": {
+   "delete": {
+    "operationId": "delete_incident_api_incidents__incident_id__delete",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "incident_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "x-admin-token",
+      "required": false,
+      "schema": {
+       "default": "",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "incidents"
+    ]
+   }
+  },
+  "/api/incidents/{incident_id}/download": {
+   "get": {
+    "operationId": "download_incident_api_incidents__incident_id__download_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "incident_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "in": "header",
+      "name": "x-admin-token",
+      "required": false,
+      "schema": {
+       "default": "",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "incidents"
+    ]
+   }
+  },
+  "/api/molecules/add-hydrogens/{workspace_id}": {
+   "post": {
+    "deprecated": true,
+    "operationId": "add_hydrogens_api_molecules_add_hydrogens__workspace_id__post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_add_hydrogens_api_molecules_add_hydrogens__workspace_id__post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "molecules"
+    ]
+   }
+  },
+  "/api/molecules/fetch-pdb/{pdb_code}": {
+   "get": {
+    "operationId": "fetch_pdb_by_code_api_molecules_fetch_pdb__pdb_code__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "pdb_code",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "molecules"
+    ]
+   }
+  },
+  "/api/molecules/remove-residue/{workspace_id}": {
+   "post": {
+    "operationId": "delete_residue_api_molecules_remove_residue__workspace_id__post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "molecules"
+    ]
+   }
+  },
+  "/api/molecules/upload": {
+   "post": {
+    "operationId": "upload_molecule_api_molecules_upload_post",
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_upload_molecule_api_molecules_upload_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "molecules"
+    ]
+   }
+  },
+  "/api/sidechains/cancel/{workspace_id}": {
+   "post": {
+    "operationId": "cancel_sidechains_api_sidechains_cancel__workspace_id__post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "sidechains"
+    ]
+   }
+  },
+  "/api/sidechains/commit/{workspace_id}": {
+   "post": {
+    "operationId": "commit_sidechains_api_sidechains_commit__workspace_id__post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "sidechains"
+    ]
+   }
+  },
+  "/api/sidechains/optimize/{workspace_id}": {
+   "post": {
+    "operationId": "optimize_sidechain_api_sidechains_optimize__workspace_id__post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SidechainOptimizeRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "sidechains"
+    ]
+   }
+  },
+  "/api/sidechains/start/{workspace_id}": {
+   "post": {
+    "operationId": "start_sidechain_session_api_sidechains_start__workspace_id__post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PreparationRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "sidechains"
+    ]
+   }
+  },
+  "/api/sidechains/update/{workspace_id}": {
+   "post": {
+    "operationId": "update_sidechains_api_sidechains_update__workspace_id__post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SidechainUpdateRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "sidechains"
+    ]
+   }
+  },
+  "/api/simulation/{workspace_id}/amber-mdin": {
+   "post": {
+    "operationId": "generate_amber_mdin_api_simulation__workspace_id__amber_mdin_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "preview",
+      "required": false,
+      "schema": {
+       "default": false,
+       "type": "boolean"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AmberMdinRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "simulation"
+    ]
+   }
+  },
+  "/api/system/logs": {
+   "get": {
+    "operationId": "get_logs_api_system_logs_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "since_id",
+      "required": false,
+      "schema": {
+       "default": 0,
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 200,
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "system"
+    ]
+   }
+  },
+  "/api/topology/{workspace_id}/generate": {
+   "post": {
+    "operationId": "generate_topology_api_topology__workspace_id__generate_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/TopologyRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "topology"
+    ]
+   }
+  },
+  "/api/validation/apply-selections": {
+   "post": {
+    "operationId": "apply_selections_api_validation_apply_selections_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/FixAltLocRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "validation"
+    ]
+   }
+  },
+  "/api/validation/check": {
+   "post": {
+    "operationId": "check_molecule_api_validation_check_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ValidationRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "validation"
+    ]
+   }
+  },
+  "/api/validation/ions": {
+   "get": {
+    "operationId": "get_ion_options_api_validation_ions_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    },
+    "tags": [
+     "validation"
+    ]
+   }
+  },
+  "/api/validation/prepare": {
+   "post": {
+    "operationId": "prepare_molecule_api_validation_prepare_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PreparationRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "validation"
+    ]
+   }
+  },
+  "/api/validation/preview-selection": {
+   "post": {
+    "operationId": "preview_selection_api_validation_preview_selection_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/FixAltLocRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "validation"
+    ]
+   }
+  }
+ }
+}
