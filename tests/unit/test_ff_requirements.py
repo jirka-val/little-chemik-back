@@ -1,5 +1,5 @@
 """
-Unit testy pro app/services/analysis_service.py::required_ff_groups.
+Unit testy pro app/services/analysis/ff_requirements.py::required_ff_groups.
 
 Zjišťuje, jaké FORGE mol_type skupiny (P/R/D/W/I1/I1+/Im/Im+) daná struktura
 reálně potřebuje, ať se dá zkontrolovat proti ff_selections ještě PŘED
@@ -13,7 +13,7 @@ ionty vyžadují "Im", ne "I1+") odhalit staticky a rychle.
 
 import pytest
 
-from app.services.analysis_service import required_ff_groups
+from app.services.analysis import required_ff_groups
 
 pytestmark = pytest.mark.unit
 

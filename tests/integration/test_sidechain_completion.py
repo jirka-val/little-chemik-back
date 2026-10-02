@@ -203,7 +203,7 @@ class TestSidechainCancel:
 
 class TestSidechainRealGapBoundaryRegression:
     """
-    Regresní test pro skutečný bug: analysis_service dřív kaskádovitě mazala
+    Regresní test pro skutečný bug: analýza sekvence (app/services/analysis) dřív kaskádovitě mazala
     z modelu KAŽDÉ reziduum na okraji gapu, které mělo jakýkoliv chybějící
     těžký atom - i když mělo svou vlastní backbone kotvu (C) a bylo tedy
     přesně tím "residue_local_open_branch" případem, který nový builder umí

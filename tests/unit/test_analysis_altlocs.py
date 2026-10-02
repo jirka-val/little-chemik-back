@@ -1,5 +1,5 @@
 """
-Unit testy pro app/services/analysis_service.py - AltLocs, modely, symetrie.
+Unit testy pro app/services/analysis/ (altlocs.py, structure_prep.py) - AltLocs, modely, symetrie.
 
 Pokrývá analyze_pdb_altlocs (detekce + doporučení trasy), clean_pdb_altlocs
 (fyzická aplikace výběru) a process_structure (výběr modelu + AltLocs najednou).
@@ -7,7 +7,7 @@ Pokrývá analyze_pdb_altlocs (detekce + doporučení trasy), clean_pdb_altlocs
 
 import pytest
 
-from app.services.analysis_service import (
+from app.services.analysis import (
     analyze_pdb_altlocs,
     clean_pdb_altlocs,
     process_structure,

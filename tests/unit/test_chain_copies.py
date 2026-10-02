@@ -1,13 +1,13 @@
 """
 Unit testy pro detekci identických kopií molekuly v jednom PDB
-(analysis_service.find_identical_chain_copies) a jejich odstranění přes
+(analysis/chain_copies.py: find_identical_chain_copies) a jejich odstranění přes
 process_structure(remove_chains=...). Vzor: 3SKR - řetězce A a B jsou dvě
 kopie téhož riboswitche, REMARK 350 je uvádí jako dvě monomerní jednotky.
 """
 
 import pytest
 
-from app.services.analysis_service import (
+from app.services.analysis import (
     analyze_pdb_altlocs,
     find_identical_chain_copies,
     process_structure,

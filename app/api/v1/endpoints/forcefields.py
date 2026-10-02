@@ -7,7 +7,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from app.core.exceptions import AppBaseException, BadRequestError, ExternalServiceError, InternalError
 from app.core.security import require_admin
-from app.services.analysis_service import required_ff_groups, resolve_ion_mol_type
+from app.services.analysis import required_ff_groups, resolve_ion_mol_type
 from app.services.ff_catalog_service import catalog_service
 from app.services.ff_classification_service import classification_service
 from app.services.forcefield_service import ForceFieldService

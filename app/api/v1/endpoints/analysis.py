@@ -11,7 +11,7 @@ from app.core.exceptions import AppBaseException, ExternalServiceError, Internal
 from app.core.http_client import external_http_client
 from app.workspaces.manager import workspace_manager
 # ZMĚNA 1: Importujeme novou funkci process_structure místo původní clean_pdb_altlocs
-from app.services.analysis_service import (
+from app.services.analysis import (
     build_sequence_tokens,
     analyze_pdb_altlocs,
     find_altloc_selection_breaks,

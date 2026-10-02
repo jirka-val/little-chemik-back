@@ -1,5 +1,5 @@
 """
-Unit testy pro app/services/analysis_service.py::build_sequence_tokens.
+Unit testy pro app/services/analysis/sequence.py::build_sequence_tokens.
 
 Pokrývá:
 - detekci sekvenčních děr (is_gap tokeny) a rozlišení "opravdové" díry od
@@ -16,7 +16,7 @@ jen debug skripty bez assercí.
 
 import pytest
 
-from app.services.analysis_service import build_sequence_tokens
+from app.services.analysis import build_sequence_tokens
 
 pytestmark = pytest.mark.unit
 
@@ -141,7 +141,7 @@ class TestGapBoundaryExclusion:
     "residue_local_open_branch"), takže tichá exkluze celého rezidua by teď
     jen zahodila data, která builder umí zpracovat. Vylučuje se ONLY reziduum,
     kterému chybí i tahle backbone kotva sama (viz
-    _GAP_BOUNDARY_ANCHOR_ATOM v analysis_service.py) - to je jediný případ,
+    _GAP_BOUNDARY_ANCHOR_ATOM v analysis/sequence.py) - to je jediný případ,
     kdy builder opravdu nemá nic, k čemu by cokoliv připojil.
     """
 

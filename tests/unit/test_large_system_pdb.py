@@ -10,7 +10,7 @@ stěny boxu zůstal ~18 Å pás bez vody.
 
 import pytest
 
-from app.services.analysis_service import process_structure
+from app.services.analysis import process_structure
 from app.services.pdb_service import PDBService, parse_pdb_to_topology_dict
 from app.services.topology_service import TopologyService
 

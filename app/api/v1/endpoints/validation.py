@@ -10,7 +10,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from app.core.exceptions import AppBaseException, BadRequestError, InternalError
-from app.services.analysis_service import list_ion_options, resolve_ion_mol_type
+from app.services.analysis import list_ion_options, resolve_ion_mol_type
 from app.services.ff_catalog_service import catalog_service
 from app.services.validation.service import ValidationService
 from app.services.structure.forge_service import ForgeStructureService, build_preparation_summary
@@ -45,7 +45,7 @@ def _build_salt_specs(positive_ion: str, negative_ion: str, ionic_strength: floa
     # mol_type se čte z converting_dictionary.json (přes resolve_ion_mol_type),
     # ne z lokálního hardcoded mapování - repo už jednou mělo tři nezávislé
     # kopie tohodle mapování a jejich nesoulad (Mg2+ nikde jako "Im") způsobil
-    # pád na 1JJ2, viz docstring analysis_service.required_ff_groups.
+    # pád na 1JJ2, viz docstring analysis.ff_requirements.required_ff_groups.
     cation_mol_type = _resolve_buildable_ion_mol_type(positive_ion)
     anion_mol_type = _resolve_buildable_ion_mol_type(negative_ion)
     if cation_mol_type is None:

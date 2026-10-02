@@ -45,7 +45,7 @@ from forge_molecule_solvation import SolvationVdwParameters, SolvationSettings, 
 from forge_molecule_state_assignment import assign_molecule_states  # noqa: E402
 
 from app.core.exceptions import AppBaseException
-from app.services.analysis_service import build_sequence_tokens, required_ff_groups
+from app.services.analysis import build_sequence_tokens, required_ff_groups
 from app.services.forcefield_service import ForceFieldService
 from app.services.structure.structure_review import apply_structure_edits, find_amide_flips, find_zero_occupancy
 
@@ -202,7 +202,7 @@ class ForgeMissingForceFieldError(AppBaseException):
     struktura reálně potřebuje. Dva zdroje:
 
     1. Statická před-kontrola (viz prepare_structure) přes
-       analysis_service.required_ff_groups - odchytí to DŘÍV, než se vůbec
+       analysis.ff_requirements.required_ff_groups - odchytí to DŘÍV, než se vůbec
        spustí drahý (u velkých struktur i několikaminutový) builder run.
     2. Bezpečnostní síť kolem run_forge_workflow() - pokud se přesto
        během buildu/solvatace/iontů narazí na chybějící MM/LJ/iontové
@@ -306,7 +306,7 @@ def _is_artificial_break_terminus(residue: "Residue") -> bool:
     """
     True pro reziduum, které se stalo N- nebo C-terminálním kvůli přerušení
     uprostřed řetězce (mezera v číslování, explicitní TER, chemicky nemožná
-    vzdálenost - viz analysis_service.terminus_reason), NE proto, že by šlo o
+    vzdálenost - viz analysis/sequence.py), NE proto, že by šlo o
     skutečný začátek/konec celého řetězce ("chain_end" - ten už řeší
     end-of-chain TER na konci molecule_to_pdb).
     """
@@ -776,7 +776,7 @@ def build_preparation_summary(result: ForgePreparationResult) -> Dict[str, Any]:
 
 
 class ForgeStructureService:
-    """Bridges upstream-cleaned PDB structures (analysis_service) to app/builder."""
+    """Bridges upstream-cleaned PDB structures (app/services/analysis) to app/builder."""
 
     def __init__(self):
         self.ff_service = ForceFieldService()
@@ -792,7 +792,7 @@ class ForgeStructureService:
         """
         Ověří PŘED spuštěním buildu, že ff_selections pokrývá všechny
         mol_type skupiny, které tahle konkrétní struktura potřebuje (viz
-        analysis_service.required_ff_groups) - ať se chybějící/špatně
+        analysis.ff_requirements.required_ff_groups) - ať se chybějící/špatně
         vybrané FF (typicky ionty, "Im" pro Mg2+ vs "I1+") odhalí hned,
         ne až po několikaminutovém běhu buildu/solvatace pádem s KeyError.
         """
@@ -1080,7 +1080,7 @@ class ForgeStructureService:
         """
         Spustí kompletní FORGE zpracování (stavy/protonace, stavba chybějících
         atomů, solvatace, ionty) na už upstream vyčištěné struktuře (jeden model,
-        vyřešené AltLocs, aplikovaná symetrie - viz analysis_service.process_structure).
+        vyřešené AltLocs, aplikovaná symetrie - viz analysis.structure_prep.process_structure).
 
         Vyhodí ForgeMissingDOFError, pokud builder narazí na chybějící stupeň
         volnosti, který nejde bezpečně dostavět - to volající musí propustit

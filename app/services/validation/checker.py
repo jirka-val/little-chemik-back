@@ -3,7 +3,7 @@ import io
 from pdbfixer import PDBFixer
 from typing import Dict, Any, List
 # Importing your existing analysis service to obtain correctly named tokens
-from app.services.analysis_service import build_sequence_tokens
+from app.services.analysis import build_sequence_tokens
 
 
 class StructureChecker:

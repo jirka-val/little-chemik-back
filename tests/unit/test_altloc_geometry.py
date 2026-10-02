@@ -1,6 +1,6 @@
 """
 Unit testy pro geometrické doporučení AltLoc variant a detekci zlomů
-(analysis_service.analyze_pdb_altlocs / find_altloc_selection_breaks).
+(analysis/altlocs.py: analyze_pdb_altlocs / find_altloc_selection_breaks).
 
 Regrese z 2TRA: doporučení vybíralo podle occupancy/B-faktoru bez ohledu na
 to, jestli zvolená konformace navazuje na sousedy (G34-C36 = B při 50/50
@@ -14,7 +14,7 @@ posuzuje jen přes ně.
 
 import pytest
 
-from app.services.analysis_service import analyze_pdb_altlocs, find_altloc_selection_breaks
+from app.services.analysis import analyze_pdb_altlocs, find_altloc_selection_breaks
 
 pytestmark = pytest.mark.unit
 
