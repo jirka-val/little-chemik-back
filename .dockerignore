@@ -1,0 +1,15 @@
+# Nic z toho nepatří do image: secrets, lokální prostředí, runtime data.
+.env
+.git
+.idea
+.venv
+.pytest_cache
+**/__pycache__
+temp_workspaces
+data/incidents
+data/ff_cache
+data/ff_cache_forge
+data/propka_cache
+manual_test_pdbs
+tests/golden/.baseline
+*.pcap

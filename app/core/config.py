@@ -1,5 +1,5 @@
 from pydantic import field_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 from typing import List
 
@@ -9,13 +9,14 @@ class Settings(BaseSettings):
     VERSION: str = "1.2.0"
     API_V1_STR: str = "/api/v1"
 
-    # Kdo smí volat API z prohlížeče (CORS). Výchozí hodnota odpovídá
-    # současné produkci + lokálnímu vývoji. Až přibude nová doména (např.
-    # subdoména jiného projektu), stačí ji přidat v .env jako
-    # BACKEND_CORS_ORIGINS=https://puvodni.cz,https://nova-subdomena.cz
-    # - není potřeba měnit kód.
+    # Kdo smí volat API z prohlížeče z JINÉHO originu (CORS). V produkci
+    # frontend i API běží pod stejnou adresou (nginx proxy /api), takže CORS
+    # není potřeba vůbec a nezáleží na tom, na jaké doméně/IP app běží.
+    # Lokální vývoj jde přes Vite proxy (vite.config.ts), taky same-origin;
+    # localhost porty tu zůstávají pro případ, kdy frontend volá backend
+    # napřímo (VITE_API_URL=http://localhost:8000). Další originy přes .env:
+    # BACKEND_CORS_ORIGINS=https://a.cz,https://b.cz
     BACKEND_CORS_ORIGINS: List[str] = [
-        "http://147.251.115.223",  # Produkce
         "http://localhost:5173",   # Standardní Vite port
         "http://localhost:5174",   # Alternativní Vite port
     ]
@@ -29,6 +30,12 @@ class Settings(BaseSettings):
 
     BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent
     PDB_DATA_DIR: Path = BASE_DIR / "data" / "pdb_files"
+
+    # Pracovní složky uživatelských relací (maže je garbage collector).
+    WORKSPACE_DIR: Path = BASE_DIR / "temp_workspaces"
+    # Soubory silových polí rozbalené z katalogu (viz ForceFieldService).
+    FF_CACHE_DIR: Path = BASE_DIR / "data" / "ff_cache"
+    FF_FORGE_CACHE_DIR: Path = BASE_DIR / "data" / "ff_cache_forge"
 
     RCSB_PDB_URL: str = "https://files.rcsb.org/download"
 
@@ -56,9 +63,9 @@ class Settings(BaseSettings):
     # Strop pro jeden report - snímky PDB nad něj se vynechají (od nejstarších).
     INCIDENT_MAX_MB: int = 300
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    # extra="ignore": klíč v .env, který Settings nezná (např. FORGE_URL pro
+    # scripts/incidents.py), nesmí shodit start backendu.
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")
 
 
 settings = Settings()

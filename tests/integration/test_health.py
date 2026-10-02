@@ -11,3 +11,9 @@ def test_root_health_check(client):
     data = response.json()
     assert data["status"] == "online"
     assert "version" in data
+
+
+def test_api_health_check(client):
+    response = client.get("/api/health")
+    assert response.status_code == 200
+    assert response.json() == client.get("/").json()

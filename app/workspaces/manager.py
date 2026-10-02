@@ -4,10 +4,11 @@ import shutil
 from pathlib import Path
 from fastapi import UploadFile
 
+from app.core.config import settings
 from app.core.exceptions import WorkspaceNotFoundError
 
-# Složka pro dočasné pracovní prostory
-WORKSPACE_DIR = os.path.join(os.getcwd(), "temp_workspaces")
+# Složka pro dočasné pracovní prostory (Settings.WORKSPACE_DIR)
+WORKSPACE_DIR = str(settings.WORKSPACE_DIR)
 
 
 class WorkspaceManager:

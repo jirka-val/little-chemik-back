@@ -1434,6 +1434,23 @@
     ]
    }
   },
+  "/api/health": {
+   "get": {
+    "operationId": "api_health_api_health_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    },
+    "tags": [
+     "Health Check"
+    ]
+   }
+  },
   "/api/incidents": {
    "get": {
     "operationId": "list_incidents_api_incidents_get",

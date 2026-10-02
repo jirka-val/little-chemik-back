@@ -5,6 +5,8 @@ import base64
 from typing import List, Dict, Any
 from pathlib import Path
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -13,14 +15,14 @@ class ForceFieldService:
     EXTERNAL_URL = "https://next.ida.4sims.eu/api/force_fields/"
 
     # Lokální cache pro uložení extrahovaných souborů (formát konzumovaný FF_IDA/TopologyService)
-    CACHE_DIR = Path("data/ff_cache")
+    CACHE_DIR = settings.FF_CACHE_DIR
 
     # Druhý pohled na stejná data, v adresářové/souborové konvenci, kterou čeká
     # app/builder (SolvationVdwParameters.from_force_field_root): adresáře
     # pojmenované "{ff_name}_{mol_type}" a soubory obsahující "residue_lib"/
     # "forcefield" v názvu. Obsahově jde o stejné UMFFF soubory, jen zdvojené
     # pod jinými jmény, aby builder mohl žít vedle TopologyService beze změny.
-    FORGE_CACHE_DIR = Path("data/ff_cache_forge")
+    FORGE_CACHE_DIR = settings.FF_FORGE_CACHE_DIR
 
     def __init__(self):
         try:

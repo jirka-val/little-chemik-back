@@ -3,8 +3,9 @@ Výpis a stažení nahlášených chyb z běžícího FORGE serveru (admin API
 /api/incidents, viz app/api/v1/endpoints/incidents.py).
 
 Heslo se bere z proměnné prostředí FORGE_ADMIN_TOKEN, jinak z ADMIN_TOKEN v
-little-chemik-back/.env (stejná hodnota jako ADMIN_TOKEN na serveru); adresa
-z FORGE_URL (výchozí http://147.251.115.223).
+little-chemik-back/.env (stejná hodnota jako ADMIN_TOKEN na serveru). Adresa
+serveru z --url, jinak z FORGE_URL (prostředí, pak .env), jinak DEFAULT_URL -
+po přesunu na doménu stačí FORGE_URL=https://... v .env.
 
     python scripts/incidents.py list
     python scripts/incidents.py download 20261001-101500-abc123
@@ -69,7 +70,7 @@ def delete(base_url: str, token: str, incident_id: str) -> None:
     print(f"{incident_id} deleted")
 
 
-def _token_from_env_file() -> str:
+def _from_env_file(name: str) -> str:
     env_file = Path(__file__).resolve().parent.parent / ".env"
     try:
         lines = env_file.read_text(encoding="utf-8").splitlines()
@@ -77,14 +78,14 @@ def _token_from_env_file() -> str:
         return ""
     for line in lines:
         key, _, value = line.partition("=")
-        if key.strip() == "ADMIN_TOKEN":
+        if key.strip() == name:
             return value.strip().strip('"').strip("'")
     return ""
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="List / download / delete FORGE error reports.")
-    parser.add_argument("--url", default=os.environ.get("FORGE_URL", DEFAULT_URL))
+    parser.add_argument("--url", default=os.environ.get("FORGE_URL") or _from_env_file("FORGE_URL") or DEFAULT_URL)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("list", help="list all reports")
     dl = sub.add_parser("download", help="download and unpack reports")
@@ -95,7 +96,7 @@ def main() -> None:
     rm.add_argument("ids", nargs="+", help="report IDs")
     args = parser.parse_args()
 
-    token = os.environ.get("FORGE_ADMIN_TOKEN", "") or _token_from_env_file()
+    token = os.environ.get("FORGE_ADMIN_TOKEN", "") or _from_env_file("ADMIN_TOKEN")
     if not token:
         sys.exit("Set FORGE_ADMIN_TOKEN (or ADMIN_TOKEN in little-chemik-back/.env) to the server's ADMIN_TOKEN.")
 

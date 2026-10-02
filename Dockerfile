@@ -22,4 +22,7 @@ COPY . .
 EXPOSE 8000
 
 # 5. Spuštění
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+# --forwarded-allow-ips "*": backend není publikovaný ven (jen přes nginx
+# kontejner), takže X-Forwarded-Proto/For od proxy může brát jako pravdivé -
+# za HTTPS pak ví, že běží na https:// (bez toho uvicorn věří jen 127.0.0.1).
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]

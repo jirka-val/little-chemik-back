@@ -69,3 +69,10 @@ async def shutdown_event():
 @app.get("/", tags=["Health Check"])
 async def root():
     return {"status": "online", "version": settings.VERSION}
+
+
+# Stejná odpověď pod /api - jen /api/* jde přes nginx proxy na backend, takže
+# tohle je adresa pro healthcheck zvenku (docker, monitoring, proxy).
+@app.get("/api/health", tags=["Health Check"])
+async def api_health():
+    return await root()
