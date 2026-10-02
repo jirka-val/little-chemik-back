@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Set
+from typing import List, Dict, Any
 import numpy as np
 import logging
 
@@ -117,7 +117,7 @@ class ConformationManager:
                 alt_id = line[16].strip()
                 chain = line[21].strip()
                 res_id_raw = line[22:27].strip()
-                res_name = line[17:20].strip()  # <--- PŘIDÁNO: Načtení jména rezidua
+                res_name = line[17:20].strip()
 
                 # KLÍČ MUSÍ ODPOVÍDAT FRONTENDU: "Chain-ID-Name"
                 lookup_key = f"{chain}-{res_id_raw}-{res_name}".replace(" ", "")

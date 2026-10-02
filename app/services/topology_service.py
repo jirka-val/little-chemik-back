@@ -217,7 +217,7 @@ class TopologyService:
             with open(original_pdb_path, "w", encoding="utf-8") as f:
                 f.write(fixed_pdb_content)
 
-            # C) PŘIDÁNO: Uložení AMBER .crd (Čisté AMBER souřadnice pro export)
+            # C) Uložení AMBER .crd (Čisté AMBER souřadnice pro export)
             crd_filename = pdb_filename.replace(".pdb", ".crd")
             crd_path = workspace_dir / crd_filename
             self._generate_amber_crd(fixed_pdb_content, crd_path)

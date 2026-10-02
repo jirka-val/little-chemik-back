@@ -11,7 +11,6 @@ from pathlib import Path
 import pytest
 
 from app.core.config import settings
-from app.services import analysis_service
 from app.services.incidents import history
 from app.workspaces.manager import WORKSPACE_DIR
 

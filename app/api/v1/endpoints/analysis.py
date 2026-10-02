@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from fastapi.concurrency import run_in_threadpool
 
 from pydantic import BaseModel
-from typing import Dict, Any, List
+from typing import Dict, List
 
 from app.core.exceptions import AppBaseException, ExternalServiceError, InternalError, RemoteMoleculeNotFoundError
 from app.core.http_client import external_http_client

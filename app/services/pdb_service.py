@@ -63,7 +63,7 @@ class PDBService:
             "R": {"A", "C", "G", "U"},
             "P": {"ALA", "ARG", "ASN", "ASP", "CYS", "GLU", "GLN", "GLY", "HIS", "ILE", "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL"},
             "W": {"HOH", "WAT", "SOL"},
-            # TADY JE ZMĚNA: Ionty rovnou rozdělíme podle toho, jak je zná tvoje DB
+            # Ionty rovnou rozdělíme podle mol_type skupin, jak je zná databáze FF
             "I1": {"NA", "NA+", "K", "K+", "CL", "CL-"},
             "I1+": {"LI", "LI+", "RB", "RB+", "CS", "CS+", "F", "F-", "BR", "BR-", "I", "I-"},
             "Im": {"MG", "MG2+"},

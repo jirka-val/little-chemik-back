@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Runs every check that must pass before a change is committed or deployed:
+#   0. backend lint (ruff)
 #   1. backend unit + integration tests (incl. the OpenAPI contract snapshot)
 #   2. golden pipeline tests (whole preparation pipeline vs. recorded baseline)
 #   3. frontend type check and production build
@@ -19,6 +20,9 @@ else
 fi
 
 cd "$BACK"
+echo "== backend: lint"
+"$PY" -m ruff check . -q
+
 echo "== backend: unit + integration"
 "$PY" -m pytest -q -p no:logging
 

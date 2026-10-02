@@ -1,5 +1,4 @@
 import logging
-import io
 import json
 from typing import Any, Dict
 import aiofiles

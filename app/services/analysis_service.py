@@ -743,7 +743,6 @@ def _check_connectivity_integrity(group: Optional[str], ff_name: str, atoms: Lis
     }
 
 
-from typing import Dict, Any
 
 
 # ---------------------------------------------------------------------------

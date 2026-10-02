@@ -1,0 +1,13 @@
+# Lint: `ruff check .` (also part of scripts/check_all.sh).
+# Only pyflakes rules (unused imports/variables, undefined names) for now -
+# they catch real mistakes without reformatting the codebase.
+target-version = "py312"
+extend-exclude = [
+    # Vendored third-party code, kept as delivered (see docs/ARCHITECTURE.md).
+    "app/builder",
+    "app/utils/adams4sims_processing_library",
+    "temp_workspaces",
+]
+
+[lint]
+select = ["F"]

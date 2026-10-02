@@ -1,4 +1,6 @@
-import asyncio  # <-- NOVÉ: Knihovna pro asynchronní úlohy na pozadí
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.api import api_router
@@ -9,16 +11,36 @@ from app.core.http_client import close_external_http_client
 from app.core.incident_middleware import IncidentJournalMiddleware
 from app.core.console_middleware import ConsoleWorkspaceMiddleware
 
-# <-- NOVÉ: Import naší vytvořené uklízečky
 from app.workspaces.tasks.garbage_collector import cleanup_old_workspaces
 from app.workspaces.tasks.ff_catalog_refresher import refresh_ff_catalog_periodically
 from app.services.ff_catalog_service import catalog_service
 
 setup_logging()
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Úlohy na pozadí: úklid starých workspace a noční refresh FF katalogu.
+    cleanup_task = asyncio.create_task(cleanup_old_workspaces())
+
+    # Bootstrap FF katalogu - pokud po čerstvém deployi ještě neexistuje
+    # žádný lokální snapshot, uděláme jeden synchronní refresh, ať FF panel
+    # hned po startu nevrátí prázdný seznam. Dál se stará noční background job.
+    await asyncio.to_thread(catalog_service.ensure_catalog)
+    ff_catalog_task = asyncio.create_task(refresh_ff_catalog_periodically())
+
+    yield
+
+    # Vypnutí serveru (Ctrl+C, docker stop): smyčky na pozadí bezpečně ukončit.
+    cleanup_task.cancel()
+    ff_catalog_task.cancel()
+    await close_external_http_client()
+
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    version=settings.VERSION
+    version=settings.VERSION,
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -42,33 +64,6 @@ app.add_middleware(ConsoleWorkspaceMiddleware)
 app.add_exception_handler(AppBaseException, app_exception_handler)
 
 app.include_router(api_router, prefix="/api")
-
-# Vytvoříme si globální proměnné, abychom si pamatovali naše background procesy
-cleanup_task = None
-ff_catalog_task = None
-
-@app.on_event("startup")
-async def startup_event():
-    global cleanup_task, ff_catalog_task
-    # Spustíme naši uklízečku a uložíme si ji do proměnné
-    cleanup_task = asyncio.create_task(cleanup_old_workspaces())
-
-    # Bootstrap FF katalogu - pokud po čerstvém deployi ještě neexistuje
-    # žádný lokální snapshot, uděláme jeden synchronní refresh, ať FF panel
-    # hned po startu nevrátí prázdný seznam. Dál se stará noční background job.
-    await asyncio.to_thread(catalog_service.ensure_catalog)
-    ff_catalog_task = asyncio.create_task(refresh_ff_catalog_periodically())
-
-# <-- NOVÉ: Přidáme událost vypnutí serveru
-@app.on_event("shutdown")
-async def shutdown_event():
-    global cleanup_task, ff_catalog_task
-    # Když zmáčknete Ctrl+C, server tyto smyčky bezpečně odstřelí
-    if cleanup_task:
-        cleanup_task.cancel()
-    if ff_catalog_task:
-        ff_catalog_task.cancel()
-    await close_external_http_client()
 
 @app.get("/", tags=["Health Check"])
 async def root():

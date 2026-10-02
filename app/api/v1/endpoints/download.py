@@ -2,7 +2,6 @@ import io
 import re
 import zipfile
 import logging
-from pathlib import Path
 from typing import Optional
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse, FileResponse, PlainTextResponse

@@ -12,7 +12,6 @@ jeden bezpečný open-branch (ověřeno přímo proti sidechain_service, ne jen
 odhadem: 3 DOF - CG/CD/OE1 dihedraly, 8 chybějících atomů).
 """
 
-import json
 
 import pytest
 

@@ -1,0 +1,5 @@
+# Development and test tools (not installed in the Docker image).
+-r requirements.txt
+pytest>=9
+pytest-asyncio>=1.4
+ruff>=0.16

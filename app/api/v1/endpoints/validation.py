@@ -71,7 +71,7 @@ class FixAltLocRequest(BaseModel):
     selections: Dict[str, str] = Field(
         ...,
         description="Variant selection map, e.g., {'A-42': 'B'}",
-        example={"A-42": "B", "A-15": "A"}
+        json_schema_extra={"example": {"A-42": "B", "A-15": "A"}},
     )
 
 

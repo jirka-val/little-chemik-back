@@ -1,11 +1,7 @@
 import logging
-import zipfile
-import io
 from fastapi import APIRouter
-from fastapi.responses import StreamingResponse  # Změněno z FileResponse
 from pydantic import BaseModel
 from typing import Dict, Any
-import os
 
 from app.core.exceptions import AppBaseException, InternalError
 from app.services.topology_service import TopologyService

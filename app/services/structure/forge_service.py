@@ -32,7 +32,7 @@ from forge_workflow import (  # noqa: E402
     WorkflowResult,
     run_forge_workflow,
 )
-from forge_molecule_ions import IonIdentity, IonPlacementSettings, load_salt_specifications  # noqa: E402
+from forge_molecule_ions import IonPlacementSettings, load_salt_specifications  # noqa: E402
 from forge_molecule_parser import (  # noqa: E402
     Molecule,
     Residue,
