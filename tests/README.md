@@ -1,114 +1,143 @@
-# Testy — Little Chemik backend
+# Tests – Little Chemik backend
 
-## Rozvržení
+## Layout
 
 ```
 tests/
-  conftest.py          sdílené fixtures (TestClient, workspace factory, PDB fixtures,
-                        offline_forge_ff pro bezpečné testování FORGE builderu bez sítě)
-  fixtures/pdb/         malé, deterministické PDB soubory používané testy
-  unit/                 čistá logika, žádné I/O, žádná síť, žádný TestClient
-  integration/          přes FastAPI TestClient, lokální workspace lifecycle
-  network/               potřebuje skutečné RCSB/IDA API   (marker: network)
-  performance/           dlouho běžící zátěžové testy       (marker: slow)
+  conftest.py          shared fixtures (TestClient, workspace factory, PDB fixtures,
+                       offline_forge_ff for testing the FORGE builder without network)
+  fixtures/pdb/        small deterministic PDB files used by the tests
+  fixtures/pdb/golden/ input structures of the golden tests
+  fixtures/openapi.json  snapshot of the HTTP contract (test_api_contract.py)
+  unit/                pure logic: no I/O, no network, no TestClient
+  integration/         through the FastAPI TestClient, local workspace lifecycle
+  golden/              whole pipeline vs. recorded baseline   (marker: golden)
+  network/             needs the real RCSB/IDA APIs            (marker: network)
+  performance/         long-running load tests                 (marker: slow)
 ```
 
-**Pravidlo umístění:** pokud test importuje a volá funkci/třídu přímo (žádný
-`client.post(...)`), patří do `unit/`. Pokud jde přes `client` fixturu
-(FastAPI `TestClient`), patří do `integration/` — pokud navíc nepotřebuje
-skutečnou síť. Cokoliv, co stahuje z RCSB nebo IDA API, patří do `network/`.
+**Where a test goes:** if it imports and calls a function or class directly
+(no `client.post(...)`), it belongs in `unit/`. If it goes through the
+`client` fixture (FastAPI `TestClient`), it belongs in `integration/`, unless
+it needs the real network. Anything that downloads from RCSB or IDA belongs
+in `network/`.
 
-## Jak spouštět
+## Running
 
 ```bash
-# výchozí běh - jen unit + integration, rychlé, žádná síť (~1-2s)
+# default run: unit + integration, fast, no network (~1 min)
 pytest
 
-# konkrétní vrstva
+# one layer
 pytest tests/unit -v
 pytest tests/integration -v
 
-# zapnout síťové testy (potřebuje internet)
+# golden pipeline tests (~3 min)
+pytest -m golden
+
+# network tests (need internet)
 pytest -m network
 
-# zapnout výkonnostní testy
+# performance tests
 pytest -m slow
 
-# úplně všechno
-pytest -m "unit or integration or network or slow"
+# everything
+pytest -m "unit or integration or golden or network or slow"
 ```
 
-Markery jsou registrované v `pytest.ini` (`--strict-markers` - překlep
-v markeru shodí test hned, ne až při čtení výstupu).
+Markers are registered in `pytest.ini` (`--strict-markers`, so a typo in a
+marker fails immediately).
 
-## Klíčová bezpečnostní zásada
+`scripts/check_all.sh` runs lint, the default run, the golden tests and the
+frontend checks in one go.
 
-**Žádný test nesmí zapisovat do `data/ff_cache/` ani `data/ff_cache_forge/`.**
-Jsou to skutečná, draze stažená data z IDA API. Testy, které potřebují
-silové pole pro FORGE builder (`app/builder`), použijí fixturu
-`offline_forge_ff` z `conftest.py` — ta postaví izolovanou kopii v `tmp_path`
-z toho, co je už lokálně nacachované, a pokud daný FF lokálně chybí, test se
-elegantně přeskočí (`pytest.skip`) místo pádu nebo (horšího) přepsání reálné
-cache prázdným/špatným obsahem.
+## Golden tests
 
-Ze stejného důvodu `unit/test_forcefield_service.py` vždy monkeypatchuje
-`ForceFieldService.CACHE_DIR`/`FORGE_CACHE_DIR` na `tmp_path` přes fixturu
-`service` — nikdy nepracuje s opravdovými adresáři.
+`golden/test_golden_pipeline.py` runs 13 reference structures through the
+same requests the frontend makes in Guided mode and compares all responses
+and output files (PDB, prmtop, crd, mdin, export ZIP, viewer download) with
+a recorded baseline. The force-field catalog is frozen in
+`golden/ff_catalog_frozen.json.gz`.
 
-## Fixture PDB soubory (`fixtures/pdb/`)
+- `golden/expected/` (committed): sha256 of every response and file.
+- `golden/.baseline/` (git-ignored): the full outputs, used to print the
+  first differing lines; without it a failure only names the changed file.
+- After an intended change: `GOLDEN_UPDATE=1 pytest -m golden`, then commit
+  the new hashes with the change.
 
-| soubor | co testuje |
+The same `GOLDEN_UPDATE=1` re-records the OpenAPI snapshot when run on
+`integration/test_api_contract.py`.
+
+## Key safety rule
+
+**No test may write to `data/ff_cache/` or `data/ff_cache_forge/`.** These
+hold real force-field files downloaded from the IDA API. Tests that need a
+force field for the FORGE builder (`app/builder`) use the `offline_forge_ff`
+fixture from `conftest.py`: it builds an isolated copy in `tmp_path` from
+what is cached locally, and skips the test (`pytest.skip`) when that force
+field is not cached, instead of failing or (worse) overwriting the real
+cache with empty or wrong content. The golden tests redirect both cache
+directories to `tmp_path` and take force-field files from the frozen catalog.
+
+For the same reason `unit/test_forcefield_service.py` always monkeypatches
+`ForceFieldService.CACHE_DIR`/`FORGE_CACHE_DIR` to `tmp_path` through the
+`service` fixture.
+
+## PDB fixtures (`fixtures/pdb/`)
+
+| file | what it tests |
 |---|---|
-| `alanine_single.pdb` | nejmenší platný protein fragment |
-| `protein_gap.pdb` | GLU83 → [84-88 chybí] → PHE89, syntetická obdoba 1JJ2 chain K - testuje terminalitu na okraji sekvenční díry |
-| `rna_gap.pdb` | **reálný výřez ze struktury 1RNA** (chain A, residua 1-3 a 6-8, 4-5 vynechána) - musí mít skutečnou geometrii, ne vymyšlené souřadnice, protože FORGE builder na degenerovaných/kolineárních atomech spadne s `Cannot normalize near-zero central dihedral bond` |
-| `altloc_sample.pdb` | SER42 se dvěma alternativními konformacemi OG (occupancy 0.6/0.4) |
-| `two_model_nmr.pdb` | stejné reziduum ve 2 MODEL blocích (NMR ensemble) |
+| `alanine_single.pdb` | smallest valid protein fragment |
+| `protein_gap.pdb` | GLU83 → [84-88 missing] → PHE89, synthetic version of 1JJ2 chain K; terminals at a sequence gap |
+| `rna_gap.pdb` | **real excerpt from 1RNA** (chain A, residues 1-3 and 6-8, 4-5 left out); needs real geometry, because the FORGE builder fails on degenerate/collinear atoms with `Cannot normalize near-zero central dihedral bond` |
+| `altloc_sample.pdb` | SER42 with two alternative OG conformations (occupancy 0.6/0.4) |
+| `two_model_nmr.pdb` | the same residue in 2 MODEL blocks (NMR ensemble) |
 
-Když přidáváš nový fixture PDB, který půjde přes `ForgeStructureService`
-(tzn. cokoliv v `integration/test_prepare_*` nebo `network/`), musí mít
-reálnou, ne-degenerovanou geometrii - buď ručně dopočítanou, nebo (spolehlivěji)
-vyříznutou ze skutečné stažené struktury, jako `rna_gap.pdb`.
+A new fixture PDB that goes through `ForgeStructureService` (anything in
+`integration/test_prepare_*` or `network/`) needs real, non-degenerate
+geometry: computed by hand or, more reliably, cut out of a real downloaded
+structure like `rna_gap.pdb`.
 
-## Solvatace a periodický box
+## Solvation and the periodic box
 
-`tests/network/test_solvation_box.py` je obdoba starého
+`network/test_solvation_box.py` is the counterpart of the old
 `test_performance.py::test_03_solvation_performance` (PDBFixer `addSolvent`),
-teď nad `ForgeStructureService`. Klíčový poznatek zjištěný při psaní: builder
-hledá vodní silové pole striktně pod `mol_type="W3"` (ne obecné `"W"`, které
-používá starší `TopologyService`/`pdb_service` pipeline pro AMBER topologii),
-a i prázdný seznam solí spustí síťovou neutralizaci výchozími K+/Cl- ionty
-(`mol_type="I1"`) - `ff_selections` proto pro solvataci vždy potřebuje i `I1`
-položku, jinak spadne na `KeyError: Ion parameters missing for I1:K+`.
+now on top of `ForgeStructureService`. Learned while writing it: the builder
+looks up the water force field strictly under `mol_type="W3"` (not the
+generic `"W"` used by the older `TopologyService`/`pdb_service` path for the
+AMBER topology), and even an empty salt list triggers neutralisation with the
+default K+/Cl- ions (`mol_type="I1"`). For solvation `ff_selections` therefore
+always needs an `I1` entry too, otherwise it fails with
+`KeyError: Ion parameters missing for I1:K+`.
 
-`TestSolvationCreatesBox` na 1RNA běží reálně a dokončí se (máme lokálně
-OL3 + TIP3P + JC-TIP3P-I1). `TestLargeStructureSolvationPerformance` na 1JJ2
-je parita se starým testem, ale **1JJ2 solvataci nikdy nedokončí** - narazí
-na legitimní `missing_dof` přesně na `K:83 (CGLU:CG)` (GLU83, stejné reziduum
-z úvodní diskuze o 1JJ2 gapu) po ~93 s, dřív než solvatace vůbec začne. To je
-očekávané, správné chování (1JJ2 je reálně neúplná struktura), ne bug - test
-proto měří čas do tohoto bodu, ne čas do úspěšné solvatace. Stejný nález a
-stejný čas potvrzuje i `tests/performance/test_forge_performance.py::TestForgeBuildPerformance`.
+`TestSolvationCreatesBox` on 1RNA runs for real and finishes (OL3 + TIP3P +
+JC-TIP3P-I1 are cached locally). `TestLargeStructureSolvationPerformance` on
+1JJ2 mirrors the old test, but **1JJ2 never finishes solvation**: after ~93 s
+it hits a legitimate `missing_dof` at `K:83 (CGLU:CG)` (GLU83), before
+solvation starts. That is the expected, correct behaviour (1JJ2 really is an
+incomplete structure), not a bug, so the test measures the time to that
+point. `performance/test_forge_performance.py::TestForgeBuildPerformance`
+confirms the same finding and timing.
 
-## Známé, zdokumentované mezery (ne bugy v tomhle kódu)
+## Known, documented gaps (not bugs in this code)
 
-- `tests/network/test_reference_structures.py::TestDnaReference::test_1bna_builds_successfully`
-  je `xfail` - lokálně nacachované `FF99BSC0` nemá parametr pro `DT:H72`. Mezera
-  v datech konkrétního FF, ne v kódu `ForgeStructureService`. Smaž `xfail`, až
-  bude FF opravené/doplněné.
-- `tests/unit/test_pdb_topology_dict.py::TestWithoutSidecar::test_protein_defaults_to_mol_type_r`
-  dokumentuje pre-existující (mimo rozsah FORGE integrace) nedostatek:
-  `parse_pdb_to_topology_dict` bez `forge_meta` sidecaru přiřadí proteinům
-  `mol_type="R"` místo `"P"`.
+- `network/test_reference_structures.py::TestDnaReference::test_1bna_builds_successfully`
+  is `xfail`: the locally cached `FF99BSC0` has no parameter for `DT:H72`.
+  A gap in that force field's data, not in `ForgeStructureService`. Remove
+  the `xfail` once the force field is fixed.
+- `unit/test_pdb_topology_dict.py::TestWithoutSidecar::test_protein_defaults_to_mol_type_r`
+  documents a pre-existing shortcoming outside the FORGE integration:
+  without the `forge_meta` sidecar, `parse_pdb_to_topology_dict` gives
+  proteins `mol_type="R"` instead of `"P"`.
 
-## Přidávání nových testů
+## Adding tests
 
-1. Vyber vrstvu podle pravidla výše.
-2. Pokud test potřebuje FORGE builder (`ForgeStructureService`/`run_forge_workflow`),
-   vždy použij `offline_forge_ff` fixturu - nikdy nevolej `ForceFieldService`
-   napřímo bez monkeypatche v testu, který běží proti reálné `data/`.
-3. Pokud test potřebuje PDB s reálnou geometrií, buď ho vyřízni ze skutečně
-   stažené struktury (viz `rna_gap.pdb` výše), nebo ověř, že tvůj syntetický
-   vstup neprochází přes builder (čistě tokenová/textová logika v `analysis_service`
-   syntetické souřadnice snese bez problémů).
-4. Nový marker přidávej i do `pytest.ini` (`--strict-markers` ho jinak odmítne).
+1. Pick the layer by the rule above.
+2. If the test needs the FORGE builder (`ForgeStructureService`/`run_forge_workflow`),
+   always use the `offline_forge_ff` fixture; never call `ForceFieldService`
+   without a monkeypatch in a test that runs against the real `data/`.
+3. If the test needs a PDB with real geometry, cut it out of a real
+   downloaded structure (see `rna_gap.pdb`), or make sure your synthetic
+   input does not go through the builder (pure token/text logic in
+   `services/analysis` copes with synthetic coordinates).
+4. Register any new marker in `pytest.ini` (`--strict-markers` rejects it otherwise).
