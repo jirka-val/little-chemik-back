@@ -55,7 +55,7 @@ _WATER_GROUPS = frozenset({"W3", "W4", "W5"})
 
 # Rezidua, která builder umí sám rozpoznat a klasifikovat (polymer/voda/iont) -
 # viz _strip_unrecognized_heterogens níže. Ionty jsou tu záměrně, na rozdíl od
-# staré PDBFixer cesty (hydrogenation.py) - builder existující krystalové ionty
+# dřívější PDBFixer cesty (HydrogenationService, odstraněna) - builder existující krystalové ionty
 # umí sám vyhodnotit a případně nahradit (result.crystal_ion_cleanup), takže je
 # netřeba (a nechceme je) stripovat spolu s ligandy.
 _KNOWN_POLYMER_RESNAMES = frozenset({
@@ -111,7 +111,7 @@ def _resolve_mol_type(key: str, ff_data: Dict[str, Any]) -> str:
 
 def _strip_unrecognized_heterogens(pdb_text: str, crystal_water_mode: str) -> str:
     """
-    Zrcadlí chování staré PDBFixer.removeHeterogens() (viz hydrogenation.py),
+    Zrcadlí chování dřívějšího PDBFixer.removeHeterogens() (HydrogenationService),
     které se při migraci na FORGE builder ztratilo. Builder neumí stavět
     libovolné krystalizační ligandy/aditiva (GOL, SO4, EDO, ...) - jen je
     tiše propustí do výstupu (Molecule.passthrough_atoms) beze změny, a
