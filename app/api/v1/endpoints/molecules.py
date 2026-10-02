@@ -129,6 +129,7 @@ async def add_hydrogens(
 
 @router.post("/remove-residue/{workspace_id}")
 async def delete_residue(workspace_id: str, request: Request):
+    workspace_manager.require_workspace(workspace_id)
     data = await request.json()
 
     FILENAME = "structure.pdb"

@@ -5,8 +5,8 @@ import aiofiles
 from fastapi import APIRouter, Header, Query
 from fastapi.concurrency import run_in_threadpool
 
-from app.core.config import settings
-from app.core.exceptions import AppBaseException, BadRequestError, ExternalServiceError, ForbiddenError, InternalError
+from app.core.exceptions import AppBaseException, BadRequestError, ExternalServiceError, InternalError
+from app.core.security import require_admin
 from app.services.analysis_service import required_ff_groups, resolve_ion_mol_type
 from app.services.ff_catalog_service import catalog_service
 from app.services.ff_classification_service import classification_service
@@ -235,8 +235,7 @@ async def patch_classification(payload: Dict[str, str], x_admin_token: str = Hea
     (jaká sada iontů k dané vodě patří), ne prosté přesunutí jména mezi
     seznamy, viz ForceFieldClassificationService.set_solute_tier docstring.
     """
-    if not settings.ADMIN_TOKEN or x_admin_token != settings.ADMIN_TOKEN:
-        raise ForbiddenError()
+    require_admin(x_admin_token)
 
     group = payload.get("group")
     ff_name = payload.get("ff_name")

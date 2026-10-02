@@ -2,7 +2,8 @@ import logging
 import sys
 import threading
 from collections import deque
-from typing import Any, Dict, List
+from contextvars import ContextVar
+from typing import Any, Dict, List, Optional
 
 
 class InMemoryLogHandler(logging.Handler):
@@ -19,6 +20,10 @@ class InMemoryLogHandler(logging.Handler):
 
     Každý záznam dostane rostoucí `id`, takže frontend může pollovat
     přírůstkově (`since_id`) místo opakovaného posílání celého bufferu.
+
+    Záznam si pamatuje workspace, v jehož requestu vznikl (console_workspace,
+    nastavuje ConsoleWorkspaceMiddleware), aby jeden uživatel neviděl zprávy
+    z přípravy jiného. Samotné ID se ven nikdy neposílá.
     """
 
     def __init__(self, capacity: int = 100):
@@ -39,15 +44,25 @@ class InMemoryLogHandler(logging.Handler):
                 "timestamp": record.created,
                 "level": record.levelname,
                 "message": message,
+                "_workspace": console_workspace.get(),
             }
             self._next_id += 1
             self._buffer.append(entry)
 
-    def get_since(self, since_id: int = 0, limit: int = 200) -> List[Dict[str, Any]]:
+    def get_since(self, since_id: int = 0, limit: int = 200, workspace_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Záznamy novější než since_id: obecné (bez workspace) + ty z daného workspace."""
         with self._lock:
-            entries = [e for e in self._buffer if e["id"] > since_id]
+            entries = [
+                {k: v for k, v in e.items() if k != "_workspace"}
+                for e in self._buffer
+                if e["id"] > since_id and e["_workspace"] in (None, workspace_id)
+            ]
         return entries[-limit:]
 
+
+# Workspace aktuálního requestu (viz ConsoleWorkspaceMiddleware). Přenáší se
+# i do run_in_threadpool, protože ten kopíruje kontext.
+console_workspace: ContextVar[Optional[str]] = ContextVar("console_workspace", default=None)
 
 console_log_buffer = InMemoryLogHandler()
 

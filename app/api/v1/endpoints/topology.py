@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import Dict, Any
 import os
 
-from app.core.exceptions import InternalError
+from app.core.exceptions import AppBaseException, InternalError
 from app.services.topology_service import TopologyService
 from app.workspaces.manager import workspace_manager
 
@@ -48,6 +48,8 @@ async def generate_topology(workspace_id: str, request: TopologyRequest):
                 "pdb": result_dict["coordinates_file"]
             }
         }
+    except AppBaseException:
+        raise
     except Exception as e:
         logger.exception(f"Topology generation failed for workspace {workspace_id}: {e}")
         raise InternalError(str(e))

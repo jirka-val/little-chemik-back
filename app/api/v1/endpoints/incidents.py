@@ -21,7 +21,8 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
-from app.core.exceptions import AppBaseException, BadRequestError, ForbiddenError, NotFoundError
+from app.core.exceptions import AppBaseException, BadRequestError, NotFoundError
+from app.core.security import require_admin
 from app.services.incidents import history, store
 
 logger = logging.getLogger(__name__)
@@ -56,11 +57,6 @@ class IncidentReport(BaseModel):
     screenshot: Optional[str] = Field(None, max_length=14_000_000)
 
 
-def _require_admin(token: str) -> None:
-    if not settings.ADMIN_TOKEN or token != settings.ADMIN_TOKEN:
-        raise ForbiddenError()
-
-
 @router.get("/config", summary="Je hlášení chyb zapnuté?")
 async def incidents_config():
     return {"enabled": history.enabled()}
@@ -93,7 +89,7 @@ async def submit_incident(report: IncidentReport):
 
 @router.get("", summary="(admin) Seznam nahlášených chyb")
 async def list_incidents(x_admin_token: str = Header(default="")):
-    _require_admin(x_admin_token)
+    require_admin(x_admin_token)
     incidents = await run_in_threadpool(store.list_incidents)
     used = await run_in_threadpool(store.storage_used_bytes)
     return {
@@ -105,7 +101,7 @@ async def list_incidents(x_admin_token: str = Header(default="")):
 
 @router.get("/{incident_id}/download", summary="(admin) Stáhne report jako ZIP")
 async def download_incident(incident_id: str, x_admin_token: str = Header(default="")):
-    _require_admin(x_admin_token)
+    require_admin(x_admin_token)
     data = await run_in_threadpool(store.incident_zip, incident_id)
     if data is None:
         raise NotFoundError(f"Incident {incident_id} not found.")
@@ -118,7 +114,7 @@ async def download_incident(incident_id: str, x_admin_token: str = Header(defaul
 
 @router.delete("/{incident_id}", summary="(admin) Smaže vyřešený report")
 async def delete_incident(incident_id: str, x_admin_token: str = Header(default="")):
-    _require_admin(x_admin_token)
+    require_admin(x_admin_token)
     if not await run_in_threadpool(store.delete_incident, incident_id):
         raise NotFoundError(f"Incident {incident_id} not found.")
     return {"deleted": incident_id}

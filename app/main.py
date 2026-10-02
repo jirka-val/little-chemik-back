@@ -7,6 +7,7 @@ from app.core.exceptions import AppBaseException, app_exception_handler
 from app.core.config import settings
 from app.core.http_client import close_external_http_client
 from app.core.incident_middleware import IncidentJournalMiddleware
+from app.core.console_middleware import ConsoleWorkspaceMiddleware
 
 # <-- NOVÉ: Import naší vytvořené uklízečky
 from app.workspaces.tasks.garbage_collector import cleanup_old_workspaces
@@ -34,6 +35,9 @@ app.add_middleware(
 
 # Deník akcí a snímky struktury pro hlášení chyb (INCIDENT_REPORTS_ENABLED).
 app.add_middleware(IncidentJournalMiddleware)
+
+# Zprávy Console panelu vidí jen workspace, který je vyvolal.
+app.add_middleware(ConsoleWorkspaceMiddleware)
 
 app.add_exception_handler(AppBaseException, app_exception_handler)
 

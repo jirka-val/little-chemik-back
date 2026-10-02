@@ -7,7 +7,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from typing import Dict, Any, List
 
-from app.core.exceptions import ExternalServiceError, InternalError, RemoteMoleculeNotFoundError
+from app.core.exceptions import AppBaseException, ExternalServiceError, InternalError, RemoteMoleculeNotFoundError
 from app.core.http_client import external_http_client
 from app.workspaces.manager import workspace_manager
 # ZMĚNA 1: Importujeme novou funkci process_structure místo původní clean_pdb_altlocs
@@ -71,6 +71,8 @@ async def analyze_sequence(workspace_id: str, chain: str | None = None, fill_gap
             "sequence": sequence_data
         }
 
+    except AppBaseException:
+        raise
     except Exception as e:
         logger.exception(f"Error processing sequence for workspace {workspace_id}: {str(e)}")
         raise InternalError("Internal server error while processing the molecule sequence.")

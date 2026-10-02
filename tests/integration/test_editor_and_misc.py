@@ -108,3 +108,39 @@ class TestConsoleLogs:
         second = client.get("/api/system/logs", params={"since_id": first["last_id"]}).json()
         assert [e["message"] for e in second["entries"]][-1] == "refactor-check message"
         assert second["last_id"] > first["last_id"]
+
+    def test_messages_of_other_workspaces_are_hidden(self, client):
+        from app.core.logging import console_workspace
+
+        mine, other = "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"
+        start = client.get("/api/system/logs").json()["last_id"]
+        for ws, text in ((mine, "mine"), (other, "other"), (None, "general")):
+            token = console_workspace.set(ws)
+            console_logger.info(text)
+            console_workspace.reset(token)
+
+        def messages(**params):
+            body = client.get("/api/system/logs", params={"since_id": start, **params}).json()
+            assert all("_workspace" not in e for e in body["entries"])
+            return [e["message"] for e in body["entries"]]
+
+        assert messages(workspace_id=mine) == ["mine", "general"]
+        assert messages() == ["general"]
+
+
+@pytest.mark.asyncio
+async def test_console_middleware_tags_requests_by_workspace_in_path():
+    from app.core.console_middleware import ConsoleWorkspaceMiddleware
+    from app.core.logging import console_workspace
+
+    seen = []
+
+    async def app(scope, receive, send):
+        seen.append(console_workspace.get())
+
+    middleware = ConsoleWorkspaceMiddleware(app)
+    ws = "33333333-3333-4333-8333-333333333333"
+    for path in (f"/api/sidechains/start/{ws}", f"/api/download/{ws}/export", "/api/validation/ions"):
+        await middleware({"type": "http", "path": path}, None, None)
+    assert seen == [ws, ws, None]
+    assert console_workspace.get() is None
