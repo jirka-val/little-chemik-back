@@ -22,7 +22,7 @@ if str(BUILDER_DIR) not in sys.path:
 
 from forge_molecule_parser import Molecule, Chain, Residue, Atom, PDBAtomRecord  # noqa: E402
 
-from app.services.structure.forge_service import (  # noqa: E402
+from app.services.structure.pdb_writer import (  # noqa: E402
     ForgeWriterError,
     _pdb_safe_resname,
     build_forge_meta,

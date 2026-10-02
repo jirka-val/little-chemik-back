@@ -11,8 +11,6 @@ varianty) a sám žádnou opravu identity reziduí ani přemostění chybějíc�
 from __future__ import annotations
 
 import logging
-import re
-import sys
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -21,10 +19,6 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 from app.core.logging import console_logger
-
-_BUILDER_DIR = Path(__file__).resolve().parents[2] / "builder"
-if str(_BUILDER_DIR) not in sys.path:
-    sys.path.insert(0, str(_BUILDER_DIR))
 
 from forge_workflow import (  # noqa: E402
     WorkflowResources,
@@ -35,23 +29,22 @@ from forge_workflow import (  # noqa: E402
 from forge_molecule_ions import IonPlacementSettings, load_salt_specifications  # noqa: E402
 from forge_molecule_parser import (  # noqa: E402
     Molecule,
-    Residue,
     build_molecule_from_forge_json,
-    format_pdb_atom_line,
-    infer_element,
     load_json,
 )
 from forge_molecule_solvation import SolvationVdwParameters, SolvationSettings, load_solvation_template  # noqa: E402
 from forge_molecule_state_assignment import assign_molecule_states  # noqa: E402
 
+from app.core.config import settings
 from app.core.exceptions import AppBaseException
+from app.services.structure.groups import BUILDER_GROUPS, WATER_GROUPS
+from app.services.structure.pdb_writer import build_forge_meta, molecule_to_pdb
+from app.services.structure.reports import REVIEW_SECTIONS, build_histidine_review, protonation_override_map
 from app.services.analysis import build_sequence_tokens, required_ff_groups
 from app.services.forcefield_service import ForceFieldService
 from app.services.structure.structure_review import apply_structure_edits, find_amide_flips, find_zero_occupancy
 
-_DATA_DIR = Path(__file__).resolve().parents[3] / "data"
-_ION_GROUPS = frozenset({"I1", "I1+", "Im", "Im+"})
-_WATER_GROUPS = frozenset({"W3", "W4", "W5"})
+_DATA_DIR = settings.BASE_DIR / "data"
 
 # Rezidua, která builder umí sám rozpoznat a klasifikovat (polymer/voda/iont) -
 # viz _strip_unrecognized_heterogens níže. Ionty jsou tu záměrně, na rozdíl od
@@ -69,11 +62,6 @@ _KNOWN_ION_RESNAMES = frozenset({
     "NA", "CL", "K", "MG", "CA", "LI", "RB", "CS", "ZN", "F", "BR", "I",
 })
 
-# Přesné skupiny, jak je builder sám rozlišuje (viz converting_dictionary.json
-# top-level klíče). ff_selections od frontendu je dnes klíčované obecným
-# detekovaným typem ("W", "I"), ne tímhle - viz _resolve_mol_type níže.
-_ALL_BUILDER_GROUPS = frozenset({"R", "D", "P"}) | _WATER_GROUPS | _ION_GROUPS
-
 
 def _resolve_mol_type(key: str, ff_data: Dict[str, Any]) -> str:
     """
@@ -88,11 +76,11 @@ def _resolve_mol_type(key: str, ff_data: Dict[str, Any]) -> str:
     místo "W3" a solvatace by pak spadla na KeyError ("LJ sigma missing for
     W3:WAT:O") - přesně tenhle bug řeší tahle funkce.
     """
-    if key in _ALL_BUILDER_GROUPS:
+    if key in BUILDER_GROUPS:
         return key
 
     candidates = ff_data.get("molecule_type") or []
-    precise = [c for c in candidates if c in _ALL_BUILDER_GROUPS]
+    precise = [c for c in candidates if c in BUILDER_GROUPS]
 
     if len(precise) == 1:
         return precise[0]
@@ -164,9 +152,6 @@ def find_removed_heterogens(pdb_text: str, crystal_water_mode: str) -> List[Dict
         entry["atoms"] += 1
     return list(found.values())
 
-
-class ForgeWriterError(RuntimeError):
-    """Vyhozeno, když by výsledná molekula nešla bezpečně zapsat do fixed-column PDB."""
 
 
 class ForgeMissingDOFError(AppBaseException):
@@ -251,228 +236,6 @@ def _cached_ff_parameters(directories: tuple) -> SolvationVdwParameters:
     return SolvationVdwParameters.from_force_field_directories([Path(d) for d in directories])
 
 
-def _pdb_safe_resname(residue: Residue) -> str:
-    """
-    Vrátí resname zapsatelné do 3sloupcového PDB pole. RNA/DNA varianty
-    (RU3/RA5/...) do 3 znaků vždy vejdou. Proteinové terminální varianty
-    (CGLU/NPHE/...) jsou 4 znaky - format_pdb_atom_line je NEOŘEZÁVÁ, jen by
-    tiše posunul všechny další sloupce na řádku, takže se vždy vrací
-    original_resname (builder ho u téhle mutace nepřepisuje).
-    """
-    if len(residue.ff_resname) <= 3:
-        return residue.ff_resname
-    original = residue.original_resname
-    if original and len(original) <= 3:
-        return original
-    raise ForgeWriterError(
-        f"Residue {residue.chain_id}:{residue.resseq}{residue.icode} "
-        f"({residue.ff_resname!r}) has no PDB-safe (<=3 char) representation."
-    )
-
-
-def _format_ter_line(serial: int, resname: str, chain_id: str, resseq: int, icode: str) -> str:
-    """
-    Standardní PDB TER záznam - signalizuje downstream nástrojům (Mol* mimo
-    jiné), že tady polymerní řetězec končí. Bez něj hrozí, že se poslední
-    reziduum jednoho chainu a první reziduum dalšího vyhodnotí jako přerušený
-    (gap) polymer téhož řetězce, což se ve vieweru projeví tečkovanou
-    "vazbou" mezi dvěma chainy i po nastavení jejich terminality - viz
-    molecule_to_pdb().
-    """
-    return f"TER   {serial:5d}      {resname:>3s} {chain_id[:1]:1s}{resseq:4d}{icode[:1]:1s}"
-
-
-def _cryst1_line(molecule: Molecule) -> Optional[str]:
-    import math
-
-    if molecule.periodic_box is None:
-        return None
-    vectors = molecule.periodic_box.vectors
-    lengths = [math.sqrt(sum(x * x for x in vector)) for vector in vectors]
-
-    def angle(left: int, right: int) -> float:
-        dot = sum(vectors[left][i] * vectors[right][i] for i in range(3))
-        cosine = max(-1.0, min(1.0, dot / (lengths[left] * lengths[right])))
-        return math.degrees(math.acos(cosine))
-
-    alpha, beta, gamma = angle(1, 2), angle(0, 2), angle(0, 1)
-    return (
-        f"CRYST1{lengths[0]:9.3f}{lengths[1]:9.3f}{lengths[2]:9.3f}"
-        f"{alpha:7.2f}{beta:7.2f}{gamma:7.2f} P 1           1"
-    )
-
-
-def _is_artificial_break_terminus(residue: "Residue") -> bool:
-    """
-    True pro reziduum, které se stalo N- nebo C-terminálním kvůli přerušení
-    uprostřed řetězce (mezera v číslování, explicitní TER, chemicky nemožná
-    vzdálenost - viz analysis/sequence.py), NE proto, že by šlo o
-    skutečný začátek/konec celého řetězce ("chain_end" - ten už řeší
-    end-of-chain TER na konci molecule_to_pdb).
-    """
-    return residue.terminus_reason is not None and residue.terminus_reason != "chain_end"
-
-
-def _chain_sort_key(molecule: Molecule, chain_id: str):
-    residues = molecule.chains[chain_id].residues
-    is_water = bool(residues) and all(r.group in _WATER_GROUPS for r in residues)
-    is_ion = bool(residues) and all(r.group in _ION_GROUPS for r in residues)
-    return (2 if is_water else 1 if is_ion else 0, chain_id)
-
-
-def _pdb_serial(serial: int) -> int:
-    """
-    Sériové číslo atomu ve fixed-column PDB smí mít nejvýš 5 číslic
-    (sloupce 7-11). format_pdb_atom_line() to samo nehlídá - `f"{serial:5d}"`
-    u čísla >= 100000 tiše přeteče na 6 znaků a posune všechny další sloupce
-    na řádku o jeden doprava, takže resname/chain/souřadnice skončí na
-    špatné pozici. Potvrzeno pádem na solvatovaném 1JJ2 (925 179 atomů):
-    OpenMM (přes PDBFixer ve StructureChecker) na takhle posunutém řádku
-    spadne na "Misaligned residue name". Sériové číslo je čistě kosmetický
-    popisek (nic downstream ho nepoužívá jako identitu - všude se pracuje
-    přes chain/resseq/atom name), takže cyklické zabalení zpátky do rozsahu
-    1-99999 je bezpečné a zachová platný fixed-column formát i nad hranicí
-    legacy PDB limitu.
-    """
-    return ((serial - 1) % 99999) + 1
-
-
-def molecule_to_pdb(molecule: Molecule) -> str:
-    """
-    Zapíše výsledek FORGE builderu do PDB textu pro Molstar/downstream nástroje.
-    Reimplementace vzoru z (nevendorovaného) forge_builder_v0/examples/forge_workflow_cli.py,
-    doplněná o bezpečnou volbu resname (viz _pdb_safe_resname) - ta v příkladovém
-    CLI writeru chybí a u proteinových terminálních variant/nahrazených iontů by
-    tiše poškodila fixed-column formát.
-    """
-    lines: List[str] = []
-    cryst1 = _cryst1_line(molecule)
-    if cryst1:
-        lines.append(cryst1)
-
-    serial = 1
-    for chain_id in sorted(molecule.chains, key=lambda cid: _chain_sort_key(molecule, cid)):
-        # _chain_sort_key()[0] je 0 jen pro "normální" (ne čistě voda/ionty)
-        # chainy - TER dává smysl jen pro tyhle polymerní řetězce, HETATM
-        # voda/ionty žádnou spojitost/gap logiku ve vieweru nespouští.
-        chain_is_polymer = _chain_sort_key(molecule, chain_id)[0] == 0
-        chain_residues = molecule.chains[chain_id].residues
-        last_written: Optional[tuple] = None
-        for res_idx, residue in enumerate(chain_residues):
-            is_ion = residue.group in _ION_GROUPS
-            hetero = is_ion or residue.group in _WATER_GROUPS
-            for atom in residue.atoms.values():
-                if atom.coord is None:
-                    continue
-                if is_ion:
-                    # Monatomární ionty: FF resname (Mg2+, Cs+, ...) do 3 sloupců
-                    # nevejde. Builder sám tenhle případ řeší přes element symbol
-                    # (viz forge_molecule_ions._ion_element) - držíme se stejné
-                    # konvence, ať je psaní iontů konzistentní s tím, co builder
-                    # sám interně považuje za jejich identitu.
-                    element = atom.element or infer_element(atom.name)
-                    if not element:
-                        raise ForgeWriterError(
-                            f"Ion {residue.chain_id}:{residue.resseq} ({residue.ff_resname}) "
-                            "has no resolvable element symbol."
-                        )
-                    atom_name_out = element.upper()
-                    resname_out = element.upper()
-                else:
-                    atom_name_out = atom.name
-                    resname_out = _pdb_safe_resname(residue)
-
-                lines.append(
-                    format_pdb_atom_line(
-                        serial=_pdb_serial(serial),
-                        record_name="HETATM" if hetero else "ATOM",
-                        atom_name=atom_name_out,
-                        resname=resname_out,
-                        chain_id=residue.chain_id,
-                        resseq=residue.resseq,
-                        icode=residue.icode,
-                        coord=atom.coord,
-                        occupancy=atom.occupancy if atom.occupancy is not None else 1.0,
-                        bfactor=atom.bfactor if atom.bfactor is not None else 0.0,
-                        element=atom.element,
-                        altloc="",
-                    )
-                )
-                serial += 1
-                if chain_is_polymer:
-                    last_written = (resname_out, residue.resseq, residue.icode)
-
-            # Hranice mezery uprostřed řetězce (GLU83/PHE89 na 1JJ2 apod.):
-            # tohle reziduum i to bezprostředně následující jsou OBĚ umělé
-            # terminusy (viz _is_artificial_break_terminus) přesně tehdy, když
-            # mezi nimi je gap/TER/geometrický zlom - "chain_end" (skutečný
-            # začátek/konec řetězce) tuhle podmínku nikdy nesplní, protože je
-            # vždy jen na jednom z dvojice sousedů. Bez explicitního TER by
-            # Molstar (a další downstream nástroje) mohly tenhle úsek
-            # vyhodnotit jako spojitý polymer navzdory nastavené terminalitě.
-            if (
-                chain_is_polymer
-                and last_written is not None
-                and _is_artificial_break_terminus(residue)
-                and res_idx + 1 < len(chain_residues)
-                and _is_artificial_break_terminus(chain_residues[res_idx + 1])
-            ):
-                resname_out, resseq, icode = last_written
-                lines.append(_format_ter_line(_pdb_serial(serial), resname_out, chain_id, resseq, icode))
-                serial += 1
-
-        if chain_is_polymer and last_written is not None:
-            resname_out, resseq, icode = last_written
-            lines.append(_format_ter_line(_pdb_serial(serial), resname_out, chain_id, resseq, icode))
-            serial += 1
-
-    for record in molecule.passthrough_atoms:
-        is_ion = record.group in _ION_GROUPS
-        if is_ion:
-            element = record.element or infer_element(record.atom_name)
-            atom_name_out = (element or record.atom_name).upper()
-            resname_out = (element or record.resname[:3]).upper()
-        else:
-            atom_name_out = record.atom_name
-            resname_out = record.resname[-3:] if len(record.resname) > 3 else record.resname
-
-        lines.append(
-            format_pdb_atom_line(
-                serial=_pdb_serial(serial),
-                record_name="HETATM",
-                atom_name=atom_name_out,
-                resname=resname_out,
-                chain_id=record.chain_id,
-                resseq=record.resseq,
-                icode=record.icode,
-                coord=record.coord,
-                occupancy=record.occupancy if record.occupancy is not None else 1.0,
-                bfactor=record.bfactor if record.bfactor is not None else 0.0,
-                element=record.element,
-                altloc="",
-            )
-        )
-        serial += 1
-
-    lines.extend(("END", ""))
-    return "\n".join(lines)
-
-
-def build_forge_meta(molecule: Molecule) -> Dict[str, Dict[str, Any]]:
-    """
-    Sidecar metadata (chain:resseq:icode -> autoritativní ff_resname/group) pro
-    TopologyService. Builder do PDB textu zapisuje jen 3znakovou reprezentaci
-    (viz _pdb_safe_resname), takže proteinové terminální varianty jako CGLU/NPHE
-    by se po zpětném parsování PDB ztratily. Tohle je jediné místo, kde je
-    plná (i 4znaková) identita reziduí po doběhnutí state-assignmentu dostupná.
-    """
-    meta: Dict[str, Dict[str, Any]] = {}
-    for chain in molecule.chains.values():
-        for residue in chain.residues:
-            key = f"{residue.chain_id}:{residue.resseq}:{residue.icode}"
-            meta[key] = {"ff_resname": residue.ff_resname, "group": residue.group}
-    return meta
-
 
 @dataclass
 class ForgeWorkflowRun:
@@ -535,245 +298,6 @@ class ForgePreparationResult:
     ion_addition: Any
 
 
-def _protonation_override_map(overrides: Optional[List[Dict[str, Any]]]) -> Dict[tuple, str]:
-    """[{chain, resseq, icode, state}] z požadavku -> klíč rezidua builderu."""
-    return {
-        (o["chain"], int(o["resseq"]), o.get("icode") or ""): o["state"]
-        for o in overrides or []
-    }
-
-
-def _format_residue_key(residue_key: tuple) -> str:
-    chain, resseq, icode = residue_key
-    return f"{chain}{resseq}{icode}".rstrip()
-
-
-def _format_atom_key(atom_key: tuple) -> str:
-    chain, resseq, icode, atom_name = atom_key
-    return f"{_format_residue_key((chain, resseq, icode))}:{atom_name}"
-
-
-# Builder píše do zpráv o konfliktech atomové klíče jako Python tuple
-# ("('A', 57, '', 'ND1')") - pro uživatele je převedeme na "A57:ND1".
-_ATOM_KEY_REPR = re.compile(r"\('([^']*)', (-?\d+), '([^']*)', '([^']+)'\)")
-_RESIDUE_KEY_REPR = re.compile(r"\('([^']*)', (-?\d+), '([^']*)'\)")
-
-
-def _readable_conflict(message: str) -> str:
-    message = _ATOM_KEY_REPR.sub(lambda m: f"{m[1]}{m[2]}{m[3]}:{m[4]}", message)
-    return _RESIDUE_KEY_REPR.sub(lambda m: f"{m[1]}{m[2]}{m[3]}", message)
-
-
-def _family_base_names(family_names: tuple) -> List[str]:
-    """
-    Názvy stavů bez koncové předpony (NHIE -> HIE), když ji mají všechny
-    členy rodiny - uživatel volí HID/HIE/HIP, builder si koncovou variantu
-    dohledá sám (viz forced_states v assign_protonation_states).
-    """
-    for prefix in ("N", "C"):
-        if family_names and all(n.startswith(prefix) and len(n) > 3 for n in family_names):
-            return [n[1:] for n in family_names]
-    return list(family_names)
-
-
-def _titratable_residue_report(prot: Any) -> List[Dict[str, Any]]:
-    """
-    Všechna titrovatelná rezidua (dnes HIS) s tím, PROČ builder zvolil daný
-    stav - pro lidskou kontrolu v Structure kroku a ruční přepsání v Expert
-    režimu. Evidence se skládá z reportu builderu podle atomových míst
-    rezidua: pevné vodíkové vazby (partner má jednoznačnou roli), vazby mezi
-    dvěma proměnnými místy a nejednoznačné kontakty.
-    """
-    families = [tuple(names) for names, _default in prot.family_defaults]
-    out = []
-    for a in prot.assignments:
-        rk = tuple(a.residue_key)
-
-        def own(atom_key) -> bool:
-            return tuple(atom_key[:3]) == rk
-
-        evidence = []
-        for e in prot.fixed_evidence:
-            if own(e.variable_site):
-                evidence.append({
-                    "kind": "fixed",
-                    "site": e.variable_site[3],
-                    "role": e.required_role,
-                    "partner": _format_atom_key(e.partner_site),
-                    "distance_angstrom": round(e.distance_angstrom, 2),
-                })
-        for c in prot.variable_contacts:
-            if own(c.site1) or own(c.site2):
-                mine, other = (c.site1, c.site2) if own(c.site1) else (c.site2, c.site1)
-                evidence.append({
-                    "kind": "variable",
-                    "site": mine[3],
-                    "partner": _format_atom_key(other),
-                    "distance_angstrom": round(c.distance_angstrom, 2),
-                })
-        for c in prot.ambivalent_contacts:
-            if own(c.variable_site):
-                evidence.append({
-                    "kind": "ambivalent",
-                    "site": c.variable_site[3],
-                    "partner": _format_atom_key(c.partner_site),
-                    "distance_angstrom": round(c.distance_angstrom, 2),
-                })
-
-        conflicts = [_readable_conflict(c.message) for c in prot.conflicts if any(own(site) for site in c.sites)]
-        unevaluable = [f"{key[3]}: {reason}" for key, reason in prot.unevaluable_sites if own(key)]
-
-        if a.is_forced:
-            source = "user"
-        elif any(e["kind"] in ("fixed", "variable") for e in evidence):
-            source = "hbond"
-        else:
-            source = "ph_default"
-
-        # Proč stav stojí za lidskou kontrolu (krok 3.5 v Expert režimu).
-        # Ruční volba uživatele se znovu nekontroluje - už o ní rozhodl.
-        review_reasons = []
-        if source != "user":
-            if conflicts:
-                review_reasons.append("conflict")
-            if any(e["kind"] == "ambivalent" for e in evidence):
-                review_reasons.append("ambivalent")
-            if unevaluable:
-                review_reasons.append("unevaluable")
-            if source == "ph_default":
-                review_reasons.append("no_hbond")
-
-        family = next((f for f in families if a.new_resname in f), (a.new_resname,))
-        base = dict(zip(family, _family_base_names(family)))
-        chain, resseq, icode = rk
-        out.append({
-            "residue": _format_residue_key(rk),
-            "chain": chain,
-            "resseq": resseq,
-            "icode": icode,
-            "original": a.old_resname,
-            "assigned": base.get(a.new_resname, a.new_resname),
-            "default": base.get(a.default_resname, a.default_resname),
-            "options": _family_base_names(family),
-            "source": source,
-            "evidence": evidence,
-            "conflicts": conflicts,
-            "unevaluable": unevaluable,
-            "review_reasons": review_reasons,
-        })
-    return out
-
-
-def build_histidine_review(prot: Any) -> Dict[str, Any]:
-    """
-    HIS sekce kroku 3.5 (Expert): titrovatelná rezidua s nejistým stavem
-    (prázdný seznam = builder o všech rozhodl jednoznačně). Obecné problémy,
-    které nepatří ke konkrétnímu reziduu, jdou zvlášť do `general_issues`.
-    """
-    rows = _titratable_residue_report(prot)
-    per_residue = {msg for r in rows for msg in r["conflicts"]}
-    general = [
-        msg for msg in (_readable_conflict(c.message) for c in prot.conflicts)
-        if msg not in per_residue
-    ]
-    return {
-        "histidines": [r for r in rows if r["review_reasons"]],
-        "total_histidines": len(rows),
-        "general_issues": general + list(prot.warnings),
-    }
-
-
-# Sekce kroku 3.5, které vyžadují rozhodnutí - když jsou všechny prázdné,
-# příprava se nezastaví (general_issues samy o sobě ne).
-_REVIEW_SECTIONS = ("histidines", "zero_occupancy", "amide_flips", "removed_heterogens")
-
-
-def build_preparation_summary(result: ForgePreparationResult) -> Dict[str, Any]:
-    """
-    Serializuje report objekty (state_assignment/crystal_ion_cleanup/solvation/
-    ion_addition), které builder počítá při KAŽDÉ přípravě, ale API je dřív
-    zahazovalo - vraceli jsme jen {message, warnings, validation}, report se
-    jen logoval na server (viz run_workflow logger.info volání níže) a nikdy
-    se nedostal na frontend. To přesně odpovídá review krokům W5.1/W5.2 v
-    FORGE_general_design_v5.xlsx ("Review ... state assignments" a "Review
-    ... retained crystal species, salt conditions and net charge") - ty tam
-    nejsou jako samostatná W2/W3 review obrazovka (to spec explicitně
-    nechce), ale musí být VIDĚT někde na konci přípravy.
-
-    U protonation_assignments vracíme jen ne-defaultní přiřazení (ne
-    kompletní inventář všech reziduí) - u velké struktury by kompletní seznam
-    byl tisíce nezajímavých řádků, zatímco přesně tohle přiřazení "odlišné od
-    výchozího" je to, co si review krok podle Excel dokumentu žádá zvýraznit.
-    """
-    summary: Dict[str, Any] = {}
-
-    sa = result.state_assignment
-    if sa is not None:
-        covalent = sa.covalent
-        summary["disulfide_bonds"] = [
-            {
-                "atom1": _format_atom_key(b.atom1),
-                "atom2": _format_atom_key(b.atom2),
-                "distance_angstrom": round(b.distance_angstrom, 3),
-            }
-            for b in covalent.bonds
-        ]
-        summary["covalent_state_changes"] = [
-            {"residue": _format_residue_key(res_key), "from": old, "to": new}
-            for res_key, old, new in covalent.state_changes
-        ]
-        summary["covalent_missing_bond_atoms"] = [
-            {"residue": _format_residue_key(res_key), "resname": resname, "expected_atom": atom}
-            for res_key, resname, atom in covalent.missing_bond_atoms
-        ]
-
-        prot = sa.protonation
-        summary["protonation_assignments"] = [
-            {
-                "residue": _format_residue_key(a.residue_key),
-                "default": a.default_resname,
-                "assigned": a.new_resname,
-            }
-            for a in prot.assignments
-            if not a.is_default
-        ]
-        summary["protonation_conflicts"] = [
-            {"kind": c.kind, "message": _readable_conflict(c.message)} for c in prot.conflicts
-        ]
-        summary["protonation_warnings"] = list(prot.warnings)
-
-    c = result.crystal_ion_cleanup
-    if c is not None:
-        summary["crystal_ion_cleanup"] = {
-            "input_ions": c.input_ions,
-            "removed_monovalent": c.removed_monovalent,
-            "removed_nonstructural_multivalent": c.removed_nonstructural_multivalent,
-            "retained_structural_monovalent": c.retained_structural_monovalent,
-            "retained_structural_multivalent": c.retained_structural_multivalent,
-            "replaced_by_magnesium": c.replaced_by_magnesium,
-        }
-
-    s = result.solvation
-    if s is not None:
-        summary["solvation"] = {
-            "box_shape": s.box_shape,
-            "padding_angstrom": s.padding_angstrom,
-            "input_crystal_waters": s.input_crystal_waters,
-            "retained_crystal_waters": s.retained_crystal_waters,
-            "generated_waters": s.generated_waters,
-            "total_waters": s.total_waters,
-        }
-
-    i = result.ion_addition
-    if i is not None:
-        summary["ion_addition"] = {
-            "neutralization_ions": dict(i.neutralization_ions),
-            "added_ions": dict(i.added_ions),
-            "final_system_charge": round(i.final_system_charge, 4),
-        }
-
-    return summary
-
 
 class ForgeStructureService:
     """Bridges upstream-cleaned PDB structures (app/services/analysis) to app/builder."""
@@ -813,7 +337,7 @@ class ForgeStructureService:
             # se přes _resolve_mol_type vždy rozřeší na přesný podtyp
             # (W3/W4/W5) - porovnávat je proto nutné přes celou skupinu.
             if mol_type == "W":
-                if not covered & _WATER_GROUPS:
+                if not covered & WATER_GROUPS:
                     missing[mol_type] = info
             elif mol_type not in covered:
                 missing[mol_type] = info
@@ -871,7 +395,7 @@ class ForgeStructureService:
                 if h["key"] not in decisions.acknowledged_heterogens
             ],
         }
-        if not any(review[section] for section in _REVIEW_SECTIONS):
+        if not any(review[section] for section in REVIEW_SECTIONS):
             return None
         return review
 
@@ -986,7 +510,7 @@ class ForgeStructureService:
             add_solvent_and_ions=add_solvent_and_ions,
             solvation=SolvationSettings(**solvation_kwargs),
             ions=IonPlacementSettings(**ion_kwargs),
-            protonation_overrides=_protonation_override_map(protonation_overrides),
+            protonation_overrides=protonation_override_map(protonation_overrides),
         )
 
         if review_structure:
@@ -994,7 +518,7 @@ class ForgeStructureService:
                 original_pdb, crystal_water_mode, decisions, structure_data, resources, settings
             )
             if review is not None:
-                counts = ", ".join(f"{s}={len(review[s])}" for s in _REVIEW_SECTIONS if review[s])
+                counts = ", ".join(f"{s}={len(review[s])}" for s in REVIEW_SECTIONS if review[s])
                 logger.info(f"FORGE: Stopped for structure check - {counts}.")
                 console_logger.warning("Preparation paused - the structure needs a manual check.")
                 return ForgeWorkflowRun(

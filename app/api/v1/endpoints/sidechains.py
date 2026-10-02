@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from app.api.v1.endpoints.validation import PreparationRequest, _BOX_SHAPE_MAP, build_request_salt_specs
 from app.core.exceptions import AppBaseException, InternalError
-from app.services.structure.forge_service import build_preparation_summary
+from app.services.structure.reports import build_preparation_summary
 from app.services.structure.sidechain_service import sidechain_session_service
 from app.services.validation.service import ValidationService
 from app.workspaces.manager import workspace_manager

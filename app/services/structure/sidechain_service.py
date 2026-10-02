@@ -16,16 +16,10 @@ není potřeba, session je vždy jen jedna aktivní GUI relace na workspace.
 from __future__ import annotations
 
 import logging
-import sys
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
 logger = logging.getLogger(__name__)
-
-_BUILDER_DIR = Path(__file__).resolve().parents[2] / "builder"
-if str(_BUILDER_DIR) not in sys.path:
-    sys.path.insert(0, str(_BUILDER_DIR))
 
 from forge_molecule_builder import (  # noqa: E402
     BuildPlan,
@@ -53,9 +47,8 @@ from app.services.structure.forge_service import (
     ForgeMissingDOFError,
     ForgePreparationResult,
     ForgeStructureService,
-    build_forge_meta,
-    molecule_to_pdb,
 )
+from app.services.structure.pdb_writer import build_forge_meta, molecule_to_pdb
 
 
 class SidechainSessionNotFoundError(NotFoundError):

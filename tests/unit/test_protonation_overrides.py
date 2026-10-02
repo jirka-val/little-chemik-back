@@ -1,6 +1,6 @@
 """
 Unit testy pro ručně vnucené protonační stavy (forced_states) v řešiči
-builderu a pro serializaci HIS reportu (_titratable_residue_report).
+builderu a pro serializaci HIS reportu (titratable_residue_report).
 
 Řešič se volá přímo nad rodinou HIS z data/protonation_states_v1.json a
 syntetickou evidencí vodíkové vazby - bez parseru, šablon a silových polí.
@@ -29,7 +29,7 @@ from forge_molecule_state_assignment import (  # noqa: E402
     _TitratableResidue,
 )
 
-from app.services.structure.forge_service import _titratable_residue_report  # noqa: E402
+from app.services.structure.reports import titratable_residue_report  # noqa: E402
 
 STATE_DATA = json.loads((BACKEND_DIR / "data" / "protonation_states_v1.json").read_text(encoding="utf-8"))
 
@@ -88,7 +88,7 @@ def test_report_serializes_source_evidence_and_base_names():
         is_default=False, is_forced=True,
     ))
 
-    [row] = _titratable_residue_report(prot)
+    [row] = titratable_residue_report(prot)
 
     assert row["residue"] == "A24"
     assert row["assigned"] == "HID"
@@ -111,7 +111,7 @@ def _his_assignment(resseq, forced=False):
 
 def test_review_flags_only_uncertain_residues():
     from forge_molecule_state_assignment import ProtonationConflict
-    from app.services.structure.forge_service import build_histidine_review
+    from app.services.structure.reports import build_histidine_review
 
     prot = ProtonationAssignmentReport(pH=7.4)
     prot.family_defaults.append((("HIP", "HIE", "HID"), "HIE"))
@@ -130,7 +130,7 @@ def test_review_flags_only_uncertain_residues():
 
 
 def test_review_is_empty_when_everything_is_decided():
-    from app.services.structure.forge_service import build_histidine_review
+    from app.services.structure.reports import build_histidine_review
 
     prot = ProtonationAssignmentReport(pH=7.4)
     prot.family_defaults.append((("HIP", "HIE", "HID"), "HIE"))
