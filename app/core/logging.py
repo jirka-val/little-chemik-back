@@ -1,14 +1,14 @@
 import logging
 import sys
 import threading
-from collections import deque
+from collections import OrderedDict, deque
 from contextvars import ContextVar
 from typing import Any, Dict, List, Optional
 
 
 class InMemoryLogHandler(logging.Handler):
     """
-    Drží posledních `capacity` log záznamů v paměti procesu, ať je frontend
+    Drží poslední log záznamy v paměti procesu, ať je frontend
     (Console panel v sidebaru) může pollovat přes /api/system/logs.
 
     Připojený POUZE na `console_logger` (viz níže), ne na root logger - ten
@@ -26,9 +26,15 @@ class InMemoryLogHandler(logging.Handler):
     z přípravy jiného. Samotné ID se ven nikdy neposílá.
     """
 
-    def __init__(self, capacity: int = 100):
+    def __init__(self, general_capacity: int = 200, workspace_capacity: int = 1000, max_workspaces: int = 500):
         super().__init__()
-        self._buffer: deque[Dict[str, Any]] = deque(maxlen=capacity)
+        # Každý workspace má vlastní buffer ("vlastní terminál") - dřív byl
+        # jeden společný na 100 záznamů a zprávy jednoho uživatele vytlačovaly
+        # zprávy ostatních. Obecné zprávy (bez workspace) mají svůj.
+        self._general: deque[Dict[str, Any]] = deque(maxlen=general_capacity)
+        self._by_workspace: "OrderedDict[str, deque[Dict[str, Any]]]" = OrderedDict()
+        self._workspace_capacity = workspace_capacity
+        self._max_workspaces = max_workspaces
         self._lock = threading.Lock()
         self._next_id = 1
 
@@ -38,25 +44,35 @@ class InMemoryLogHandler(logging.Handler):
         except Exception:
             message = str(record.msg)
 
+        workspace_id = console_workspace.get()
         with self._lock:
             entry = {
                 "id": self._next_id,
                 "timestamp": record.created,
                 "level": record.levelname,
                 "message": message,
-                "_workspace": console_workspace.get(),
             }
             self._next_id += 1
-            self._buffer.append(entry)
+            if workspace_id is None:
+                self._general.append(entry)
+                return
+            buffer = self._by_workspace.get(workspace_id)
+            if buffer is None:
+                buffer = self._by_workspace[workspace_id] = deque(maxlen=self._workspace_capacity)
+                # Nejdéle nepoužité workspace zahodíme, ať paměť neroste.
+                while len(self._by_workspace) > self._max_workspaces:
+                    self._by_workspace.popitem(last=False)
+            else:
+                self._by_workspace.move_to_end(workspace_id)
+            buffer.append(entry)
 
-    def get_since(self, since_id: int = 0, limit: int = 200, workspace_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_since(self, since_id: int = 0, limit: int = 1000, workspace_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Záznamy novější než since_id: obecné (bez workspace) + ty z daného workspace."""
         with self._lock:
-            entries = [
-                {k: v for k, v in e.items() if k != "_workspace"}
-                for e in self._buffer
-                if e["id"] > since_id and e["_workspace"] in (None, workspace_id)
-            ]
+            entries = [dict(e) for e in self._general if e["id"] > since_id]
+            if workspace_id is not None:
+                entries += [dict(e) for e in self._by_workspace.get(workspace_id, ()) if e["id"] > since_id]
+        entries.sort(key=lambda e: e["id"])
         return entries[-limit:]
 
 

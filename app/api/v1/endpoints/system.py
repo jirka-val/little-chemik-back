@@ -1,5 +1,5 @@
 # app/api/v1/endpoints/system.py
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from app.core.logging import console_log_buffer
 
@@ -7,7 +7,7 @@ router = APIRouter()
 
 
 @router.get("/logs", summary="Poslední stavové zprávy pro Console panel (polling)")
-async def get_logs(since_id: int = 0, limit: int = 200, workspace_id: str | None = None):
+async def get_logs(since_id: int = 0, limit: int = Query(1000, ge=1, le=1000), workspace_id: str | None = None):
     """
     Vrací jen krátké, obecné stavové zprávy (viz app.core.logging.console_logger) -
     NE kompletní aplikační log. Frontend pollováním (viz Console panel v sidebaru)
