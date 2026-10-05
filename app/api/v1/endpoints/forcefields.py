@@ -11,6 +11,7 @@ from app.services.analysis import required_ff_groups, resolve_ion_mol_type
 from app.services.ff_catalog_service import catalog_service
 from app.services.ff_classification_service import classification_service
 from app.services.forcefield_service import ForceFieldService
+from app.services.ghbfix import correction_flags
 from app.workspaces.manager import workspace_manager
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ def _classify_and_sort(ffs: List[Dict[str, Any]], classify_fn, mode: str) -> Lis
     for ff in ffs:
         name = ff_validator.ff_name(ff)
         info = classify_fn(name)
-        enriched.append({**ff, "tier": info["tier"], "is_default": info["is_default"]})
+        enriched.append({**ff, "tier": info["tier"], "is_default": info["is_default"], **correction_flags(ff)})
 
     if mode == "guided":
         enriched = [f for f in enriched if f["is_default"]]
@@ -88,6 +89,26 @@ def _build_water_profiles(ffs_by_group: Dict[str, List[Any]], mode: str) -> List
 
     profiles.sort(key=lambda p: _TIER_SORT_ORDER.get(p["tier"], 99))
     return profiles
+
+
+def _with_all_ion_groups(required: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """
+    Sůl se volí až v kroku Structure, po výběru FF - panel proto nabízí FF
+    pro všechny iontové skupiny, ať změna soli nevyžaduje nový výběr. Skupiny,
+    které struktura a aktuální sůl nepotřebují, mají needed=False a jdou na
+    konec; builder a topologie je zahodí (drop_unused_ion_groups).
+
+    Pořadí potřebných skupin se nemění: topologie zatím dává všem iontům
+    jeden FF (poslední iontová skupina ve výběru), takže by změna pořadí
+    změnila výslednou topologii - viz MEETING_PLAN_2026-10.md.
+    """
+    out = {key: {**info, "needed": True} for key, info in required.items()}
+    if "W" not in required:
+        return out
+    for mol_type in ION_MOL_TYPES:
+        if mol_type not in out:
+            out[mol_type] = {"reason": "for salts chosen in the Structure step", "needed": False}
+    return out
 
 
 @router.get("/{workspace_id}", summary="Získá dostupné forcefieldy pro danou molekulu")
@@ -161,6 +182,7 @@ async def get_my_forcefields(
         required = await run_in_threadpool(
             required_ff_groups, pdb_content, True, salts_for_ff_coverage, replace_structural_multivalent_with_mg
         )
+        required = _with_all_ion_groups(required)
 
         search_types = set(required.keys())
         search_types.add("W")  # obecné "W" -> filter_forcefields rozbalí na W3/W4/W5
@@ -188,12 +210,12 @@ async def get_my_forcefields(
         return {
             "mode": mode,
             "catalog_fetched_at": catalog_service.fetched_at(),
-            "detected_types": sorted(required.keys()),
+            "detected_types": sorted(key for key, info in required.items() if info["needed"]),
             "required_groups": required,
             "forcefields_by_group": enriched_by_group,
             "water_profiles": water_profiles,
             # Zachováno pro zpětnou kompatibilitu s dosavadním plochým seznamem.
-            "forcefields": ffs,
+            "forcefields": [{**ff, **correction_flags(ff)} for ff in ffs],
         }
 
     except AppBaseException:

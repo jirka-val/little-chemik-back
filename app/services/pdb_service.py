@@ -352,12 +352,13 @@ class PDBService:
 # VOLNÉ (GLOBÁLNÍ) FUNKCE PRO ZPRACOVÁNÍ PDB
 # =========================================================================
 
-# FORGE builder skupiny (viz app/builder/INTEGRATION_CONTRACT.md) na zjednodušené
-# mol_type kódy, které tahle funkce a zbytek TopologyService dnes používají.
+# FORGE builder skupiny (viz app/builder/INTEGRATION_CONTRACT.md) na mol_type
+# kódy, pod kterými TopologyService načítá FF. Ionty si nechávají přesnou
+# skupinu - každá (I1/I1+/Im/Im+) má vlastní vybraný FF.
 _FORGE_GROUP_TO_MOL_TYPE = {
     "P": "P", "R": "R", "D": "D",
     "W3": "W", "W4": "W", "W5": "W",
-    "I1": "I", "I1+": "I", "Im": "I", "Im+": "I",
+    "I1": "I1", "I1+": "I1+", "Im": "Im", "Im+": "Im+",
 }
 
 

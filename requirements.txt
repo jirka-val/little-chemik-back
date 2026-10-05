@@ -12,3 +12,4 @@ requests
 openmm
 rdkit
 pdbfixer
+fpdf2>=2.8

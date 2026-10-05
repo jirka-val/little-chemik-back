@@ -7,7 +7,7 @@
  "export/structure.crd": {
   "atoms": 0,
   "lines": 14839,
-  "sha256": "58be93a35f2fb37ddfbc9379d163e737ea33536ea963af7e1bc44cbd88c6846f"
+  "sha256": "28255cecbf5c45a9019f8c6a26e9d07634e581afda86184ec5274feca1124deb"
  },
  "export/structure.pdb": {
   "atoms": 29671,
@@ -17,7 +17,7 @@
  "export/structure.prmtop": {
   "atoms": 0,
   "lines": 69254,
-  "sha256": "1a869e92448fa39e3af765628c6eaeae2340b72a1cdff330ec2373df501da320"
+  "sha256": "54c6a36828d7f9d44651c5ea975a0796b5e895f8a06f5fe0410faf0a7794e2c4"
  },
  "prepared.pdb": {
   "atoms": 29671,
@@ -32,7 +32,7 @@
  "structure.crd": {
   "atoms": 0,
   "lines": 14839,
-  "sha256": "58be93a35f2fb37ddfbc9379d163e737ea33536ea963af7e1bc44cbd88c6846f"
+  "sha256": "28255cecbf5c45a9019f8c6a26e9d07634e581afda86184ec5274feca1124deb"
  },
  "structure.forge_meta.json": {
   "atoms": 0,
@@ -47,7 +47,7 @@
  "structure.prmtop": {
   "atoms": 0,
   "lines": 69254,
-  "sha256": "1a869e92448fa39e3af765628c6eaeae2340b72a1cdff330ec2373df501da320"
+  "sha256": "54c6a36828d7f9d44651c5ea975a0796b5e895f8a06f5fe0410faf0a7794e2c4"
  },
  "viewer_light_false.pdb": {
   "atoms": 29671,

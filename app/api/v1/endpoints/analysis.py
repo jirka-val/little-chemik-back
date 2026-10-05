@@ -7,6 +7,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from typing import Dict, List
 
+from app.services.report import records as report_records
 from app.core.exceptions import AppBaseException, ExternalServiceError, InternalError, RemoteMoleculeNotFoundError
 from app.core.http_client import external_http_client
 from app.workspaces.manager import workspace_manager
@@ -252,6 +253,7 @@ async def apply_clean_altlocs(workspace_id: str, payload: StructurePrepRequest):
             await f.write(cleaned_pdb_text)
 
         logger.info(f"Structure prepared successfully for workspace {workspace_id}.")
+        report_records.save_record(workspace_id, report_records.CONFORMATIONS, payload.model_dump())
         return {"status": "success", "message": "Structure prepared and cleaned successfully."}
 
     except Exception as e:

@@ -7,7 +7,7 @@
  "export/structure.crd": {
   "atoms": 0,
   "lines": 18042,
-  "sha256": "2d44f8e29d45af762e50f5f258359819cda16f60832b7e163feeefa3c67a759c"
+  "sha256": "94603ba938f6a90b2432fa5153ec240d73b4d69229dbfc7ff3c8f5f2a448622d"
  },
  "export/structure.pdb": {
   "atoms": 36078,
@@ -32,7 +32,7 @@
  "structure.crd": {
   "atoms": 0,
   "lines": 18042,
-  "sha256": "2d44f8e29d45af762e50f5f258359819cda16f60832b7e163feeefa3c67a759c"
+  "sha256": "94603ba938f6a90b2432fa5153ec240d73b4d69229dbfc7ff3c8f5f2a448622d"
  },
  "structure.forge_meta.json": {
   "atoms": 0,

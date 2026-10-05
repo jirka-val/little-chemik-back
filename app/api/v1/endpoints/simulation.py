@@ -25,6 +25,7 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from app.core.exceptions import BadRequestError
+from app.services.ghbfix import GHBFIX_FILENAME, GHBFIX_LISTOUT
 from app.workspaces.manager import workspace_manager
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,10 @@ class AmberMdinRequest(BaseModel):
     ioutfm: Literal[0, 1] = 1
     ntxo: Literal[1, 2] = 2
     iwrap: Literal[0, 1] = 1
+
+    # Vybraný FF má gHBfix korekce (has_ghbfix z /api/forcefields) - mdin je
+    # načte jako restrainty z ghbfix.f, viz app/services/ghbfix.py.
+    ghbfix: bool = False
 
 
 _NTC_NTF = {"none": 1, "h-bonds": 2, "all-bonds": 3}
@@ -176,8 +181,29 @@ def render_amber_mdin(req: AmberMdinRequest) -> str:
 
     lines.append(f"  ioutfm={req.ioutfm}, ntxo={req.ntxo},")
     lines.append(f"  iwrap={req.iwrap},")
+    if req.ghbfix:
+        lines.append("  nmropt=1,")
     lines.append("/")
+    if req.ghbfix:
+        # Váha restraintů 1.0 po celý segment. Při výměnách replik (numexchg
+        # > 1) by istep2 bylo nstlim*numexchg - tenhle generátor REMD nemá.
+        lines += [
+            "&wt",
+            f"  type='REST', istep1=1, istep2={nstlim}, value1=1.0, value2=1.0,",
+            "/",
+            "&wt",
+            "  type='END',",
+            "/",
+            f"LISTOUT={GHBFIX_LISTOUT}",
+            f"DISANG={GHBFIX_FILENAME}",
+        ]
     return "\n".join(lines) + "\n"
+
+
+def mdin_overview(req: AmberMdinRequest) -> tuple[str, int]:
+    """(ensemble, nstlim) pro souhrnný report - stejný výpočet jako render_amber_mdin."""
+    ensemble = _ensemble_label(*_resolve_coupling(req))
+    return ensemble, round(req.duration_ns * 1000.0 / (req.dt_fs / 1000.0))
 
 
 def _mdin_filename(req: AmberMdinRequest) -> str:

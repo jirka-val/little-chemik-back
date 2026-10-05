@@ -20,6 +20,7 @@ from fastapi import APIRouter
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
+from app.services.report import records as report_records
 from app.api.v1.schemas.preparation import BOX_SHAPE_MAP, PreparationRequest, build_request_salt_specs
 from app.core.exceptions import AppBaseException, InternalError
 from app.services.structure.reports import build_preparation_summary
@@ -92,6 +93,12 @@ async def start_sidechain_session(workspace_id: str, request: PreparationRequest
             logger.info(f"Sidechain start: structure check requested for {workspace_id} in {time.time() - start_time:.2f}s.")
             return {"status": "structure_review", "structure_review": outcome.structure_review}
 
+        # Nastavení přípravy do reportu (i když se pokračuje v Side Chains).
+        report_records.save_record(workspace_id, report_records.PREPARATION, {
+            "settings": request.model_dump(exclude={"workspace_id", "ff_selections", "review_structure"}),
+            "force_fields": {k: report_records.ff_summary(v) for k, v in request.ff_selections.items()},
+        })
+
         if outcome.status == "complete":
             prepared = outcome.prepared
             meta_path = pdb_path.with_name(pdb_path.name.replace(".pdb", ".forge_meta.json"))
@@ -104,12 +111,14 @@ async def start_sidechain_session(workspace_id: str, request: PreparationRequest
                 validation_service.validate_pdb_content, prepared.pdb_text, label="prepared_state"
             )
             logger.info(f"Sidechain start: structure already complete for {workspace_id} in {time.time() - start_time:.2f}s.")
+            summary = build_preparation_summary(prepared)
+            report_records.update_record(workspace_id, report_records.PREPARATION, {"summary": summary})
             return {
                 "status": "complete",
                 "message": "Structure successfully prepared.",
                 "warnings": prepared.warnings,
                 "validation": validation_results,
-                "preparation_summary": build_preparation_summary(prepared),
+                "preparation_summary": summary,
             }
 
         preview_path = workspace_manager.get_file_path(workspace_id, outcome.preview_filename)
@@ -205,11 +214,15 @@ async def commit_sidechains(workspace_id: str):
             validation_service.validate_pdb_content, prepared.pdb_text, label="prepared_state"
         )
         logger.info(f"Sidechain commit: finished for {workspace_id} in {time.time() - start_time:.2f}s.")
+        summary = build_preparation_summary(prepared)
+        report_records.update_record(
+            workspace_id, report_records.PREPARATION, {"summary": summary, "interactive_sidechains": True}
+        )
         return {
             "message": "Structure successfully prepared.",
             "warnings": prepared.warnings,
             "validation": validation_results,
-            "preparation_summary": build_preparation_summary(prepared),
+            "preparation_summary": summary,
         }
     except AppBaseException:
         # ForgeMissingDOFError (další, ne-bezpečný missing DOF) apod. - 409

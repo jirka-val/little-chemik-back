@@ -69,6 +69,7 @@ class ForceFieldService:
         nb_raw = ff_data.get('nonbonded_ff_file')
         b_raw = ff_data.get('bonded_ff_file')
         atp_raw = ff_data.get('atom_type_ff_file')
+        corrections_raw = ff_data.get('ghbfix_nbfix_ff_file')
 
         # Dekódování obsahu do textu
         rtp_content = self._decode_content(rtp_raw)
@@ -76,6 +77,7 @@ class ForceFieldService:
         nb_content = self._decode_content(nb_raw)
         b_content = self._decode_content(b_raw)
         atp_content = self._decode_content(atp_raw)
+        corrections_content = self._decode_content(corrections_raw)
 
         if not res_lib_content:
             logger.warning(f"Residue library (residue_lib_ff_file) is missing for {ff_name}. This will likely cause KeyError.")
@@ -102,7 +104,9 @@ class ForceFieldService:
             f"{ff_name}.rtp": final_rtp_content,
             f"nonbonded_{ff_name}.itp": nb_content,
             f"bonded_{ff_name}.itp": b_content,
-            f"{ff_name}.atp": atp_content
+            f"{ff_name}.atp": atp_content,
+            # gHBfix/NBfix tabulka (app/services/ghbfix.py)
+            f"ghbfix_nbfix_{ff_name}.itp": corrections_content,
         }
 
         for fname, data in files.items():

@@ -47,6 +47,7 @@ from app.services.structure.forge_service import (
     ForgeMissingDOFError,
     ForgePreparationResult,
     ForgeStructureService,
+    neutralization_error_from,
 )
 from app.services.structure.pdb_writer import build_forge_meta, molecule_to_pdb
 
@@ -358,13 +359,19 @@ class SidechainSessionService:
                 session.settings.solvation,
                 modify_myself=True,
             )
-            molecule, ion_report = add_ions_to_solvated_molecule(
-                molecule,
-                session.salts,
-                session.resources.force_field_parameters,
-                session.settings.ions,
-                modify_myself=True,
-            )
+            try:
+                molecule, ion_report = add_ions_to_solvated_molecule(
+                    molecule,
+                    session.salts,
+                    session.resources.force_field_parameters,
+                    session.settings.ions,
+                    modify_myself=True,
+                )
+            except ValueError as exc:
+                error = neutralization_error_from(exc)
+                if error is None:
+                    raise
+                raise error from exc
 
         self._sessions.pop(workspace_id, None)
         return ForgePreparationResult(

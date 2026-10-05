@@ -67,6 +67,10 @@
       "minimum": 0.0,
       "type": "number"
      },
+     "ghbfix": {
+      "default": false,
+      "type": "boolean"
+     },
      "hmr": {
       "default": false,
       "type": "boolean"
@@ -185,6 +189,16 @@
       "default": true,
       "type": "boolean"
      },
+     "detail_level": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
      "mdin": {
       "anyOf": [
        {
@@ -194,6 +208,14 @@
         "type": "null"
        }
       ]
+     },
+     "procedure": {
+      "default": false,
+      "type": "boolean"
+     },
+     "report": {
+      "default": false,
+      "type": "boolean"
      },
      "wants_crd": {
       "default": false,
@@ -2000,7 +2022,9 @@
       "name": "limit",
       "required": false,
       "schema": {
-       "default": 200,
+       "default": 1000,
+       "maximum": 1000,
+       "minimum": 1,
        "type": "integer"
       }
      },

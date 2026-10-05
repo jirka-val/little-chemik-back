@@ -89,4 +89,4 @@ class TestWithSidecar:
         result = parse_pdb_to_topology_dict(pdb, forge_meta=forge_meta)
         by_resn = {r["resn"]: r["mol_type"] for r in result["residues"]}
         assert by_resn["WAT"] == "W"
-        assert by_resn["MG"] == "I"
+        assert by_resn["MG"] == "Im"  # každá iontová skupina má vlastní FF

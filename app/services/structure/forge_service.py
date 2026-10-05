@@ -11,10 +11,11 @@ varianty) a sám žádnou opravu identity reziduí ani přemostění chybějíc�
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ from forge_molecule_state_assignment import assign_molecule_states  # noqa: E402
 
 from app.core.config import settings
 from app.core.exceptions import AppBaseException
-from app.services.structure.groups import BUILDER_GROUPS, WATER_GROUPS
+from app.services.structure.groups import BUILDER_GROUPS, WATER_GROUPS, drop_unused_ion_groups
 from app.services.structure.pdb_writer import build_forge_meta, molecule_to_pdb
 from app.services.structure.reports import REVIEW_SECTIONS, build_histidine_review, protonation_override_map
 from app.services.analysis import build_sequence_tokens, required_ff_groups
@@ -181,6 +182,37 @@ class ForgeMissingDOFError(AppBaseException):
         )
 
 
+class ForgeNeutralizationError(AppBaseException):
+    """
+    Náboj systému nejde přesně vyrovnat neutralizačním iontem první soli -
+    typicky lichý náboj a dvojmocný kationt (MgCl2 jako jediná / první sůl).
+    Builder to hlásí jako ValueError; jde o kombinaci dat a nastavení, kterou
+    uživatel vyřeší jinou volbou solí, ne o pád aplikace - proto 400.
+    """
+
+    status_code = 400
+    code = "neutralization_impossible"
+
+    def __init__(self, system_charge: int, ion: str, ion_charge: int):
+        message = (
+            f"The system charge ({system_charge:+d}) cannot be neutralized exactly with {ion} "
+            f"({ion_charge:+d}) alone. Use a monovalent salt (e.g. NaCl or KCl) as the first salt "
+            f"and add the {ion} salt as an additional salt."
+        )
+        super().__init__(message, payload={"system_charge": system_charge, "ion": ion, "ion_charge": ion_charge})
+
+
+_NEUTRALIZATION_RE = re.compile(r"System charge ([+-]?\d+) cannot be exactly neutralized by (\S+) \(([+-]?\d+)\)")
+
+
+def neutralization_error_from(exc: ValueError) -> Optional[ForgeNeutralizationError]:
+    """Chyba neutralizace z builderu (forge_molecule_ions) jako chyba pro uživatele, jinak None."""
+    match = _NEUTRALIZATION_RE.search(str(exc))
+    if not match:
+        return None
+    return ForgeNeutralizationError(int(match.group(1)), match.group(2), int(match.group(3)))
+
+
 class ForgeMissingForceFieldError(AppBaseException):
     """
     ff_selections nepokrývá všechny FORGE mol_type skupiny, které tahle
@@ -312,13 +344,14 @@ class ForgeStructureService:
         add_solvent_and_ions: bool,
         salts: Optional[List[Dict[str, Any]]],
         require_mg: bool = False,
-    ) -> None:
+    ) -> Set[str]:
         """
         Ověří PŘED spuštěním buildu, že ff_selections pokrývá všechny
         mol_type skupiny, které tahle konkrétní struktura potřebuje (viz
         analysis.ff_requirements.required_ff_groups) - ať se chybějící/špatně
         vybrané FF (typicky ionty, "Im" pro Mg2+ vs "I1+") odhalí hned,
         ne až po několikaminutovém běhu buildu/solvatace pádem s KeyError.
+        Vrací potřebné skupiny.
         """
         covered = set()
         for key, ff_data in ff_selections.items():
@@ -343,6 +376,7 @@ class ForgeStructureService:
                 missing[mol_type] = info
         if missing:
             raise ForgeMissingForceFieldError(missing)
+        return set(required)
 
     def _resolve_force_field_parameters(self, ff_selections: Dict[str, Any]) -> SolvationVdwParameters:
         if not ff_selections:
@@ -481,10 +515,13 @@ class ForgeStructureService:
         sequence_data = build_sequence_tokens(pdb_text, chain=None, fill_gaps=True)
         structure_data = {"pdb_text": pdb_text, "missing_atoms": sequence_data}
 
-        self._check_ff_coverage(
+        required_groups = self._check_ff_coverage(
             pdb_text, ff_selections, add_solvent_and_ions, salts,
             require_mg=bool(replace_structural_multivalent_with_mg),
         )
+        # FF panel nabízí všechny iontové skupiny - builder dostane jen ty,
+        # které tahle struktura a zvolené soli opravdu použijí.
+        ff_selections = drop_unused_ion_groups(ff_selections, required_groups)
 
         resources = self._build_resources(ff_selections)
         salt_specs = load_salt_specifications({"salts": salts or []})
@@ -550,6 +587,12 @@ class ForgeStructureService:
                 raise ForgeMissingForceFieldError({}, detail=detail) from exc
             console_logger.error("Structure preparation failed.")
             raise
+        except ValueError as exc:
+            error = neutralization_error_from(exc)
+            if error is None:
+                raise
+            console_logger.error("Structure preparation failed - the salt cannot neutralize the system.")
+            raise error from exc
 
         if result.stopped_at_missing_dof:
             logger.info(

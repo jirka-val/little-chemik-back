@@ -5,7 +5,7 @@ from typing import List
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "Little Chemik API"
+    PROJECT_NAME: str = "FORGE API"
     VERSION: str = "1.2.0"
     API_V1_STR: str = "/api/v1"
 

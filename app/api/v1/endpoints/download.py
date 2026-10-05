@@ -2,13 +2,17 @@ import io
 import re
 import zipfile
 import logging
-from typing import Optional
+from typing import List, Optional, Tuple
 from fastapi import APIRouter, Query
-from fastapi.responses import StreamingResponse, FileResponse, PlainTextResponse
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse, PlainTextResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from app.api.v1.endpoints.simulation import AmberMdinRequest, render_amber_mdin, _mdin_filename
+from app.api.v1.endpoints.simulation import AmberMdinRequest, _mdin_filename, mdin_overview, render_amber_mdin
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.services.ghbfix import GHBFIX_FILENAME
+from app.services.report.pdf import REPORT_FILENAME, render_report_pdf
+from app.services.report.procedure import PROCEDURE_FILENAME, render_procedure_pdf
 from app.workspaces.manager import workspace_manager
 
 logger = logging.getLogger(__name__)
@@ -51,6 +55,12 @@ class DownloadRequest(BaseModel):
     # mdin se nikde na disk neukládá - generuje se tady z nastavení
     # Simulation panelu (stejně jako /api/simulation/.../amber-mdin).
     mdin: Optional[AmberMdinRequest] = None
+    # Souhrnný report přípravy (PDF, app/services/report/pdf.py).
+    report: bool = False
+    # Popis postupu jako souvislý text (PDF, app/services/report/procedure.py).
+    procedure: bool = False
+    # Guided/Standard/Expert - jen pro report.
+    detail_level: Optional[str] = None
     as_zip: bool = True
 
 
@@ -81,44 +91,78 @@ async def export_workspace_files(workspace_id: str, req: DownloadRequest):
     if req.wants_crd:
         files_to_pack.append(workspace_manager.get_file_path(workspace_id, FILE_MAPPING["crd"]["filename"]))
 
+    # mdin s gHBfix odkazuje na ghbfix.f (DISANG) - patří k němu.
+    if req.mdin is not None and req.mdin.ghbfix:
+        files_to_pack.append(workspace_manager.get_file_path(workspace_id, GHBFIX_FILENAME))
+
     # Filtrace pouze existujících souborů
     valid_files = [f for f in files_to_pack if f.exists()]
 
-    if not valid_files and req.mdin is None:
-        raise NotFoundError("Žádný z vybraných souborů nebyl ve workspace nalezen. Byla už vygenerována topologie?")
+    # Soubory generované až tady (nejsou na disku): mdin z nastavení
+    # Simulation panelu a souhrnný report.
+    generated: List[Tuple[str, bytes, str]] = []
+    if req.mdin is not None:
+        generated.append((_mdin_filename(req.mdin), render_amber_mdin(req.mdin).encode("utf-8"), "text/plain"))
+    ensemble, nstlim = mdin_overview(req.mdin) if req.mdin is not None else (None, None)
+    simulation = req.mdin.model_dump() if req.mdin is not None else None
+    if req.procedure:
+        procedure_bytes = await run_in_threadpool(
+            render_procedure_pdf, workspace_id, simulation=simulation, ensemble=ensemble, nstlim=nstlim
+        )
+        generated.append((PROCEDURE_FILENAME, procedure_bytes, "application/pdf"))
+    if req.report:
+        names = [f.name for f in valid_files] + [g[0] for g in generated] + [REPORT_FILENAME]
+        pdf_bytes = await run_in_threadpool(
+            render_report_pdf,
+            workspace_id,
+            simulation=simulation,
+            ensemble=ensemble,
+            nstlim=nstlim,
+            detail_level=req.detail_level,
+            files=names,
+        )
+        generated.append((REPORT_FILENAME, pdf_bytes, "application/pdf"))
 
-    if req.mdin is not None and not valid_files and not req.as_zip:
-        # Jen mdin bez ZIPu - rovnou jako text.
-        filename = _mdin_filename(req.mdin)
-        return PlainTextResponse(
-            content=render_amber_mdin(req.mdin),
-            media_type="text/plain",
-            headers={"Content-Disposition": f"attachment; filename={filename}"},
+    if not valid_files and not generated:
+        if not files_to_pack:
+            raise BadRequestError("No files were selected for export.", code="nothing_selected")
+        missing = ", ".join(f.name for f in files_to_pack)
+        hint = (" The AMBER topology and coordinates are created when they are selected in the Export step."
+                if req.wants_top or req.wants_crd else "")
+        raise NotFoundError(f"The selected files are not available yet: {missing}.{hint}")
+
+    if len(generated) == 1 and not valid_files and not req.as_zip:
+        # Jen jeden generovaný soubor bez ZIPu - rovnou.
+        name, content, media_type = generated[0]
+        return Response(
+            content=content,
+            media_type=media_type,
+            headers={"Content-Disposition": f"attachment; filename={name}"},
         )
 
     # Pokud uživatel chce ZIP, NEBO vybral více souborů (přes HTTP nelze poslat více souborů najednou bez ZIPu)
-    if req.as_zip or len(valid_files) > 1 or req.mdin is not None:
+    if req.as_zip or len(valid_files) + len(generated) > 1:
         zip_buffer = io.BytesIO()
 
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
             for file_path in valid_files:
                 # Zapisujeme pouze název souboru, ne celou cestu na serveru
                 zip_file.write(file_path, file_path.name)
-            if req.mdin is not None:
-                zip_file.writestr(_mdin_filename(req.mdin), render_amber_mdin(req.mdin))
+            for name, content, _media_type in generated:
+                zip_file.writestr(name, content)
 
         # Vrácení ukazatele na začátek souboru, aby ho šlo přečíst
         zip_buffer.seek(0)
 
         logger.info(
             f"Serving ZIP archive for workspace: {workspace_id} with files: {[f.name for f in valid_files]}"
-            f"{' + mdin' if req.mdin is not None else ''}"
+            f"{''.join(f' + {g[0]}' for g in generated)}"
         )
         return StreamingResponse(
             zip_buffer,
             media_type="application/x-zip-compressed",
             headers={
-                "Content-Disposition": f"attachment; filename=little_chemik_export_{workspace_id}.zip"
+                "Content-Disposition": f"attachment; filename=forge_export_{workspace_id}.zip"
             }
         )
     else:
