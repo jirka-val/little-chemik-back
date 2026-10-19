@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from typing import Dict, List
 
 from app.services.report import records as report_records
+from app.services.structure.solvated_system import analyze_solvated_system
 from app.core.exceptions import AppBaseException, ExternalServiceError, InternalError, RemoteMoleculeNotFoundError
 from app.core.http_client import external_http_client
 from app.workspaces.manager import workspace_manager
@@ -192,6 +193,25 @@ async def analyze_altlocs(workspace_id: str):
     except Exception as e:
         logger.exception(f"Error processing structure prep analysis for workspace {workspace_id}: {str(e)}")
         raise InternalError("Internal server error while analyzing structure.")
+
+
+@router.get("/solvation/{workspace_id}", summary="Je struktura už solvatovaný systém (box, voda, ionty)? + kontroly")
+async def analyze_solvation(workspace_id: str):
+    """
+    Rozpozná nahraný hotový systém - frontend pak nabídne ponechat box
+    (existing_solvent="keep") nebo solvatovat znovu ("rebuild"). Viz
+    app/services/structure/solvated_system.py.
+    """
+    workspace_manager.require_workspace(workspace_id)
+    file_path = workspace_manager.get_file_path(workspace_id, "structure.pdb")
+    async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+        pdb_text = await f.read()
+    result = await run_in_threadpool(analyze_solvated_system, pdb_text)
+    if result["solvated"]:
+        problems = [c["id"] for c in result["checks"] if c["status"] != "ok"]
+        logger.info(f"Workspace {workspace_id}: solvated system detected ({result['waters']} waters, "
+                    f"issues: {problems or 'none'})")
+    return result
 
 
 @router.post("/altloc-breaks/{workspace_id}", summary="Zlomy řetězce, které vytvoří daný výběr AltLocs")

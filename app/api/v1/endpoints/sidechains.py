@@ -22,8 +22,9 @@ from pydantic import BaseModel, Field
 
 from app.services.report import records as report_records
 from app.api.v1.schemas.preparation import BOX_SHAPE_MAP, PreparationRequest, build_request_salt_specs
-from app.core.exceptions import AppBaseException, InternalError
+from app.core.exceptions import AppBaseException, BadRequestError, InternalError
 from app.services.structure.reports import build_preparation_summary
+from app.services.structure.solvated_system import analyze_solvated_system, cryst1_line, restore_cryst1
 from app.services.structure.sidechain_service import sidechain_session_service
 from app.services.validation.service import ValidationService
 from app.workspaces.manager import workspace_manager
@@ -43,6 +44,49 @@ class SidechainUpdateRequest(BaseModel):
 class SidechainOptimizeRequest(BaseModel):
     sidechain_data: Dict[str, Any] = Field(...)
     residue: Dict[str, Any] = Field(..., description="{chain_id, residue_index} vybraného rezidua pro Opt")
+
+
+# CRYST1 ponechaného boxu (existing_solvent="keep") - builder bez solvatace
+# box nezapíše, po přípravě se vrací do structure.pdb.
+KEPT_BOX_FILENAME = "kept_box.cryst1"
+
+
+def _resolve_existing_solvent(workspace_id: str, pdb_text: str, request: PreparationRequest):
+    """
+    (add_solvent, crystal_water_mode, clean_crystal_ions) podle volby u už
+    solvatovaného systému. Bez volby a s ponecháním krystalové vody by se
+    celý vodní box bral jako krystalová voda a obalil dalším boxem - to se
+    odmítne, frontend se musí zeptat.
+    """
+    kept_box = workspace_manager.get_file_path(workspace_id, KEPT_BOX_FILENAME)
+    if kept_box.exists():
+        kept_box.unlink()
+
+    if request.existing_solvent == "keep":
+        line = cryst1_line(pdb_text)
+        if line:
+            kept_box.write_text(line, encoding="utf-8")
+        logger.info(f"Workspace {workspace_id}: keeping the existing solvent box ({line or 'no CRYST1'}).")
+        return False, "keep_water", False
+    if request.existing_solvent == "rebuild":
+        logger.info(f"Workspace {workspace_id}: removing the existing solvent and solvating again.")
+        return True, "remove_all", True
+
+    if request.add_solvent and request.crystal_water_mode != "remove_all":
+        if analyze_solvated_system(pdb_text, with_checks=False)["solvated"]:
+            raise BadRequestError(
+                "The structure is already a solvated system. Choose whether to keep its box "
+                "or remove the solvent and solvate again.",
+                code="solvated_system_choice_required",
+            )
+    return request.add_solvent, request.crystal_water_mode, request.clean_crystal_ions
+
+
+def _with_kept_box(workspace_id: str, pdb_text: str) -> str:
+    kept_box = workspace_manager.get_file_path(workspace_id, KEPT_BOX_FILENAME)
+    if not kept_box.exists():
+        return pdb_text
+    return restore_cryst1(pdb_text, kept_box.read_text(encoding="utf-8"))
 
 
 @router.post("/start/{workspace_id}", summary="Spustí přípravu; otevře GUI relaci, pokud narazí na bezpečný missing DOF")
@@ -66,19 +110,23 @@ async def start_sidechain_session(workspace_id: str, request: PreparationRequest
         async with aiofiles.open(pdb_path, "r", encoding="utf-8") as f:
             pdb_content = await f.read()
 
+        add_solvent, crystal_water_mode, clean_crystal_ions = await run_in_threadpool(
+            _resolve_existing_solvent, workspace_id, pdb_content, request
+        )
+
         outcome = await run_in_threadpool(
             sidechain_session_service.start,
             workspace_id=workspace_id,
             pdb_text=pdb_content,
             ff_selections=request.ff_selections,
             ph=request.ph,
-            add_solvent_and_ions=request.add_solvent,
-            salts=build_request_salt_specs(request),
+            add_solvent_and_ions=add_solvent,
+            salts=build_request_salt_specs(request) if add_solvent else [],
             box_shape=BOX_SHAPE_MAP.get(request.box_shape),
             box_padding_angstrom=request.box_padding_nm * 10.0,
-            keep_crystal_waters=request.crystal_water_mode != "remove_all",
-            crystal_water_mode=request.crystal_water_mode,
-            clean_crystal_ions=request.clean_crystal_ions,
+            keep_crystal_waters=crystal_water_mode != "remove_all",
+            crystal_water_mode=crystal_water_mode,
+            clean_crystal_ions=clean_crystal_ions,
             replace_structural_multivalent_with_mg=request.replace_structural_multivalent_with_mg,
             concentration_mode=request.concentration_mode,
             protonation_overrides=[o.model_dump() for o in request.protonation_overrides],
@@ -102,13 +150,14 @@ async def start_sidechain_session(workspace_id: str, request: PreparationRequest
         if outcome.status == "complete":
             prepared = outcome.prepared
             meta_path = pdb_path.with_name(pdb_path.name.replace(".pdb", ".forge_meta.json"))
+            pdb_text = _with_kept_box(workspace_id, prepared.pdb_text)
             async with aiofiles.open(pdb_path, "w", encoding="utf-8") as f:
-                await f.write(prepared.pdb_text)
+                await f.write(pdb_text)
             async with aiofiles.open(meta_path, "w", encoding="utf-8") as f:
                 await f.write(json.dumps(prepared.forge_meta))
 
             validation_results = await run_in_threadpool(
-                validation_service.validate_pdb_content, prepared.pdb_text, label="prepared_state"
+                validation_service.validate_pdb_content, pdb_text, label="prepared_state"
             )
             logger.info(f"Sidechain start: structure already complete for {workspace_id} in {time.time() - start_time:.2f}s.")
             summary = build_preparation_summary(prepared)
@@ -201,8 +250,9 @@ async def commit_sidechains(workspace_id: str):
 
         pdb_path = workspace_manager.get_file_path(workspace_id)
         meta_path = pdb_path.with_name(pdb_path.name.replace(".pdb", ".forge_meta.json"))
+        pdb_text = _with_kept_box(workspace_id, prepared.pdb_text)
         async with aiofiles.open(pdb_path, "w", encoding="utf-8") as f:
-            await f.write(prepared.pdb_text)
+            await f.write(pdb_text)
         async with aiofiles.open(meta_path, "w", encoding="utf-8") as f:
             await f.write(json.dumps(prepared.forge_meta))
 
@@ -211,7 +261,7 @@ async def commit_sidechains(workspace_id: str):
             preview_path.unlink()
 
         validation_results = await run_in_threadpool(
-            validation_service.validate_pdb_content, prepared.pdb_text, label="prepared_state"
+            validation_service.validate_pdb_content, pdb_text, label="prepared_state"
         )
         logger.info(f"Sidechain commit: finished for {workspace_id} in {time.time() - start_time:.2f}s.")
         summary = build_preparation_summary(prepared)

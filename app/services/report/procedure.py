@@ -176,7 +176,9 @@ def _preparation_paragraphs(prep: Optional[Dict[str, Any]], water_name: Optional
             text += f" {_plural(len(flips), 'ASN/GLN amide')} {'were' if len(flips) > 1 else 'was'} flipped after review."
     if prep.get("interactive_sidechains"):
         text += " Missing side-chain conformations were set interactively before the structure was completed."
-    if crystal:
+    if s.get("existing_solvent") == "rebuild":
+        text += " The water and monovalent ions of the uploaded solvated system were removed before solvating again."
+    elif crystal and s.get("existing_solvent") != "keep":
         text += f" {crystal}."
     cleanup = summary.get("crystal_ion_cleanup") or {}
     if cleanup.get("input_ions"):
@@ -188,7 +190,10 @@ def _preparation_paragraphs(prep: Optional[Dict[str, Any]], water_name: Optional
         text += "."
     out.append(text)
 
-    if s.get("add_solvent"):
+    if s.get("existing_solvent") == "keep":
+        out.append("The uploaded structure was already a solvated system; its periodic box, water molecules "
+                   "and ions were kept unchanged and no further solvent or ions were added.")
+    elif s.get("add_solvent"):
         solv = summary.get("solvation") or {}
         ions = summary.get("ion_addition") or {}
         shape = _BOX_ADJECTIVE.get(s.get("box_shape"), s.get("box_shape") or "")

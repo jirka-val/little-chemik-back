@@ -129,6 +129,12 @@ class PreparationRequest(BaseModel):
         False,
         description="Guided/Standard mode: apply the suggested ASN/GLN amide flips without asking.",
     )
+    existing_solvent: Literal["none", "keep", "rebuild"] = Field(
+        "none",
+        description="Structure is already a solvated system (GET /analysis/solvation): 'keep' = use its box, "
+                    "water and ions as they are (no solvation, CRYST1 kept); 'rebuild' = remove water and "
+                    "monovalent ions and solvate again with the request's settings.",
+    )
     additional_salts: List[SaltStep] = Field(
         default_factory=list,
         description="Further salts added after the primary one (positive_ion/negative_ion/ionic_strength). "

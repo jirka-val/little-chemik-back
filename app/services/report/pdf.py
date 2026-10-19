@@ -252,9 +252,9 @@ def _section_preparation(pdf: _Report, records: Dict[str, Dict[str, Any]]):
         ("Crystal waters and ions", _CRYSTAL_WATER.get(s.get("crystal_water_mode"), s.get("crystal_water_mode"))),
         ("Clean up crystal ions", "Yes" if s.get("clean_crystal_ions") else "No"),
         ("Replace multivalent ions with Mg2+", "Yes" if s.get("replace_structural_multivalent_with_mg") else "No"),
-        ("Solvation", "Water box and ions" if s.get("add_solvent") else "None (vacuum)"),
+        ("Solvation", _solvation_label(s)),
     ]
-    if s.get("add_solvent"):
+    if s.get("add_solvent") and s.get("existing_solvent") != "keep":
         rows += [
             ("Box shape", _BOX_SHAPE.get(s.get("box_shape"), s.get("box_shape"))),
             ("Box padding", f"{_num(s.get('box_padding_nm'))} nm"),
@@ -342,6 +342,15 @@ def _length_text(s: Dict[str, Any], nstlim: Optional[int]) -> str:
     if s.get("protocol"):
         text += ", with minimization, heating and equilibration (run_md.sh)"
     return text
+
+
+def _solvation_label(s: Dict[str, Any]) -> str:
+    existing = s.get("existing_solvent")
+    if existing == "keep":
+        return "Existing water box and ions of the uploaded system kept"
+    if existing == "rebuild":
+        return "Existing solvent removed, new water box and ions"
+    return "Water box and ions" if s.get("add_solvent") else "None (vacuum)"
 
 
 def _section_simulation(pdf: _Report, simulation: Optional[Dict[str, Any]], ensemble: Optional[str],

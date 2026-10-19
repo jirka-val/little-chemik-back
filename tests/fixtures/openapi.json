@@ -431,6 +431,15 @@
       ],
       "type": "string"
      },
+     "existing_solvent": {
+      "default": "none",
+      "enum": [
+       "none",
+       "keep",
+       "rebuild"
+      ],
+      "type": "string"
+     },
      "ff_selections": {
       "additionalProperties": true,
       "type": "object"
@@ -1024,6 +1033,42 @@
       "required": false,
       "schema": {
        "default": "structure.pdb",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "analysis"
+    ]
+   }
+  },
+  "/api/analysis/solvation/{workspace_id}": {
+   "get": {
+    "operationId": "analyze_solvation_api_analysis_solvation__workspace_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
        "type": "string"
       }
      }
