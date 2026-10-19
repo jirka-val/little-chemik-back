@@ -3,6 +3,7 @@ from fastapi import APIRouter, File, UploadFile, Request
 from fastapi.concurrency import run_in_threadpool
 
 from app.services.report import records as report_records
+from app.services.report.citation import parse_jrnl
 from app.core.exceptions import BadRequestError, InternalError, NotFoundError, RemoteMoleculeNotFoundError
 from app.services.pdb_service import PDBService, remove_residue_from_pdb
 from app.workspaces.manager import workspace_manager
@@ -25,7 +26,10 @@ async def upload_molecule(file: UploadFile = File(...)):
         workspace_id = await workspace_manager.create_from_upload(file)
         logger.info(f"Successfully created workspace {workspace_id} from {file.filename}")
         await run_in_threadpool(incident_history.record_workspace_created, workspace_id, f"upload:{file.filename}")
-        report_records.save_record(workspace_id, report_records.SOURCE, {"kind": "upload", "filename": file.filename})
+        pdb_text = workspace_manager.get_file_path(workspace_id).read_text(encoding="utf-8", errors="replace")
+        report_records.save_record(workspace_id, report_records.SOURCE, {
+            "kind": "upload", "filename": file.filename, "citation": parse_jrnl(pdb_text),
+        })
 
         return {
             "workspace_id": workspace_id,
@@ -50,7 +54,9 @@ async def fetch_pdb_by_code(pdb_code: str):
         workspace_id = workspace_manager.create_from_string(pdb_content)
         logger.info(f"Successfully fetched and created workspace {workspace_id} for {pdb_code}")
         await run_in_threadpool(incident_history.record_workspace_created, workspace_id, f"rcsb:{pdb_code}")
-        report_records.save_record(workspace_id, report_records.SOURCE, {"kind": "pdb", "pdb_code": pdb_code})
+        report_records.save_record(workspace_id, report_records.SOURCE, {
+            "kind": "pdb", "pdb_code": pdb_code, "citation": parse_jrnl(pdb_content),
+        })
 
         return {
             "workspace_id": workspace_id,

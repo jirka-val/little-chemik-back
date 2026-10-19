@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from app.core.config import settings
 
+from .citation import structure_pdb_id, structure_references
 from .pdf import _CONCENTRATION_MODE, _Report, _num, system_composition
 from .records import CONFORMATIONS, PREPARATION, SOURCE, TOPOLOGY, load_records
 
@@ -54,7 +55,7 @@ def _ff_name(ff: Dict[str, Any]) -> str:
 
 
 class _References:
-    """Číslované citace FF v pořadí prvního výskytu v textu."""
+    """Číslované citace (struktura, FF) v pořadí prvního výskytu v textu."""
 
     def __init__(self):
         self.entries: List[str] = []
@@ -76,17 +77,29 @@ class _References:
             self._index[name] = len(self.entries)
         return f" [{self._index[name]}]"
 
+    def cite_all(self, entries: Sequence[str]) -> str:
+        numbers = []
+        for entry in entries:
+            if entry not in self._index:
+                self.entries.append(entry)
+                self._index[entry] = len(self.entries)
+            numbers.append(str(self._index[entry]))
+        return f" [{', '.join(numbers)}]" if numbers else ""
+
 
 # ---------------------------------------------------------------------------
 # Odstavce
 # ---------------------------------------------------------------------------
 
-def _input_paragraph(records: Dict[str, Dict[str, Any]]) -> str:
+def _input_paragraph(records: Dict[str, Dict[str, Any]], refs: _References) -> str:
     source = records.get(SOURCE) or {}
+    cited = refs.cite_all(structure_references(source))
+    pdb_id = structure_pdb_id(source)
     if source.get("kind") == "pdb":
-        text = f"The starting structure, PDB entry {source.get('pdb_code', '').upper()}, was downloaded from the RCSB Protein Data Bank."
+        text = f"The starting structure, PDB entry {pdb_id}, was downloaded from the RCSB Protein Data Bank{cited}."
     elif source.get("filename"):
-        text = f"The starting structure was loaded from the uploaded file {source['filename']}."
+        entry = f" (PDB entry {pdb_id})" if pdb_id else ""
+        text = f"The starting structure was loaded from the uploaded file {source['filename']}{entry}{cited}."
     else:
         text = "The starting structure was loaded into FORGE."
 
@@ -287,7 +300,7 @@ def render_procedure_pdf(
              size=8.5, style="I")
 
     sections = [
-        ("Input structure", [_input_paragraph(records)]),
+        ("Input structure", [_input_paragraph(records, refs)]),
         ("Force fields", [_force_field_paragraph(ffs, refs, topo is not None)]),
         ("System preparation", _preparation_paragraphs(prep, _ff_name(water) if water else None)
          + [_system_paragraph(composition), _topology_paragraph(topo)]),

@@ -19,6 +19,7 @@ from fpdf.fonts import FontFace
 from app.core.config import settings
 from app.workspaces.manager import workspace_manager
 
+from .citation import format_article, pdb_entry_doi, structure_pdb_id, structure_references
 from .records import CONFORMATIONS, PREPARATION, SOURCE, TOPOLOGY, load_records
 
 REPORT_FILENAME = "forge_report.pdf"
@@ -184,7 +185,13 @@ def _section_input(pdf: _Report, records: Dict[str, Dict[str, Any]]):
     if source:
         origin = (f"PDB entry {source.get('pdb_code', '').upper()} (RCSB)" if source.get("kind") == "pdb"
                   else f"Uploaded file {source.get('filename')}")
-        pdf.kv([("Source", origin)])
+        rows = [("Source", origin)]
+        pdb_id = structure_pdb_id(source)
+        if pdb_id:
+            rows.append(("PDB DOI", pdb_entry_doi(pdb_id)))
+        rows.append(("Primary citation", format_article(source.get("citation") or {})
+                     or "Not given in the PDB header (JRNL)"))
+        pdf.kv(rows)
     else:
         pdf.para("Source not recorded.")
     if conf:
@@ -359,6 +366,7 @@ def _section_files(pdf: _Report, files: Sequence[str]):
 
 
 def _section_references(pdf: _Report, records: Dict[str, Dict[str, Any]]):
+    structure = structure_references(records.get(SOURCE))
     ffs = ((records.get(TOPOLOGY) or {}).get("force_fields")
            or (records.get(PREPARATION) or {}).get("force_fields") or {})
     entries = []
@@ -378,10 +386,15 @@ def _section_references(pdf: _Report, records: Dict[str, Dict[str, Any]]):
         if ff.get("doi"):
             parts.append(f"Dataset: doi:{ff['doi']}")
         entries.append(". ".join(p.rstrip(".") for p in parts) + ".")
-    if not entries:
+    if not structure and not entries:
         return
-    pdf.h2("7. Force field references")
-    pdf.bullets(entries, limit=100)
+    pdf.h2("7. References")
+    if structure:
+        pdf.para("Input structure:", style="B")
+        pdf.bullets(structure, limit=100)
+    if entries:
+        pdf.para("Force fields:", style="B")
+        pdf.bullets(entries, limit=100)
 
 
 def render_report_pdf(

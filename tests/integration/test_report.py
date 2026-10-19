@@ -5,10 +5,11 @@ vykreslení (app/services/report/).
 
 import io
 import zipfile
+from pathlib import Path
 
 import pytest
 
-from app.services.report.records import PREPARATION, load_records
+from app.services.report.records import PREPARATION, SOURCE, load_records
 
 pytestmark = pytest.mark.integration
 
@@ -81,3 +82,13 @@ def test_export_errors_name_what_is_missing(client, make_workspace, pdb_alanine_
     message = no_topology.json()["message"]
     assert "structure.prmtop, structure.crd" in message
     assert "Export step" in message
+
+
+def test_upload_records_structure_citation(client):
+    pdb = (Path(__file__).resolve().parents[2] / "data" / "pdb_files" / "1RNA.pdb").read_text()
+    response = client.post("/api/molecules/upload", files={"file": ("1RNA.pdb", pdb.encode(), "chemical/x-pdb")})
+    assert response.status_code == 200, response.text
+
+    citation = load_records(response.json()["workspace_id"])[SOURCE]["citation"]
+    assert citation["pdb_id"] == "1RNA"
+    assert citation["doi"] == "10.1016/0022-2836(89)90010-7"
