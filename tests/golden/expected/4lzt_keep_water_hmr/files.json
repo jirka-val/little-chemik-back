@@ -16,8 +16,8 @@
  },
  "export/structure.prmtop": {
   "atoms": 0,
-  "lines": 49156,
-  "sha256": "5f37206c13bdc34db998e6762e612f8e58993b14f70a5ac38f02dc198520dfff"
+  "lines": 49174,
+  "sha256": "e0e7b994ee9c61b37afa790873e6573cee76e976c28361388070e464b821b9f6"
  },
  "prepared.pdb": {
   "atoms": 22392,
@@ -46,8 +46,8 @@
  },
  "structure.prmtop": {
   "atoms": 0,
-  "lines": 49156,
-  "sha256": "5f37206c13bdc34db998e6762e612f8e58993b14f70a5ac38f02dc198520dfff"
+  "lines": 49174,
+  "sha256": "e0e7b994ee9c61b37afa790873e6573cee76e976c28361388070e464b821b9f6"
  },
  "viewer_light_false.pdb": {
   "atoms": 22392,

@@ -374,6 +374,9 @@ def parse_pdb_to_topology_dict(pdb_content: str, selected_force_fields: dict = N
         if line.startswith("CRYST1"):
             try:
                 box = [float(line[6:15]), float(line[15:24]), float(line[24:33])]
+                # úhel beta pro prmtop BOX_DIMENSIONS (109.47 u oktaedru)
+                if line[40:47].strip():
+                    box.append(float(line[40:47]))
             except ValueError:
                 pass
 

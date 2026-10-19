@@ -1044,6 +1044,11 @@ def create_AMBER_topology(mol):
         if at not in connectivity:
             top['NUMBER_EXCLUDED_ATOMS'].append(1)
             top['EXCLUDED_ATOMS_LIST'].append(0)
+            # atom without bonds (ion) still needs its GB radius and screen,
+            # otherwise RADII/SCREEN are shorter than NATOM
+            Z = top['ATOMIC_NUMBER'][at]
+            top['RADII'].append(bondii_radii_by_Z.get(Z, 1.5))
+            top['SCREEN'].append(bondii_screen_by_Z.get(Z, 0.80))
             continue
         visited = {at}
         q = deque([(at, 0)])
@@ -1163,12 +1168,13 @@ def create_AMBER_topology(mol):
     # pointers
     top['POINTERS'][0] = natom
     top['POINTERS'][1] = VdW_types
-    top['POINTERS'][2] = len(top['BONDS_INC_HYDROGEN'])
-    top['POINTERS'][3] = len(top['BONDS_WITHOUT_HYDROGEN'])
-    top['POINTERS'][4] = len(top['ANGLES_INC_HYDROGEN'])
-    top['POINTERS'][5] = len(top['ANGLES_WITHOUT_HYDROGEN'])
-    top['POINTERS'][6] = len(top['DIHEDRALS_INC_HYDROGEN'])
-    top['POINTERS'][7] = len(top['DIHEDRALS_WITHOUT_HYDROGEN'])
+    # counts of terms, not of integers (3 per bond, 4 per angle, 5 per dihedral) - same as strip()
+    top['POINTERS'][2] = len(top['BONDS_INC_HYDROGEN']) // 3
+    top['POINTERS'][3] = len(top['BONDS_WITHOUT_HYDROGEN']) // 3
+    top['POINTERS'][4] = len(top['ANGLES_INC_HYDROGEN']) // 4
+    top['POINTERS'][5] = len(top['ANGLES_WITHOUT_HYDROGEN']) // 4
+    top['POINTERS'][6] = len(top['DIHEDRALS_INC_HYDROGEN']) // 5
+    top['POINTERS'][7] = len(top['DIHEDRALS_WITHOUT_HYDROGEN']) // 5
     top['POINTERS'][8] = 0
     top['POINTERS'][9] = 0
     top['POINTERS'][10] = len(top['EXCLUDED_ATOMS_LIST'])
@@ -1188,7 +1194,12 @@ def create_AMBER_topology(mol):
     top['POINTERS'][24] = 0
     top['POINTERS'][25] = 0
     top['POINTERS'][26] = 0
-    top['POINTERS'][27] = ifbox
+    # IFBOX: 1 = rectangular/general periodic box, 2 = truncated octahedron (as tleap writes it)
+    if ifbox == 1 and abs(top['BOX_DIMENSIONS'][0] - 109.4712190) < 0.01:
+        top['POINTERS'][27] = 2
+        top['BOX_DIMENSIONS'][0] = 109.4712190  # CRYST1 carries only 2 decimals
+    else:
+        top['POINTERS'][27] = ifbox
     top['POINTERS'][28] = nmxrs
     top['POINTERS'][29] = 0
     top['POINTERS'][30] = numextra
