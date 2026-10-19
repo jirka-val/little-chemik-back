@@ -5,16 +5,36 @@ from app.utils.adams4sims_processing_library.utils.loader_helper import get_line
 
 class ff:
 
- def __init__(self, rtp_file, nb_itp_file, b_itp_file, atp_file = None):
+ def __init__(self, rtp_file, nb_itp_file, b_itp_file, atp_file = None, ghbfix_nbfix_file = None):
   self.units = {}
   self.nb = {}
   self.b  = {}
   self.types = {}
+  # pair corrections from the ghbfix_nbfix file, key = sorted (type1, type2)
+  self.nbfix = {}   # [R, eps] - pair LJ override, belongs to prmtop
+  self.ghbfix = {}  # [eta, rbeg, rend, c] - H-bond restraint, belongs to mdin (ghbfix.f)
   self.read_rtp(rtp_file)
   self.read_nonbonded(nb_itp_file)
   self.read_bonded(b_itp_file)
   if atp_file is not None:
     self.read_atp(atp_file)
+  if ghbfix_nbfix_file is not None:
+    self.read_corrections(ghbfix_nbfix_file)
+
+ def read_corrections(self,corrections_file):
+  # READ GHBFIX_NBFIX.ITP: Type1 Type2 R eps eta rbeg rend c, all-zero rows are skipped
+  for line in get_lines(corrections_file):
+    if not line or line.startswith(";") or line.startswith("#") or len(line.split()) == 0:
+     continue
+    field = line.split()
+    if len(field) < 8:
+     raise Exception("Incorrect number of filed in ghbfix_nbfix file.")
+    key = min((field[0],field[1]),(field[1],field[0]))
+    R, eps, eta, rbeg, rend, c = (float(v) for v in field[2:8])
+    if R or eps:
+     self.nbfix[key] = [R, eps]
+    if eta or rbeg or rend or c:
+     self.ghbfix[key] = [eta, rbeg, rend, c]
 
  def find_atom_type(self,name,resn):
   try:

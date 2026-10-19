@@ -6,8 +6,9 @@ Soubor je tabulka párů typů atomů se sloupci
 řádky jsou dvojího druhu:
 
 - NBfix (R, eps): upravené LJ parametry pro daný pár typů - patří do
-  topologie (prmtop), ne do mdin. Zatím se nepoužívají
-  (viz MEETING_PLAN_2026-10.md, fáze B).
+  topologie (prmtop), ne do mdin. FF instance je má načtené v `ff.nbfix`
+  (FF_IDA.ff, parametr ghbfix_nbfix_file), do LENNARD_JONES_ACOEF/BCOEF
+  je zatím nepromítá create_AMBER_topology.
 - gHBfix (eta, rbeg, rend, c): korekce vodíkových vazeb, kterou simulace
   načítá jako restrainty - mdin dostane `nmropt=1`, blok `&wt` a
   `DISANG=ghbfix.f` (render_amber_mdin), soubor ghbfix.f se exportuje

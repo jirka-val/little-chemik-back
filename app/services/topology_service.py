@@ -162,11 +162,15 @@ class TopologyService:
 
                 ff_path = self.ff_service.prepare_forcefield_files(ff_data)
 
+                # Šestý FF soubor (gHBfix/NBfix) - instance má pak ff.nbfix a
+                # ff.ghbfix. Starší cache ho mít nemusí.
+                corrections_path = ff_path / f"ghbfix_nbfix_{ff_name}.itp"
                 ff_instance = FF_IDA.ff(
                     str(ff_path / f"{ff_name}.rtp"),
                     str(ff_path / f"nonbonded_{ff_name}.itp"),
                     str(ff_path / f"bonded_{ff_name}.itp"),
-                    str(ff_path / f"{ff_name}.atp")
+                    str(ff_path / f"{ff_name}.atp"),
+                    str(corrections_path) if corrections_path.exists() else None,
                 )
 
                 # Aplikace záplat (Ionty, Voda)
