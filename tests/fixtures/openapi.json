@@ -108,6 +108,10 @@
       "default": 1.0,
       "type": "number"
      },
+     "protocol": {
+      "default": false,
+      "type": "boolean"
+     },
      "restart_interval_ps": {
       "default": 1000.0,
       "exclusiveMinimum": 0.0,
@@ -120,6 +124,12 @@
        "continue"
       ],
       "type": "string"
+     },
+     "segments": {
+      "default": 1,
+      "maximum": 10000.0,
+      "minimum": 1.0,
+      "type": "integer"
      },
      "taup": {
       "default": 2.0,
@@ -167,6 +177,33 @@
      "write_energy_file": {
       "default": false,
       "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "Body_upload_inputs_api_molecules__workspace_id__inputs_post": {
+    "properties": {
+     "coordinates": {
+      "anyOf": [
+       {
+        "contentMediaType": "application/octet-stream",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "topology": {
+      "anyOf": [
+       {
+        "contentMediaType": "application/octet-stream",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
      }
     },
     "type": "object"
@@ -1715,6 +1752,85 @@
       }
      },
      "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "molecules"
+    ]
+   }
+  },
+  "/api/molecules/{workspace_id}/inputs": {
+   "get": {
+    "operationId": "get_inputs_summary_api_molecules__workspace_id__inputs_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "molecules"
+    ]
+   },
+   "post": {
+    "operationId": "upload_inputs_api_molecules__workspace_id__inputs_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_upload_inputs_api_molecules__workspace_id__inputs_post"
+       }
+      }
+     }
     },
     "responses": {
      "200": {

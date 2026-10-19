@@ -1,7 +1,11 @@
 import logging
+import shutil
+from typing import Optional
+
 from fastapi import APIRouter, File, UploadFile, Request
 from fastapi.concurrency import run_in_threadpool
 
+from app.services import input_files
 from app.services.report import records as report_records
 from app.services.report.citation import parse_jrnl
 from app.core.exceptions import BadRequestError, InternalError, NotFoundError, RemoteMoleculeNotFoundError
@@ -18,9 +22,10 @@ async def upload_molecule(file: UploadFile = File(...)):
     """
     Přijímá PDB soubor přes multipart form data, vytvoří workspace a vrátí jeho ID.
     """
-    if not file.filename.endswith('.pdb'):
+    # .ent = PDB soubor pod jménem z archivu RCSB (pdbXXXX.ent), frontend ho nabízí
+    if not file.filename.lower().endswith(('.pdb', '.ent')):
         logger.warning(f"Unsupported format attempt: {file.filename}")
-        raise BadRequestError("Only .pdb files are currently supported.")
+        raise BadRequestError("Only .pdb and .ent files are currently supported.")
 
     try:
         workspace_id = await workspace_manager.create_from_upload(file)
@@ -39,6 +44,52 @@ async def upload_molecule(file: UploadFile = File(...)):
     except Exception as e:
         logger.exception(f"Critical error saving file {file.filename}: {e}")
         raise InternalError("Failed to save the uploaded file.")
+
+
+@router.post("/{workspace_id}/inputs", summary="Přidá k nahranému PDB topologii a/nebo souřadnice")
+async def upload_inputs(
+    workspace_id: str,
+    topology: Optional[UploadFile] = File(None),
+    coordinates: Optional[UploadFile] = File(None),
+):
+    """
+    Topologie (.prmtop/.parm7/.top) a souřadnice (.crd/.inpcrd/.rst7/.rst/.ncrst)
+    z upload dialogu. Zatím se jen uloží a vrátí se jejich souhrn - viz
+    app/services/input_files.py.
+    """
+    workspace_manager.require_workspace(workspace_id)
+    if topology is None and coordinates is None:
+        raise BadRequestError("No topology or coordinate file was sent.", code="nothing_selected")
+    for upload, extensions, kind in ((topology, input_files.TOPOLOGY_EXTENSIONS, "topology"),
+                                     (coordinates, input_files.COORDINATE_EXTENSIONS, "coordinates")):
+        if upload is not None and not upload.filename.lower().endswith(extensions):
+            raise BadRequestError(
+                f"\"{upload.filename}\" is not a supported {kind} file ({', '.join(extensions)}).",
+                code=f"unsupported_{kind}_format",
+            )
+
+    workspace_dir = workspace_manager.get_workspace_dir(workspace_id)
+    manifest = input_files.load_manifest(workspace_dir)
+    if topology is not None:
+        with open(workspace_dir / input_files.UPLOADED_TOPOLOGY, "wb") as fh:
+            shutil.copyfileobj(topology.file, fh)
+        manifest["topology"] = topology.filename
+    if coordinates is not None:
+        for old in workspace_dir.glob(input_files.UPLOADED_COORDINATES + ".*"):
+            old.unlink()
+        with open(workspace_dir / input_files.coordinates_filename(coordinates.filename), "wb") as fh:
+            shutil.copyfileobj(coordinates.file, fh)
+        manifest["coordinates"] = coordinates.filename
+    input_files.save_manifest(workspace_dir, manifest)
+    logger.info(f"Workspace {workspace_id}: uploaded inputs {manifest}")
+
+    return await run_in_threadpool(input_files.summarize_inputs, workspace_dir)
+
+
+@router.get("/{workspace_id}/inputs", summary="Souhrn nahraných vstupů (PDB, topologie, souřadnice)")
+async def get_inputs_summary(workspace_id: str):
+    workspace_manager.require_workspace(workspace_id)
+    return await run_in_threadpool(input_files.summarize_inputs, workspace_manager.get_workspace_dir(workspace_id))
 
 
 @router.get("/fetch-pdb/{pdb_code}")
