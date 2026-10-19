@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 import traceback
 
-from app.services.pdb_service import PDBService, parse_pdb_to_topology_dict
+from app.services.pdb_service import PDBService, ion_group_for_resname, parse_pdb_to_topology_dict
 from app.services.forcefield_service import ForceFieldService
 from app.services.structure.groups import ION_GROUPS, drop_unused_ion_groups
 from app.services.topology_patches import apply_topology_patches
@@ -17,6 +17,16 @@ from app.workspaces.manager import WorkspaceManager
 from app.utils.adams4sims_processing_library.utils.alias import resn_alias
 
 logger = logging.getLogger(__name__)
+
+
+def ion_groups_in_pdb(pdb_content: str) -> set:
+    """Iontové skupiny jednoatomových HETATM reziduí, které slovník zná."""
+    groups = set()
+    for name in {line[17:20].strip() for line in pdb_content.splitlines() if line.startswith("HETATM")}:
+        group = ion_group_for_resname(name)
+        if group:
+            groups.add(group)
+    return groups
 
 
 class TopologyService:
@@ -118,15 +128,18 @@ class TopologyService:
 
             # FF panel nabízí všechny iontové skupiny - do topologie jdou jen
             # ty, které v připravené struktuře reálně jsou.
-            forge_meta = self._load_forge_meta(workspace_dir, pdb_filename)
-            if forge_meta:
-                used_groups = {entry.get("group") for entry in forge_meta.values()}
-                ff_selections = drop_unused_ion_groups(ff_selections, used_groups)
-
             # 1. Načtení původního PDB obsahu
             pdb_path = self.workspace_manager.get_file_path(workspace_id, pdb_filename)
             with open(pdb_path, "r", encoding="utf-8") as f:
                 pdb_content = f.read()
+
+            # Ionty bez metadat (ponechaný hotový systém - builder je do
+            # forge_meta nezapisuje) se počítají podle PDB.
+            forge_meta = self._load_forge_meta(workspace_dir, pdb_filename)
+            if forge_meta:
+                used_groups = {entry.get("group") for entry in forge_meta.values()}
+                used_groups |= ion_groups_in_pdb(pdb_content)
+                ff_selections = drop_unused_ion_groups(ff_selections, used_groups)
 
             logger.info(f"Starting topology generation for workspace {workspace_id}")
 
@@ -262,10 +275,15 @@ class TopologyService:
             logger.info(f"PDB coordinates updated at {original_pdb_path}")
             logger.info(f"AMBER CRD successfully saved to {crd_path}")
 
+            # prmtop CHARGE je v e * 18.2223 - celkový náboj pro kontrolu neutrality
+            total_charge = round(sum(topology_data["CHARGE"]) / 18.2223, 3) + 0.0
+            if abs(total_charge) > 0.01:
+                logger.warning(f"Topology for workspace {workspace_id} is not neutral: {total_charge:+g} e")
             return {
                 "topology_file": prmtop_filename,
                 "coordinates_file": pdb_filename,
                 "hmr": hmr,
+                "total_charge": total_charge,
             }
 
         except Exception as e:

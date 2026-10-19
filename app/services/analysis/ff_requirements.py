@@ -13,6 +13,9 @@ from .sequence import build_sequence_tokens
 _POLYMER_GROUP_LABELS = {"P": "protein", "R": "RNA", "D": "DNA"}
 
 
+_WATER_RESNAMES = {"HOH", "WAT", "SOL", "TIP", "DOD"}
+
+
 def resolve_ion_mol_type(resname: str, conv: Optional[dict] = None) -> Optional[str]:
     """
     Jediné povolené místo pro převod iontového resname na FORGE mol_type
@@ -91,32 +94,44 @@ def required_ff_groups(
             "reason": f"{_POLYMER_GROUP_LABELS[group]} residues present (e.g. {', '.join(examples)})",
         }
 
+    # Voda a ionty, které ve struktuře už jsou (nahraný hotový systém), potřebují
+    # FF i bez nové solvatace - jinak by je topologie neměla čím popsat.
+    ion_mol_type = {}
+    for mol_type in ("I1", "I1+", "Im", "Im+"):
+        for resname in conv.get(mol_type, {}):
+            ion_mol_type[resname] = mol_type
+
+    ion_counts: Dict[str, int] = {}
+    waters = 0
+    for line in pdb_text.splitlines():
+        if not line.startswith(("ATOM", "HETATM")):
+            continue
+        resname = line[17:20].strip()
+        if resname in _WATER_RESNAMES:
+            if line[12:16].strip().startswith("O"):
+                waters += 1
+            continue
+        if not line.startswith("HETATM"):
+            continue
+        # Konverzní slovník vede ionty pod jejich kanonickým FF názvem
+        # (Mg2+, Na+, ...), ne pod raw PDB zkratkou (MG, NA, ...) -
+        # stejný alias krok jako u polymerních reziduí v _infer_group.
+        canonical = resn_alias(resname)
+        if canonical in ion_mol_type:
+            ion_counts[canonical] = ion_counts.get(canonical, 0) + 1
+        elif resname in ion_mol_type:
+            ion_counts[resname] = ion_counts.get(resname, 0) + 1
+
     if add_solvent_and_ions:
         result["W"] = {"reason": "solvation requested (add_solvent_and_ions=True)"}
+    elif waters:
+        result["W"] = {"reason": f"water present in the structure ({waters} molecules)"}
 
-        ion_mol_type = {}
-        for mol_type in ("I1", "I1+", "Im", "Im+"):
-            for resname in conv.get(mol_type, {}):
-                ion_mol_type[resname] = mol_type
+    by_group: Dict[str, List[str]] = {}
+    for resname, count in ion_counts.items():
+        by_group.setdefault(ion_mol_type[resname], []).append(f"{resname} (x{count})")
 
-        ion_counts: Dict[str, int] = {}
-        for line in pdb_text.splitlines():
-            if not line.startswith("HETATM"):
-                continue
-            resname = line[17:20].strip()
-            # Konverzní slovník vede ionty pod jejich kanonickým FF názvem
-            # (Mg2+, Na+, ...), ne pod raw PDB zkratkou (MG, NA, ...) -
-            # stejný alias krok jako u polymerních reziduí v _infer_group.
-            canonical = resn_alias(resname)
-            if canonical in ion_mol_type:
-                ion_counts[canonical] = ion_counts.get(canonical, 0) + 1
-            elif resname in ion_mol_type:
-                ion_counts[resname] = ion_counts.get(resname, 0) + 1
-
-        by_group: Dict[str, List[str]] = {}
-        for resname, count in ion_counts.items():
-            by_group.setdefault(ion_mol_type[resname], []).append(f"{resname} (x{count})")
-
+    if add_solvent_and_ions:
         salt_mol_types: Set[str] = set()
         if salts:
             for spec in salts:
@@ -134,10 +149,10 @@ def required_ff_groups(
         for mol_type in salt_mol_types:
             by_group.setdefault(mol_type, []).append("default/requested neutralization or salt")
 
-        if require_mg:
-            by_group.setdefault("Im", []).append("structural multivalent ion -> Mg2+ replacement requested")
+    if require_mg:
+        by_group.setdefault("Im", []).append("structural multivalent ion -> Mg2+ replacement requested")
 
-        for mol_type, reasons in by_group.items():
-            result[mol_type] = {"reason": f"ions: {', '.join(reasons)}"}
+    for mol_type, reasons in by_group.items():
+        result[mol_type] = {"reason": f"ions: {', '.join(reasons)}"}
 
     return result

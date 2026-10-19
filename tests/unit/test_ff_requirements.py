@@ -57,6 +57,8 @@ class TestRequiredFfGroups:
         assert "I1+" in required
         assert "I1" not in required
 
-    def test_no_solvent_no_ion_requirements_even_with_crystal_ions(self):
+    def test_no_solvent_still_needs_ff_for_ions_left_in_the_structure(self):
+        # Bez solvatace se ionty ze struktury neodstraňují - topologie pro ně
+        # FF potřebuje. Výchozí neutralizační I1 ale ne (nic se nepřidává).
         required = required_ff_groups(_PROTEIN_WITH_MG_PDB, add_solvent_and_ions=False)
-        assert set(required.keys()) == {"P"}
+        assert set(required.keys()) == {"P", "Im"}

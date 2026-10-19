@@ -6,6 +6,9 @@ import aiofiles.os
 from app.core.config import settings
 from app.core.http_client import external_http_client
 from pathlib import Path
+from typing import Optional
+
+from app.utils.adams4sims_processing_library.utils.alias import resn_alias
 
 # --- NOVÝ IMPORT ---
 from app.utils.water_models import water_extra_points
@@ -362,6 +365,13 @@ _FORGE_GROUP_TO_MOL_TYPE = {
 }
 
 
+def ion_group_for_resname(res_name: str) -> Optional[str]:
+    """FORGE iontová skupina (I1/I1+/Im/Im+) pro PDB jméno iontu, nebo None."""
+    from app.services.analysis import resolve_ion_mol_type  # pozdní import - analysis importuje tenhle modul
+
+    return resolve_ion_mol_type(resn_alias(res_name)) or resolve_ion_mol_type(res_name)
+
+
 def parse_pdb_to_topology_dict(pdb_content: str, selected_force_fields: dict = None, forge_meta: dict = None) -> dict:
     if selected_force_fields is None:
         selected_force_fields = {"R": "OL3"}
@@ -436,7 +446,10 @@ def parse_pdb_to_topology_dict(pdb_content: str, selected_force_fields: dict = N
             if res_name in ['HOH', 'WAT', 'SOL']:
                 mol_type = "W"
             elif res_name in ion_resnames:
-                mol_type = "I"
+                # Iont bez FORGE metadat (nahraný hotový systém, příprava bez
+                # solvatace) - skupina z konverzního slovníku, ať dostane FF
+                # své skupiny; obecné "I" jen když ho slovník nezná.
+                mol_type = ion_group_for_resname(res_name) or "I"
 
             is_nucleotide = i in nuc_indices
             base_name = res_name

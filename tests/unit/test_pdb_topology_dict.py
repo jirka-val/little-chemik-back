@@ -46,7 +46,8 @@ class TestWithoutSidecar:
         result = parse_pdb_to_topology_dict(pdb)
         by_name = {r["resn"]: r["mol_type"] for r in result["residues"]}
         assert by_name["HOH"] == "W"
-        assert by_name["NA"] == "I"
+        # skupina z konverzního slovníku, ať iont dostane FF své skupiny
+        assert by_name["NA"] == "I1"
 
 
 class TestWithSidecar:

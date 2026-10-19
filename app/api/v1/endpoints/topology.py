@@ -39,6 +39,7 @@ async def generate_topology(workspace_id: str, request: TopologyRequest):
         return {
             "status": "success",
             "hmr": result_dict["hmr"],
+            "total_charge": result_dict["total_charge"],
             "files": {
                 "topology": result_dict["topology_file"],
                 "pdb": result_dict["coordinates_file"]
