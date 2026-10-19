@@ -1,5 +1,6 @@
 import io
 import re
+import time
 import zipfile
 import logging
 from typing import List, Optional, Tuple
@@ -11,6 +12,7 @@ from pydantic import BaseModel
 from app.api.v1.endpoints.simulation import AmberMdinRequest, _mdin_filename, mdin_overview, render_amber_mdin
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.services.ghbfix import GHBFIX_FILENAME
+from app.services.md_protocol import render_protocol
 from app.services.report.pdf import REPORT_FILENAME, render_report_pdf
 from app.services.report.procedure import PROCEDURE_FILENAME, render_procedure_pdf
 from app.workspaces.manager import workspace_manager
@@ -101,7 +103,13 @@ async def export_workspace_files(workspace_id: str, req: DownloadRequest):
     # Soubory generované až tady (nejsou na disku): mdin z nastavení
     # Simulation panelu a souhrnný report.
     generated: List[Tuple[str, bytes, str]] = []
-    if req.mdin is not None:
+    if req.mdin is not None and req.mdin.protocol:
+        # Celý běh: minimalizace, ohřev, ekvilibrace, produkce a run_md.sh.
+        pdb_path = workspace_manager.get_file_path(workspace_id, FILE_MAPPING["pdb"]["filename"])
+        pdb_text = pdb_path.read_text(encoding="utf-8", errors="replace") if pdb_path.exists() else None
+        for name, text in render_protocol(req.mdin, pdb_text):
+            generated.append((name, text.encode("utf-8"), "text/plain"))
+    elif req.mdin is not None:
         generated.append((_mdin_filename(req.mdin), render_amber_mdin(req.mdin).encode("utf-8"), "text/plain"))
     ensemble, nstlim = mdin_overview(req.mdin) if req.mdin is not None else (None, None)
     simulation = req.mdin.model_dump() if req.mdin is not None else None
@@ -149,7 +157,13 @@ async def export_workspace_files(workspace_id: str, req: DownloadRequest):
                 # Zapisujeme pouze název souboru, ne celou cestu na serveru
                 zip_file.write(file_path, file_path.name)
             for name, content, _media_type in generated:
-                zip_file.writestr(name, content)
+                info = zipfile.ZipInfo(name, date_time=time.localtime()[:6])
+                info.compress_type = zipfile.ZIP_DEFLATED
+                if name.endswith(".sh"):
+                    info.external_attr = 0o755 << 16  # spustitelný po rozbalení (unzip na Linuxu)
+                else:
+                    info.external_attr = 0o644 << 16
+                zip_file.writestr(info, content)
 
         # Vrácení ukazatele na začátek souboru, aby ho šlo přečíst
         zip_buffer.seek(0)

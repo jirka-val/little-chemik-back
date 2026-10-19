@@ -249,10 +249,20 @@ def _topology_paragraph(topo: Optional[Dict[str, Any]]) -> str:
 def _simulation_paragraph(sim: Optional[Dict[str, Any]], ensemble: Optional[str], nstlim: Optional[int]) -> str:
     if not sim:
         return ""
-    text = (f"An AMBER input file was prepared for {'a new' if sim.get('run_type') == 'new' else 'a continued'} "
-            f"{_num(sim.get('duration_ns'))} ns {ensemble or ''} production segment"
-            + (f" ({nstlim} steps)" if nstlim else "")
-            + f" with a {_num(sim.get('dt_fs'))} fs time step").replace("  ", " ")
+    segments = sim.get("segments") or 1
+    if sim.get("protocol"):
+        text = ("AMBER inputs were prepared for the whole run: two-stage energy minimization (solute restrained, "
+                "then unrestrained), heating to the target temperature with the solute restrained, NPT "
+                f"equilibration and {_num(sim.get('duration_ns'))} ns of {ensemble or ''} production in "
+                f"{segments} segment{'s' if segments > 1 else ''} of {_num(sim.get('duration_ns') / segments)} ns"
+                + (f" ({nstlim} steps each)" if nstlim else "")
+                + f" with a {_num(sim.get('dt_fs'))} fs time step").replace("  ", " ")
+    else:
+        text = (f"An AMBER input file was prepared for {'a new' if sim.get('run_type') == 'new' else 'a continued'} "
+                f"{_num(sim.get('duration_ns') / segments)} ns {ensemble or ''} production segment"
+                + (f" ({nstlim} steps)" if nstlim else "")
+                + (f", one of {segments} making up {_num(sim.get('duration_ns'))} ns" if segments > 1 else "")
+                + f" with a {_num(sim.get('dt_fs'))} fs time step").replace("  ", " ")
     if sim.get("hmr"):
         text += " enabled by hydrogen mass repartitioning"
     text += "."

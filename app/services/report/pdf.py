@@ -332,6 +332,18 @@ def _section_system(pdf: _Report, composition: Dict[str, Any]):
     pdf.kv(rows)
 
 
+def _length_text(s: Dict[str, Any], nstlim: Optional[int]) -> str:
+    segments = s.get("segments") or 1
+    text = f"{_num(s.get('duration_ns'))} ns"
+    if segments > 1:
+        text += f" in {segments} segments of {_num(s.get('duration_ns') / segments)} ns"
+    if nstlim:
+        text += f" ({nstlim} steps{' per segment' if segments > 1 else ''})"
+    if s.get("protocol"):
+        text += ", with minimization, heating and equilibration (run_md.sh)"
+    return text
+
+
 def _section_simulation(pdf: _Report, simulation: Optional[Dict[str, Any]], ensemble: Optional[str],
                         nstlim: Optional[int]):
     pdf.h2("5. Simulation input (AMBER)")
@@ -344,7 +356,7 @@ def _section_simulation(pdf: _Report, simulation: Optional[Dict[str, Any]], ense
     rows: List[Tuple[str, Any]] = [
         ("Segment", "New run" if s.get("run_type") == "new" else "Continuation (restart)"),
         ("Ensemble", ensemble),
-        ("Length", f"{_num(s.get('duration_ns'))} ns ({nstlim} steps)" if nstlim else f"{_num(s.get('duration_ns'))} ns"),
+        ("Length", _length_text(s, nstlim)),
         ("Time step", f"{_num(s.get('dt_fs'))} fs"),
         ("Hydrogen mass repartitioning", "Yes" if s.get("hmr") else "No"),
         ("Thermostat", f"{_THERMOSTAT.get(thermostat, thermostat)}, {_num(s.get('temp0'))} K"

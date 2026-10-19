@@ -5,11 +5,10 @@ pmemd). Vychází z FORGE_general_design_v5.xlsx (list "MD input mapping",
 sekce W4.1-W4.7) a z Amber26.pdf sekce 23.6 (General minimization and
 dynamics parameters).
 
-ROZSAH (v1): jeden segment na jeden request - žádné automatické dělení
-dlouhého běhu na N+1 segmentů s restart orchestrací (to je podle designového
-listu samo o sobě označené jako "future extension", ne součást dnešního
-rozsahu). Uživatel si segmenty spouští ručně, po jednom, s run_type
-"new"/"continue".
+`duration_ns` je celková délka produkce, `segments` na kolik stejně dlouhých
+segmentů se rozdělí (mdin popisuje jeden segment). S `protocol=True` Export
+přibalí celý běh - minimalizace, ohřev, ekvilibrace, produkční segmenty a
+master skript run_md.sh (app/services/md_protocol.py).
 
 Generovaný text je čistě funkcí vstupních parametrů formuláře - nezávisí na
 konkrétní struktuře/topologii daného workspace (mdin soubor neobsahuje žádné
@@ -35,7 +34,10 @@ router = APIRouter()
 class AmberMdinRequest(BaseModel):
     # W4.2 Run structure
     run_type: Literal["new", "continue"] = "new"
-    duration_ns: float = Field(100.0, gt=0)
+    duration_ns: float = Field(100.0, gt=0)  # celková délka produkce
+    segments: int = Field(1, ge=1, le=10000)  # na kolik segmentů se produkce rozdělí
+    # Export přibalí minimalizaci, ohřev, ekvilibraci a run_md.sh (md_protocol.py)
+    protocol: bool = False
     dt_fs: float = Field(2.0, gt=0)
     hmr: bool = False
 
@@ -121,8 +123,19 @@ def _fmt(value: float) -> str:
     return text if not text.endswith(".") else text + "0"
 
 
+def segment_ns(req: AmberMdinRequest) -> float:
+    """Délka jednoho produkčního segmentu v ns."""
+    return req.duration_ns / req.segments
+
+
+def _segment_nstlim(req: AmberMdinRequest) -> int:
+    return round(segment_ns(req) * 1000.0 / (req.dt_fs / 1000.0))
+
+
 def _build_title(req: AmberMdinRequest, ensemble: str) -> str:
-    parts = f"Production {ensemble}, {req.duration_ns:g} ns segment, {req.dt_fs:g} fs"
+    parts = f"Production {ensemble}, {segment_ns(req):g} ns segment, {req.dt_fs:g} fs"
+    if req.segments > 1:
+        parts += f" ({req.segments} x {segment_ns(req):g} ns = {req.duration_ns:g} ns)"
     if req.hmr:
         parts += " with HMR in the topology"
     return parts
@@ -133,14 +146,15 @@ def render_amber_mdin(req: AmberMdinRequest) -> str:
     ensemble = _ensemble_label(thermostat, barostat)
 
     dt_ps = req.dt_fs / 1000.0
-    nstlim = round(req.duration_ns * 1000.0 / dt_ps)
+    nstlim = _segment_nstlim(req)
     ntpr = max(1, round(req.log_interval_ps / dt_ps))
     ntwx = max(1, round(req.traj_interval_ps / dt_ps))
     ntwr = max(1, round(req.restart_interval_ps / dt_ps))
     ntc = ntf = _NTC_NTF[req.constraints]
 
     has_barostat = barostat != "none"
-    irest, ntx = (0, 1) if req.run_type == "new" else (1, 5)
+    # V protokolu produkce vždy navazuje na ekvilibraci/předchozí segment.
+    irest, ntx = (0, 1) if req.run_type == "new" and not req.protocol else (1, 5)
     ntb = 2 if has_barostat else 1
     ntp = 1 if has_barostat else 0
     ntt = _NTT[thermostat]
@@ -185,31 +199,42 @@ def render_amber_mdin(req: AmberMdinRequest) -> str:
         lines.append("  nmropt=1,")
     lines.append("/")
     if req.ghbfix:
-        # Váha restraintů 1.0 po celý segment. Při výměnách replik (numexchg
-        # > 1) by istep2 bylo nstlim*numexchg - tenhle generátor REMD nemá.
-        lines += [
-            "&wt",
-            f"  type='REST', istep1=1, istep2={nstlim}, value1=1.0, value2=1.0,",
-            "/",
-            "&wt",
-            "  type='END',",
-            "/",
-            f"LISTOUT={GHBFIX_LISTOUT}",
-            f"DISANG={GHBFIX_FILENAME}",
-        ]
+        lines += ghbfix_wt_lines(nstlim)
     return "\n".join(lines) + "\n"
 
 
+def ghbfix_wt_lines(nstlim: int, extra_wt: tuple[str, ...] = ()) -> list[str]:
+    """
+    &wt bloky a DISANG pro gHBfix restrainty. Váha 1.0 po celý segment. Při
+    výměnách replik (numexchg > 1) by istep2 bylo nstlim*numexchg - tenhle
+    generátor REMD nemá. `extra_wt` = další &wt bloky před END (TEMP0 rampa
+    při ohřevu).
+    """
+    return [
+        *extra_wt,
+        "&wt",
+        f"  type='REST', istep1=1, istep2={nstlim}, value1=1.0, value2=1.0,",
+        "/",
+        "&wt",
+        "  type='END',",
+        "/",
+        f"LISTOUT={GHBFIX_LISTOUT}",
+        f"DISANG={GHBFIX_FILENAME}",
+    ]
+
+
 def mdin_overview(req: AmberMdinRequest) -> tuple[str, int]:
-    """(ensemble, nstlim) pro souhrnný report - stejný výpočet jako render_amber_mdin."""
+    """(ensemble, nstlim jednoho segmentu) pro souhrnný report - stejný výpočet jako render_amber_mdin."""
     ensemble = _ensemble_label(*_resolve_coupling(req))
-    return ensemble, round(req.duration_ns * 1000.0 / (req.dt_fs / 1000.0))
+    return ensemble, _segment_nstlim(req)
 
 
 def _mdin_filename(req: AmberMdinRequest) -> str:
+    if req.protocol:
+        return "prod.in"  # run_md.sh na něj odkazuje pevným jménem
     ensemble = _ensemble_label(*_resolve_coupling(req))
     hmr_suffix = "_hmr" if req.hmr else ""
-    duration_label = f"{req.duration_ns:g}".replace(".", "p")
+    duration_label = f"{segment_ns(req):g}".replace(".", "p")
     return f"amber_{ensemble.lower()}_production_{duration_label}ns{hmr_suffix}.mdin"
 
 
@@ -230,7 +255,8 @@ async def generate_amber_mdin(workspace_id: str, req: AmberMdinRequest, preview:
         logger.info(
             f"Generated AMBER mdin for workspace {workspace_id}: "
             f"{_ensemble_label(thermostat, barostat)} (thermostat={thermostat}, barostat={barostat}), "
-            f"{req.duration_ns:g} ns, dt={req.dt_fs:g} fs, hmr={req.hmr}"
+            f"{req.duration_ns:g} ns in {req.segments} segment(s), dt={req.dt_fs:g} fs, hmr={req.hmr}, "
+            f"protocol={req.protocol}"
         )
 
     return PlainTextResponse(
