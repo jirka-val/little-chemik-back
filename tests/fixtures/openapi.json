@@ -41,11 +41,13 @@
      },
      "cut": {
       "default": 10.0,
+      "exclusiveMinimum": 0.0,
       "type": "number"
      },
      "dt_fs": {
       "default": 2.0,
       "exclusiveMinimum": 0.0,
+      "maximum": 10.0,
       "type": "number"
      },
      "duration_ns": {
@@ -106,6 +108,7 @@
      },
      "pres0": {
       "default": 1.0,
+      "exclusiveMinimum": 0.0,
       "type": "number"
      },
      "protocol": {
@@ -131,8 +134,22 @@
       "minimum": 1.0,
       "type": "integer"
      },
+     "steps": {
+      "anyOf": [
+       {
+        "items": {
+         "$ref": "#/components/schemas/ProtocolStep"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
      "taup": {
       "default": 2.0,
+      "exclusiveMinimum": 0.0,
       "type": "number"
      },
      "tautp": {
@@ -142,6 +159,8 @@
      },
      "temp0": {
       "default": 298.16,
+      "maximum": 1000.0,
+      "minimum": 0.0,
       "type": "number"
      },
      "thermostat": {
@@ -162,6 +181,7 @@
      },
      "tol": {
       "default": 1e-05,
+      "exclusiveMinimum": 0.0,
       "type": "number"
      },
      "traj_interval_ps": {
@@ -220,6 +240,42 @@
     ],
     "type": "object"
    },
+   "CheckedProtocol": {
+    "properties": {
+     "filename": {
+      "type": "string"
+     },
+     "fingerprint": {
+      "type": "string"
+     },
+     "protocol": {
+      "$ref": "#/components/schemas/RunProtocol"
+     },
+     "warnings": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "protocol",
+     "warnings",
+     "fingerprint",
+     "filename"
+    ],
+    "type": "object"
+   },
+   "Conformations": {
+    "properties": {
+     "strategy": {
+      "const": "recommended",
+      "default": "recommended",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
    "DownloadRequest": {
     "properties": {
      "as_zip": {
@@ -250,6 +306,16 @@
       "default": false,
       "type": "boolean"
      },
+     "protocol": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/RunProtocol"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
      "report": {
       "default": false,
       "type": "boolean"
@@ -264,6 +330,39 @@
      },
      "wants_top": {
       "default": false,
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "ExportChoice": {
+    "properties": {
+     "crd": {
+      "default": true,
+      "type": "boolean"
+     },
+     "mdin": {
+      "default": true,
+      "type": "boolean"
+     },
+     "pdb": {
+      "default": true,
+      "type": "boolean"
+     },
+     "procedure": {
+      "default": true,
+      "type": "boolean"
+     },
+     "protocol": {
+      "default": true,
+      "type": "boolean"
+     },
+     "report": {
+      "default": true,
+      "type": "boolean"
+     },
+     "top": {
+      "default": true,
       "type": "boolean"
      }
     },
@@ -284,6 +383,29 @@
     "required": [
      "workspace_id",
      "selections"
+    ],
+    "type": "object"
+   },
+   "ForceFieldRef": {
+    "properties": {
+     "id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "name": {
+      "maxLength": 200,
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
     ],
     "type": "object"
    },
@@ -381,6 +503,89 @@
     ],
     "type": "object"
    },
+   "Preparation": {
+    "properties": {
+     "add_solvent": {
+      "default": false,
+      "type": "boolean"
+     },
+     "additional_salts": {
+      "items": {
+       "$ref": "#/components/schemas/SaltStep"
+      },
+      "type": "array"
+     },
+     "box_padding_nm": {
+      "default": 1.0,
+      "exclusiveMinimum": 0.0,
+      "maximum": 10.0,
+      "type": "number"
+     },
+     "box_shape": {
+      "default": "cube",
+      "enum": [
+       "cube",
+       "octahedron",
+       "truncated octahedron"
+      ],
+      "type": "string"
+     },
+     "clean_crystal_ions": {
+      "default": true,
+      "type": "boolean"
+     },
+     "concentration_mode": {
+      "default": "water_ratio",
+      "enum": [
+       "water_ratio",
+       "box_volume"
+      ],
+      "type": "string"
+     },
+     "crystal_water_mode": {
+      "default": "remove_all",
+      "enum": [
+       "remove_all",
+       "keep_water",
+       "keep_all"
+      ],
+      "type": "string"
+     },
+     "existing_solvent": {
+      "default": "keep",
+      "enum": [
+       "keep",
+       "rebuild"
+      ],
+      "type": "string"
+     },
+     "ionic_strength": {
+      "default": 0.15,
+      "maximum": 5.0,
+      "minimum": 0.0,
+      "type": "number"
+     },
+     "negative_ion": {
+      "default": "Cl-",
+      "type": "string"
+     },
+     "ph": {
+      "default": 7.0,
+      "maximum": 14.0,
+      "minimum": 0.0,
+      "type": "number"
+     },
+     "positive_ion": {
+      "default": "Na+",
+      "type": "string"
+     },
+     "replace_structural_multivalent_with_mg": {
+      "default": false,
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
    "PreparationRequest": {
     "properties": {
      "add_solvent": {
@@ -399,6 +604,8 @@
      },
      "box_padding_nm": {
       "default": 1.0,
+      "exclusiveMinimum": 0.0,
+      "maximum": 10.0,
       "type": "number"
      },
      "box_shape": {
@@ -446,6 +653,8 @@
      },
      "ionic_strength": {
       "default": 0.15,
+      "maximum": 5.0,
+      "minimum": 0.0,
       "type": "number"
      },
      "negative_ion": {
@@ -454,6 +663,8 @@
      },
      "ph": {
       "default": 7.0,
+      "maximum": 14.0,
+      "minimum": 0.0,
       "type": "number"
      },
      "positive_ion": {
@@ -484,6 +695,141 @@
     "required": [
      "workspace_id",
      "ff_selections"
+    ],
+    "type": "object"
+   },
+   "ProtocolFile": {
+    "properties": {
+     "content": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "content"
+    ],
+    "type": "object"
+   },
+   "ProtocolStep": {
+    "properties": {
+     "extra": {
+      "default": "",
+      "maxLength": 500,
+      "type": "string"
+     },
+     "kind": {
+      "enum": [
+       "minimization",
+       "heating",
+       "equilibration"
+      ],
+      "type": "string"
+     },
+     "length_ps": {
+      "default": 100.0,
+      "maximum": 1000000.0,
+      "minimum": 1.0,
+      "type": "number"
+     },
+     "maxcyc": {
+      "default": 5000,
+      "maximum": 10000000.0,
+      "minimum": 1.0,
+      "type": "integer"
+     },
+     "name": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$",
+      "type": "string"
+     },
+     "ncyc": {
+      "anyOf": [
+       {
+        "minimum": 0.0,
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "pressure": {
+      "default": true,
+      "type": "boolean"
+     },
+     "restraint": {
+      "default": "none",
+      "enum": [
+       "none",
+       "solute",
+       "heavy",
+       "custom"
+      ],
+      "type": "string"
+     },
+     "restraint_mask": {
+      "default": "",
+      "maxLength": 200,
+      "type": "string"
+     },
+     "restraint_wt": {
+      "default": 10.0,
+      "exclusiveMinimum": 0.0,
+      "maximum": 100000.0,
+      "type": "number"
+     },
+     "temp_start": {
+      "default": 0.0,
+      "maximum": 1000.0,
+      "minimum": 0.0,
+      "type": "number"
+     },
+     "temp_target": {
+      "anyOf": [
+       {
+        "maximum": 1000.0,
+        "minimum": 0.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    "required": [
+     "name",
+     "kind"
+    ],
+    "type": "object"
+   },
+   "ProtonationChoice": {
+    "properties": {
+     "chain": {
+      "type": "string"
+     },
+     "icode": {
+      "default": "",
+      "type": "string"
+     },
+     "resname": {
+      "default": "",
+      "maxLength": 10,
+      "type": "string"
+     },
+     "resseq": {
+      "type": "integer"
+     },
+     "state": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "chain",
+     "resseq",
+     "state"
     ],
     "type": "object"
    },
@@ -608,9 +954,82 @@
     ],
     "type": "object"
    },
+   "RunProtocol": {
+    "properties": {
+     "conformations": {
+      "$ref": "#/components/schemas/Conformations"
+     },
+     "created": {
+      "anyOf": [
+       {
+        "maxLength": 40,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "export": {
+      "$ref": "#/components/schemas/ExportChoice"
+     },
+     "forcefields": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/ForceFieldRef"
+      },
+      "type": "object"
+     },
+     "format": {
+      "const": "forge-protocol",
+      "default": "forge-protocol",
+      "type": "string"
+     },
+     "format_version": {
+      "default": 1,
+      "type": "integer"
+     },
+     "mode": {
+      "default": "standard",
+      "enum": [
+       "guided",
+       "standard",
+       "expert"
+      ],
+      "type": "string"
+     },
+     "name": {
+      "maxLength": 100,
+      "minLength": 1,
+      "type": "string"
+     },
+     "notes": {
+      "default": "",
+      "maxLength": 2000,
+      "type": "string"
+     },
+     "preparation": {
+      "$ref": "#/components/schemas/Preparation"
+     },
+     "protonation": {
+      "items": {
+       "$ref": "#/components/schemas/ProtonationChoice"
+      },
+      "maxItems": 5000,
+      "type": "array"
+     },
+     "simulation": {
+      "$ref": "#/components/schemas/AmberMdinRequest"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "type": "object"
+   },
    "SaltStep": {
     "properties": {
      "ionic_strength": {
+      "maximum": 5.0,
       "minimum": 0.0,
       "type": "number"
      },
@@ -1900,6 +2319,45 @@
     ]
    }
   },
+  "/api/protocols/check": {
+   "post": {
+    "operationId": "check_protocol_api_protocols_check_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "additionalProperties": true,
+        "type": "object"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CheckedProtocol"
+        }
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "protocols"
+    ]
+   }
+  },
   "/api/sidechains/cancel/{workspace_id}": {
    "post": {
     "operationId": "cancel_sidechains_api_sidechains_cancel__workspace_id__post",
@@ -2110,6 +2568,28 @@
     ]
    }
   },
+  "/api/simulation/protocol-steps": {
+   "get": {
+    "operationId": "get_default_protocol_steps_api_simulation_protocol_steps_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/ProtocolStep"
+         },
+         "type": "array"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "simulation"
+    ]
+   }
+  },
   "/api/simulation/{workspace_id}/amber-mdin": {
    "post": {
     "operationId": "generate_amber_mdin_api_simulation__workspace_id__amber_mdin_post",
@@ -2147,6 +2627,57 @@
       "content": {
        "application/json": {
         "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "simulation"
+    ]
+   }
+  },
+  "/api/simulation/{workspace_id}/amber-protocol": {
+   "post": {
+    "operationId": "generate_amber_protocol_api_simulation__workspace_id__amber_protocol_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AmberMdinRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/ProtocolFile"
+         },
+         "type": "array"
+        }
        }
       }
      },

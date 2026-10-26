@@ -12,7 +12,8 @@ from pydantic import BaseModel
 from app.api.v1.endpoints.simulation import AmberMdinRequest, _mdin_filename, mdin_overview, render_amber_mdin
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.services.ghbfix import GHBFIX_FILENAME
-from app.services.md_protocol import render_protocol
+from app.services.md_protocol import render_workspace_protocol
+from app.services.run_protocol import RunProtocol, protocol_filename, protocol_fingerprint
 from app.services.report.pdf import REPORT_FILENAME, render_report_pdf
 from app.services.report.procedure import PROCEDURE_FILENAME, render_procedure_pdf
 from app.workspaces.manager import workspace_manager
@@ -64,6 +65,8 @@ class DownloadRequest(BaseModel):
     # Guided/Standard/Expert - jen pro report.
     detail_level: Optional[str] = None
     as_zip: bool = True
+    # Protokol přípravy, podle kterého data vznikla - přibalí se a report ho uvede.
+    protocol: Optional[RunProtocol] = None
 
 
 # 2. Mapování formátů na konkrétní jména souborů
@@ -105,17 +108,21 @@ async def export_workspace_files(workspace_id: str, req: DownloadRequest):
     generated: List[Tuple[str, bytes, str]] = []
     if req.mdin is not None and req.mdin.protocol:
         # Celý běh: minimalizace, ohřev, ekvilibrace, produkce a run_md.sh.
-        pdb_path = workspace_manager.get_file_path(workspace_id, FILE_MAPPING["pdb"]["filename"])
-        pdb_text = pdb_path.read_text(encoding="utf-8", errors="replace") if pdb_path.exists() else None
-        for name, text in render_protocol(req.mdin, pdb_text):
+        for name, text in render_workspace_protocol(req.mdin, workspace_id):
             generated.append((name, text.encode("utf-8"), "text/plain"))
     elif req.mdin is not None:
         generated.append((_mdin_filename(req.mdin), render_amber_mdin(req.mdin).encode("utf-8"), "text/plain"))
+    protocol_label = None
+    if req.protocol is not None:
+        generated.append((protocol_filename(req.protocol),
+                          req.protocol.model_dump_json(indent=2).encode("utf-8"), "application/json"))
+        protocol_label = f'"{req.protocol.name}" (fingerprint {protocol_fingerprint(req.protocol)})'
     ensemble, nstlim = mdin_overview(req.mdin) if req.mdin is not None else (None, None)
     simulation = req.mdin.model_dump() if req.mdin is not None else None
     if req.procedure:
         procedure_bytes = await run_in_threadpool(
-            render_procedure_pdf, workspace_id, simulation=simulation, ensemble=ensemble, nstlim=nstlim
+            render_procedure_pdf, workspace_id, simulation=simulation, ensemble=ensemble, nstlim=nstlim,
+            protocol=protocol_label,
         )
         generated.append((PROCEDURE_FILENAME, procedure_bytes, "application/pdf"))
     if req.report:
@@ -128,6 +135,7 @@ async def export_workspace_files(workspace_id: str, req: DownloadRequest):
             nstlim=nstlim,
             detail_level=req.detail_level,
             files=names,
+            protocol=protocol_label,
         )
         generated.append((REPORT_FILENAME, pdf_bytes, "application/pdf"))
 

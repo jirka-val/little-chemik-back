@@ -7,8 +7,9 @@ dynamics parameters).
 
 `duration_ns` je celková délka produkce, `segments` na kolik stejně dlouhých
 segmentů se rozdělí (mdin popisuje jeden segment). S `protocol=True` Export
-přibalí celý běh - minimalizace, ohřev, ekvilibrace, produkční segmenty a
-master skript run_md.sh (app/services/md_protocol.py).
+přibalí celý běh - přípravné kroky ze `steps` (minimalizace, ohřev,
+ekvilibrace; app/services/md_steps.py), produkční segmenty a master skript
+run_md.sh (app/services/md_protocol.py).
 
 Generovaný text je čistě funkcí vstupních parametrů formuláře - nezávisí na
 konkrétní struktuře/topologii daného workspace (mdin soubor neobsahuje žádné
@@ -17,14 +18,15 @@ konzistenci s zbytkem API (a ověření, že workspace existuje), ne proto, že 
 se z něj něco čtlo.
 """
 import logging
-from typing import Literal
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.exceptions import BadRequestError
 from app.services.ghbfix import GHBFIX_FILENAME, GHBFIX_LISTOUT
+from app.services.md_steps import MAX_TEMPERATURE, MIN_MD_LENGTH_PS, ProtocolStep, check_steps, default_steps
 from app.workspaces.manager import workspace_manager
 
 logger = logging.getLogger(__name__)
@@ -32,13 +34,18 @@ router = APIRouter()
 
 
 class AmberMdinRequest(BaseModel):
+    # NaN a nekonečno by prošly mezemi (gt/le) až do mdin
+    model_config = ConfigDict(allow_inf_nan=False)
+
     # W4.2 Run structure
     run_type: Literal["new", "continue"] = "new"
     duration_ns: float = Field(100.0, gt=0)  # celková délka produkce
     segments: int = Field(1, ge=1, le=10000)  # na kolik segmentů se produkce rozdělí
     # Export přibalí minimalizaci, ohřev, ekvilibraci a run_md.sh (md_protocol.py)
     protocol: bool = False
-    dt_fs: float = Field(2.0, gt=0)
+    # Přípravné kroky celého běhu (md_steps.py); None = výchozí DEFAULT_STEPS
+    steps: Optional[List[ProtocolStep]] = None
+    dt_fs: float = Field(2.0, gt=0, le=10)
     hmr: bool = False
 
     # W4.3 Ensemble / temperature
@@ -50,21 +57,21 @@ class AmberMdinRequest(BaseModel):
     ensemble: Literal["NVE", "NVT", "NPT"] = "NVT"
     thermostat: Literal["none", "langevin", "berendsen", "andersen"] | None = None
     barostat: Literal["none", "monte-carlo", "berendsen"] | None = None
-    temp0: float = 298.16
+    temp0: float = Field(298.16, ge=0, le=MAX_TEMPERATURE)
     gamma_ln: float = Field(1.0, ge=0)      # Langevin (ntt=3)
     tautp: float = Field(1.0, gt=0)         # Berendsen weak coupling (ntt=1)
     vrand: int = Field(1000, gt=0)          # Andersen - kroky mezi randomizacemi (ntt=2)
 
     # W4.4 Pressure (jen s barostatem)
-    pres0: float = 1.0
-    taup: float = 2.0                       # Berendsen barostat (barostat=1)
+    pres0: float = Field(1.0, gt=0)
+    taup: float = Field(2.0, gt=0)          # Berendsen barostat (barostat=1)
 
     # W4.5 Constraints
     constraints: Literal["none", "h-bonds", "all-bonds"] = "h-bonds"
-    tol: float = 0.00001
+    tol: float = Field(0.00001, gt=0)
 
     # W4.6 PBC / nonbonded
-    cut: float = 10.0
+    cut: float = Field(10.0, gt=0)
 
     # W4.2 Output (physical intervals in ps - converted to step counts below)
     log_interval_ps: float = Field(10.0, gt=0)
@@ -80,6 +87,18 @@ class AmberMdinRequest(BaseModel):
     # Vybraný FF má gHBfix korekce (has_ghbfix z /api/forcefields) - mdin je
     # načte jako restrainty z ghbfix.f, viz app/services/ghbfix.py.
     ghbfix: bool = False
+
+    @field_validator("steps")
+    @classmethod
+    def _check_steps(cls, steps: Optional[List[ProtocolStep]]):
+        return check_steps(steps) if steps is not None else None
+
+    @model_validator(mode="after")
+    def _check_segment_length(self):
+        # segment kratší než 1 ps by dal nstlim=0 (nebo pár kroků)
+        if self.duration_ns / self.segments < MIN_MD_LENGTH_PS / 1000.0:
+            raise ValueError("each production segment must be at least 1 ps long")
+        return self
 
 
 _NTC_NTF = {"none": 1, "h-bonds": 2, "all-bonds": 3}
@@ -238,6 +257,13 @@ def _mdin_filename(req: AmberMdinRequest) -> str:
     return f"amber_{ensemble.lower()}_production_{duration_label}ns{hmr_suffix}.mdin"
 
 
+@router.get("/protocol-steps", response_model=List[ProtocolStep],
+            summary="Výchozí přípravné kroky celého MD běhu")
+async def get_default_protocol_steps():
+    """Výchozí seznam kroků pro editor v Simulation panelu (md_steps.DEFAULT_STEPS)."""
+    return default_steps()
+
+
 @router.post("/{workspace_id}/amber-mdin", summary="Generuje AMBER produkční mdin (&cntrl) soubor")
 async def generate_amber_mdin(workspace_id: str, req: AmberMdinRequest, preview: bool = False):
     """
@@ -264,3 +290,24 @@ async def generate_amber_mdin(workspace_id: str, req: AmberMdinRequest, preview:
         media_type="text/plain",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+class ProtocolFile(BaseModel):
+    name: str
+    content: str
+
+
+@router.post("/{workspace_id}/amber-protocol", response_model=List[ProtocolFile],
+             summary="Všechny vstupy celého MD běhu (náhled po krocích)")
+async def generate_amber_protocol(workspace_id: str, req: AmberMdinRequest):
+    """
+    Stejné soubory jako Export s `protocol=true` (kroky, prod.in, run_md.sh)
+    jako JSON - Simulation panel je ukazuje v záložkách náhledu. Neloguje se,
+    volá se při každé změně formuláře.
+    """
+    # md_protocol importuje tenhle modul (AmberMdinRequest, render_amber_mdin)
+    from app.services.md_protocol import render_workspace_protocol
+
+    workspace_manager.require_workspace(workspace_id)
+    return [ProtocolFile(name=name, content=text)
+            for name, text in render_workspace_protocol(req.model_copy(update={"protocol": True}), workspace_id)]

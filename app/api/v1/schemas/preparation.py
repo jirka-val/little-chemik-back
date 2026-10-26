@@ -5,7 +5,7 @@ translation into the arguments the FORGE builder takes.
 
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.exceptions import BadRequestError
 from app.services.analysis import resolve_ion_mol_type
@@ -53,9 +53,11 @@ def _build_salt_specs(positive_ion: str, negative_ion: str, ionic_strength: floa
 
 class SaltStep(BaseModel):
     """Další sůl přidaná po té hlavní (např. NaCl + KCl) - viz additional_salts."""
+    model_config = ConfigDict(allow_inf_nan=False)
+
     positive_ion: str = Field(..., description="Cation resname, see GET /validation/ions.")
     negative_ion: str = Field(..., description="Anion resname, see GET /validation/ions.")
-    ionic_strength: float = Field(..., ge=0, description="Concentration (M) of this salt.")
+    ionic_strength: float = Field(..., ge=0, le=5, description="Concentration (M) of this salt.")
 
 
 class ProtonationOverride(BaseModel):
@@ -80,18 +82,21 @@ class StructureDecisionsPayload(BaseModel):
     )
 
 
-class PreparationRequest(BaseModel):
-    workspace_id: str = Field(...)
-    ff_selections: Dict[str, Any] = Field(
-        ...,
-        description="mol_type -> FF metadata z IDA API, stejný tvar jako /api/topology/.../generate. "
-                    "Builder potřebuje silové pole už pro stavbu chybějících atomů, ne až pro topologii.",
-    )
-    ph: float = Field(7.0)
+class PreparationSettings(BaseModel):
+    """
+    Nastavení přípravy nezávislé na konkrétní struktuře - sdílí ho
+    PreparationRequest a protokol běhu (app/services/run_protocol.py).
+    """
+    # NaN/nekonečno by prošly mezemi až do builderu
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    ph: float = Field(7.0, ge=0, le=14)
     crystal_water_mode: Literal["remove_all", "keep_water", "keep_all"] = Field("remove_all")
     add_solvent: bool = Field(False)
-    box_padding_nm: float = Field(1.0)
-    ionic_strength: float = Field(0.15, description="Salt concentration (M). The system is automatically neutralized.")
+    box_padding_nm: float = Field(1.0, gt=0, le=10)
+    ionic_strength: float = Field(
+        0.15, ge=0, le=5, description="Salt concentration (M). The system is automatically neutralized."
+    )
     positive_ion: str = Field(
         "Na+", description="Cation resname to add for neutralization/salt. See GET /validation/ions for valid options."
     )
@@ -109,6 +114,20 @@ class PreparationRequest(BaseModel):
     )
     concentration_mode: Literal["water_ratio", "box_volume"] = Field(
         "water_ratio", description="How ionic_strength is interpreted when placing salt ions."
+    )
+    additional_salts: List[SaltStep] = Field(
+        default_factory=list,
+        description="Further salts added after the primary one (positive_ion/negative_ion/ionic_strength). "
+                    "Neutralization always uses the primary salt; builder places each salt in order.",
+    )
+
+
+class PreparationRequest(PreparationSettings):
+    workspace_id: str = Field(...)
+    ff_selections: Dict[str, Any] = Field(
+        ...,
+        description="mol_type -> FF metadata z IDA API, stejný tvar jako /api/topology/.../generate. "
+                    "Builder potřebuje silové pole už pro stavbu chybějících atomů, ne až pro topologii.",
     )
     protonation_overrides: List[ProtonationOverride] = Field(
         default_factory=list,
@@ -134,11 +153,6 @@ class PreparationRequest(BaseModel):
         description="Structure is already a solvated system (GET /analysis/solvation): 'keep' = use its box, "
                     "water and ions as they are (no solvation, CRYST1 kept); 'rebuild' = remove water and "
                     "monovalent ions and solvate again with the request's settings.",
-    )
-    additional_salts: List[SaltStep] = Field(
-        default_factory=list,
-        description="Further salts added after the primary one (positive_ion/negative_ion/ionic_strength). "
-                    "Neutralization always uses the primary salt; builder places each salt in order.",
     )
 
 

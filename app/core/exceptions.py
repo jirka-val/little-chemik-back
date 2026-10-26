@@ -16,8 +16,11 @@ opakující se případ.
 """
 
 from fastapi import Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 import logging
+import math
 import traceback
 
 logger = logging.getLogger(__name__)
@@ -109,3 +112,20 @@ async def app_exception_handler(request: Request, exc: AppBaseException):
         status_code=exc.status_code,
         content={"error": exc.__class__.__name__, "code": exc.code, "message": exc.message, **exc.payload}
     )
+
+
+def _json_safe(value):
+    # NaN/Infinity (JSON je nemá, Python json je přijme) - jako text, jinak by
+    # serializace 422 odpovědi spadla na 500
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    return value
+
+
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """FastAPI 422 ve stejném tvaru ({"detail": [...]}), jen vždy serializovatelná."""
+    return JSONResponse(status_code=422, content={"detail": _json_safe(jsonable_encoder(exc.errors()))})

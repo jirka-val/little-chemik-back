@@ -2,10 +2,11 @@ import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.api import api_router
 from app.core.logging import setup_logging
-from app.core.exceptions import AppBaseException, app_exception_handler
+from app.core.exceptions import AppBaseException, app_exception_handler, validation_exception_handler
 from app.core.config import settings
 from app.core.http_client import close_external_http_client
 from app.core.incident_middleware import IncidentJournalMiddleware
@@ -62,6 +63,7 @@ app.add_middleware(IncidentJournalMiddleware)
 app.add_middleware(ConsoleWorkspaceMiddleware)
 
 app.add_exception_handler(AppBaseException, app_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 app.include_router(api_router, prefix="/api")
 

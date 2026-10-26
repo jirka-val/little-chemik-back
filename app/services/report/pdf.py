@@ -17,9 +17,11 @@ from fpdf import FPDF
 from fpdf.fonts import FontFace
 
 from app.core.config import settings
+from app.services.md_steps import steps_from_settings
 from app.workspaces.manager import workspace_manager
 
 from .citation import format_article, pdb_entry_doi, structure_pdb_id, structure_references
+from .ff_references import ff_references
 from .records import CONFORMATIONS, PREPARATION, SOURCE, TOPOLOGY, load_records
 
 REPORT_FILENAME = "forge_report.pdf"
@@ -45,7 +47,7 @@ _LIST_LIMIT = 40
 _REPLACEMENTS = {
     "→": "->", "–": "-", "—": "-", "−": "-", "²": "2", "³": "3",
     "⁺": "+", "⁻": "-", "‘": "'", "’": "'", "“": '"', "”": '"',
-    "…": "...", "·": "-",
+    "…": "...", "·": "-", "α": "alpha", "γ": "gamma", "χ": "chi",
 }
 
 
@@ -340,7 +342,8 @@ def _length_text(s: Dict[str, Any], nstlim: Optional[int]) -> str:
     if nstlim:
         text += f" ({nstlim} steps{' per segment' if segments > 1 else ''})"
     if s.get("protocol"):
-        text += ", with minimization, heating and equilibration (run_md.sh)"
+        names = ", ".join(step.name for step in steps_from_settings(s))
+        text += f", after preparation steps {names} (run_md.sh)"
     return text
 
 
@@ -397,16 +400,10 @@ def _section_references(pdf: _Report, records: Dict[str, Dict[str, Any]]):
         if not name or name in seen:
             continue
         seen.add(name)
-        dois = [d.strip() for d in str(ff.get("reference_article_doi") or "").split(",") if d.strip()]
-        parts = [name]
-        if ff.get("creators"):
-            authors = ff["creators"]
-            parts.append("; ".join(authors[:6]) + (" et al." if len(authors) > 6 else ""))
-        if dois:
-            parts.append("Reference: " + ", ".join(f"doi:{d}" for d in dois))
+        text = f"{name}: " + " ".join(ff_references(ff) or ["(no reference)"])
         if ff.get("doi"):
-            parts.append(f"Dataset: doi:{ff['doi']}")
-        entries.append(". ".join(p.rstrip(".") for p in parts) + ".")
+            text += f" Dataset: doi:{ff['doi']}."
+        entries.append(text)
     if not structure and not entries:
         return
     pdf.h2("7. References")
@@ -425,6 +422,7 @@ def render_report_pdf(
     nstlim: Optional[int] = None,
     detail_level: Optional[str] = None,
     files: Sequence[str] = (),
+    protocol: Optional[str] = None,
 ) -> bytes:
     records = load_records(workspace_id)
     composition = system_composition(workspace_id)
@@ -436,6 +434,8 @@ def render_report_pdf(
         ("Generated", time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())),
         ("Application", f"FORGE {settings.VERSION}"),
         ("Detail level", _MODE_LABELS.get(detail_level or "", detail_level)),
+        # použitý protokol přípravy (jméno a otisk) - viz run_protocol.py
+        ("Protocol", protocol),
     ])
 
     _section_input(pdf, records)
