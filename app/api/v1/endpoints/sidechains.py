@@ -24,7 +24,9 @@ from app.services.report import records as report_records
 from app.api.v1.schemas.preparation import BOX_SHAPE_MAP, PreparationRequest, build_request_salt_specs
 from app.core.exceptions import AppBaseException, BadRequestError, InternalError
 from app.services.structure.reports import build_preparation_summary
-from app.services.structure.solvated_system import analyze_solvated_system, cryst1_line, restore_cryst1
+from app.services.structure.solvated_system import (
+    analyze_solvated_system, cryst1_line, restore_cryst1, standardize_reconstructed_box,
+)
 from app.services.structure.sidechain_service import sidechain_session_service
 from app.services.validation.service import ValidationService
 from app.workspaces.manager import workspace_manager
@@ -53,10 +55,13 @@ KEPT_BOX_FILENAME = "kept_box.cryst1"
 
 def _resolve_existing_solvent(workspace_id: str, pdb_text: str, request: PreparationRequest):
     """
-    (add_solvent, crystal_water_mode, clean_crystal_ions) podle volby u už
-    solvatovaného systému. Bez volby a s ponecháním krystalové vody by se
-    celý vodní box bral jako krystalová voda a obalil dalším boxem - to se
-    odmítne, frontend se musí zeptat.
+    (add_solvent, crystal_water_mode, clean_crystal_ions, pdb_text) podle
+    volby u už solvatovaného systému. Bez volby a s ponecháním krystalové
+    vody by se celý vodní box bral jako krystalová voda a obalil dalším
+    boxem - to se odmítne, frontend se musí zeptat.
+
+    "keep" u PDB bez CRYST1: box se rekonstruuje z vody a vrácené pdb_text
+    je otočené a posunuté do jeho standardní orientace (s CRYST1).
     """
     kept_box = workspace_manager.get_file_path(workspace_id, KEPT_BOX_FILENAME)
     if kept_box.exists():
@@ -64,22 +69,33 @@ def _resolve_existing_solvent(workspace_id: str, pdb_text: str, request: Prepara
 
     if request.existing_solvent == "keep":
         line = cryst1_line(pdb_text)
+        if not line:
+            standardized = standardize_reconstructed_box(pdb_text)
+            if standardized is not None:
+                pdb_text, line = standardized
+                logger.info(f"Workspace {workspace_id}: no CRYST1, box reconstructed from the water.")
+            elif analyze_solvated_system(pdb_text, with_checks=False, reconstruct=False)["solvated"]:
+                raise BadRequestError(
+                    "The structure has no CRYST1 record and its box could not be reconstructed from "
+                    "the water. Remove the solvent and solvate again.",
+                    code="solvated_system_box_missing",
+                )
         if line:
             kept_box.write_text(line, encoding="utf-8")
         logger.info(f"Workspace {workspace_id}: keeping the existing solvent box ({line or 'no CRYST1'}).")
-        return False, "keep_water", False
+        return False, "keep_water", False, pdb_text
     if request.existing_solvent == "rebuild":
         logger.info(f"Workspace {workspace_id}: removing the existing solvent and solvating again.")
-        return True, "remove_all", True
+        return True, "remove_all", True, pdb_text
 
     if request.add_solvent and request.crystal_water_mode != "remove_all":
-        if analyze_solvated_system(pdb_text, with_checks=False)["solvated"]:
+        if analyze_solvated_system(pdb_text, with_checks=False, reconstruct=False)["solvated"]:
             raise BadRequestError(
                 "The structure is already a solvated system. Choose whether to keep its box "
                 "or remove the solvent and solvate again.",
                 code="solvated_system_choice_required",
             )
-    return request.add_solvent, request.crystal_water_mode, request.clean_crystal_ions
+    return request.add_solvent, request.crystal_water_mode, request.clean_crystal_ions, pdb_text
 
 
 def _with_kept_box(workspace_id: str, pdb_text: str) -> str:
@@ -110,7 +126,7 @@ async def start_sidechain_session(workspace_id: str, request: PreparationRequest
         async with aiofiles.open(pdb_path, "r", encoding="utf-8") as f:
             pdb_content = await f.read()
 
-        add_solvent, crystal_water_mode, clean_crystal_ions = await run_in_threadpool(
+        add_solvent, crystal_water_mode, clean_crystal_ions, pdb_content = await run_in_threadpool(
             _resolve_existing_solvent, workspace_id, pdb_content, request
         )
 

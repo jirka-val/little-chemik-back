@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from app.services.structure.solvated_system import (
-    analyze_solvated_system, box_vectors, min_image_distance, restore_cryst1,
+    analyze_solvated_system, box_vectors, min_image_distance, restore_cryst1, standardize_reconstructed_box,
 )
 
 pytestmark = pytest.mark.unit
@@ -89,6 +89,84 @@ def test_min_image_distance_octahedron():
     one_atom = np.array([[0.0, 0.0, 0.0]])
     # nejbližší obraz v oktaedru je ve vzdálenosti a (délka mřížkového vektoru)
     assert min_image_distance(one_atom, box_vectors(box)) == pytest.approx(50.0, abs=0.01)
+
+
+# ---------------------------------------------------------------------------
+# Bez CRYST1: box se rekonstruuje z vody (box_reconstruction.py)
+# ---------------------------------------------------------------------------
+
+def _without_cryst1(pdb, rotation=None, shift=(0.0, 0.0, 0.0)):
+    """Smaže CRYST1 a souřadnice otočí/posune (jako export z jiného programu)."""
+    out = []
+    for line in pdb.splitlines():
+        if line.startswith("CRYST1"):
+            continue
+        if line.startswith(("ATOM", "HETATM")) and rotation is not None:
+            xyz = np.array([float(line[30:38]), float(line[38:46]), float(line[46:54])]) @ rotation.T + shift
+            line = f"{line[:30]}{xyz[0]:8.3f}{xyz[1]:8.3f}{xyz[2]:8.3f}{line[54:]}"
+        out.append(line)
+    return "\n".join(out) + "\n"
+
+
+def _rotation(deg_z, deg_x):
+    cz, sz = np.cos(np.radians(deg_z)), np.sin(np.radians(deg_z))
+    cx, sx = np.cos(np.radians(deg_x)), np.sin(np.radians(deg_x))
+    return np.array([[1, 0, 0], [0, cx, -sx], [0, sx, cx]]) @ np.array([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]])
+
+
+def test_missing_cryst1_box_is_reconstructed():
+    pdb = _without_cryst1(_system(box=34.0, solute_at=(17.0, 17.0, 17.0)), _rotation(27, 41), (5.0, -12.0, 30.0))
+    result = analyze_solvated_system(pdb)
+    assert result["solvated"] is True
+    assert result["box_source"] == "reconstructed"
+    assert result["box"]["shape"] == "cubic"
+    assert result["box"]["a"] == pytest.approx(34.0, abs=0.6)
+    assert result["checks"][0]["id"] == "box_source" and result["checks"][0]["status"] == "warning"
+    statuses = _statuses(result)
+    # kontroly běží ve standardní orientaci rekonstruovaného boxu (stejně jako s CRYST1)
+    with_box = _statuses(analyze_solvated_system(_system(box=34.0, solute_at=(17.0, 17.0, 17.0))))
+    assert {k: v for k, v in statuses.items() if k != "box_source"} == with_box
+    assert result["box_reconstruction"]["shape"] == "cubic"
+
+
+def test_quick_detection_skips_reconstruction():
+    pdb = _without_cryst1(_system(box=34.0, solute_at=(17.0, 17.0, 17.0)))
+    result = analyze_solvated_system(pdb, with_checks=False, reconstruct=False)
+    assert result["solvated"] is True and result["box_source"] == "missing" and result["box"] is None
+
+
+def test_standardize_reconstructed_box():
+    pdb = _without_cryst1(_system(box=34.0, solute_at=(17.0, 17.0, 17.0)), _rotation(27, 41), (5.0, -12.0, 30.0))
+    text, cryst1 = standardize_reconstructed_box(pdb)
+    assert text.startswith(cryst1) and cryst1.startswith("CRYST1")
+    again = analyze_solvated_system(text)
+    assert again["box_source"] == "cryst1" and again["box"]["shape"] == "cubic"
+    waters = np.array([[float(l[30:38]), float(l[38:46]), float(l[46:54])]
+                       for l in text.splitlines() if l.startswith("HETATM") and l[17:20] == "WAT" and l[12:16].strip() == "O"])
+    a = again["box"]["a"]
+    assert waters.min() > -1.0 and waters.max() < a + 1.0
+    assert standardize_reconstructed_box(_system(box=34.0)) is None      # CRYST1 už je
+
+
+def test_liquid_water_without_a_box_shape():
+    # kulová kapka vody: kapalina, ale žádný periodický box -> "keep" nejde
+    lines, serial = [], 1
+    grid = np.arange(-20.0, 20.1, 3.1)
+    for x in grid:
+        for y in grid:
+            for z in grid:
+                if np.linalg.norm([x, y, z]) < 19.0:
+                    lines.append(_line(serial, "O", "WAT", "W", serial % 10000, (x, y, z), "O", "HETATM"))
+                    serial += 1
+    result = analyze_solvated_system("\n".join(lines) + "\nEND\n")
+    assert result["solvated"] is True and result["box_source"] == "missing" and result["box"] is None
+    assert [c["status"] for c in result["checks"]] == ["error"]
+
+
+def test_crystal_waters_without_cryst1_are_not_solvated():
+    pdb = _without_cryst1(_system(spacing=12.0))
+    result = analyze_solvated_system(pdb)
+    assert result["solvated"] is False and result["box_source"] is None
 
 
 def test_restore_cryst1():

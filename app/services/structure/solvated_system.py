@@ -8,17 +8,26 @@ Uživatel pak volí (PreparationRequest.existing_solvent):
 
 Krystalová struktura z RCSB má CRYST1 taky (jednotková buňka) a pár desítek
 krystalových vod - od solvatovaného boxu se liší hustotou vody v buňce.
+
+PDB bez CRYST1 (export z VMD/PyMOL, převod z .gro ...): když je v něm voda
+s hustotou kapaliny, je to taky solvatovaný systém. Box se pak rekonstruuje
+z rozložení vody (box_reconstruction.py). Kontroly i volba "keep" pracují
+se strukturou otočenou a posunutou do standardní orientace boxu
+(standardize_reconstructed_box). Když tvar boxu poznat nejde, "keep" není
+možné - zbývá "rebuild".
 """
 
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass, field, replace
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
 from app.services.pdb_service import ion_group_for_resname
+from app.services.structure.box_reconstruction import MIN_WATERS as LIQUID_MIN_WATERS
+from app.services.structure.box_reconstruction import BoxReconstruction, reconstruct_box
 
 WATER_RESNAMES = {"HOH", "WAT", "SOL", "TIP", "DOD"}
 
@@ -30,6 +39,10 @@ SOLUTE_VOLUME_PER_DALTON = 1.21
 # Solvatovaný box má v buňce řádově 0.02-0.03 vod/A^3, krystal ~0.001.
 SOLVATED_MIN_WATERS = 50
 SOLVATED_MIN_WATER_DENSITY = 0.01
+
+# Bez CRYST1: voda je kapalina, když má medián nejbližší vzdálenosti O-O pod
+# touto mezí (kapalná voda ~2.8 A, krystalové vody jsou od sebe řádově dál).
+LIQUID_MAX_NN = 3.3
 
 MIN_IMAGE_DISTANCE_OK = 10.0     # A - aspoň nonbonded cutoff
 MIN_IMAGE_DISTANCE_SPLIT = 3.0   # pod tím solut nejspíš přesahuje hranu boxu
@@ -110,6 +123,8 @@ def box_shape(box: Dict[str, float]) -> str:
     if all(abs(x - 109.4712) < 0.1 for x in angles) or (
             abs(angles[0] - 70.5288) < 0.1 and abs(angles[1] - 109.4712) < 0.1 and abs(angles[2] - 70.5288) < 0.1):
         return "truncated octahedron"
+    if abs(angles[0] - 60) < 0.1 and abs(angles[1] - 60) < 0.1 and abs(angles[2] - 90) < 0.1:
+        return "rhombic dodecahedron"
     return "other"
 
 
@@ -198,12 +213,73 @@ def _check(check_id: str, label: str, status: str, detail: str) -> Dict[str, str
     return {"id": check_id, "label": label, "status": status, "detail": detail}
 
 
-def analyze_solvated_system(pdb_text: str, with_checks: bool = True) -> Dict[str, Any]:
+def _water_oxygens(atoms: List[_Atom]) -> np.ndarray:
+    return np.array([a.xyz for a in atoms if a.resname in WATER_RESNAMES and a.element == "O"], dtype=float)
+
+
+def _is_liquid_water(oxygens: np.ndarray) -> bool:
+    """Hodně vody s hustotou kapaliny (bez boxu nejde spočítat hustotu v buňce)."""
+    if len(oxygens) < LIQUID_MIN_WATERS:
+        return False
+    sample = oxygens[np.linspace(0, len(oxygens) - 1, min(400, len(oxygens))).astype(int)]
+    nearest = []
+    for start in range(0, len(sample), 100):
+        chunk = sample[start:start + 100]
+        d2 = ((chunk[:, None, :] - oxygens[None, :, :]) ** 2).sum(axis=2)
+        d2[d2 < 1e-6] = np.inf
+        nearest.append(np.sqrt(d2.min(axis=1)))
+    return float(np.median(np.concatenate(nearest))) < LIQUID_MAX_NN
+
+
+def _cryst1_box(params: Dict[str, float]) -> Dict[str, float]:
+    """Parametry v přesnosti CRYST1, aby kontroly i zapsaný řádek seděly."""
+    return {k: round(float(params[k]), 3 if k in ("a", "b", "c") else 2)
+            for k in ("a", "b", "c", "alpha", "beta", "gamma")}
+
+
+def format_cryst1(box: Dict[str, float]) -> str:
+    return (f"CRYST1{box['a']:9.3f}{box['b']:9.3f}{box['c']:9.3f}"
+            f"{box['alpha']:7.2f}{box['beta']:7.2f}{box['gamma']:7.2f} P 1           1")
+
+
+def _reconstruct(parsed: _Parsed) -> Optional[BoxReconstruction]:
+    """Rekonstrukce boxu pro PDB bez CRYST1, None když v něm není kapalná voda."""
+    if parsed.box:
+        return None
+    oxygens = _water_oxygens(parsed.atoms)
+    if not _is_liquid_water(oxygens):
+        return None
+    return reconstruct_box(oxygens)
+
+
+def analyze_solvated_system(pdb_text: str, with_checks: bool = True, reconstruct: bool = True) -> Dict[str, Any]:
     """
     {"solvated": bool, ...}. Když je systém solvatovaný, obsahuje i box,
     počty a seznam kontrol (status ok/warning/error) pro volbu "keep".
+
+    box_source: "cryst1" | "reconstructed" (bez CRYST1, box z rozložení
+    vody, kontroly jsou ve standardní orientaci boxu) | "missing" (kapalná
+    voda bez CRYST1, tvar boxu poznat nejde) | None (žádný box).
+    reconstruct=False jen pozná solvataci, box nerekonstruuje (rychlé).
     """
     parsed = _parse(pdb_text)
+    box_source = "cryst1" if parsed.box else None
+    reconstruction: Optional[BoxReconstruction] = None
+    liquid_without_box = False
+    if not parsed.box:
+        if reconstruct:
+            reconstruction = _reconstruct(parsed)
+            liquid_without_box = reconstruction is not None
+        else:
+            liquid_without_box = _is_liquid_water(_water_oxygens(parsed.atoms))
+    if reconstruction is not None and reconstruction.ok:
+        box_source = "reconstructed"
+        parsed.box = _cryst1_box(reconstruction.params)
+        moved = reconstruction.transform(np.array([a.xyz for a in parsed.atoms], dtype=float))
+        parsed.atoms = [replace(a, xyz=tuple(float(v) for v in xyz)) for a, xyz in zip(parsed.atoms, moved)]
+    elif liquid_without_box:
+        box_source = "missing"
+
     residues = _residues(parsed.atoms)
     waters = {k: v for k, v in residues.items() if v[0].resname in WATER_RESNAMES}
     ions = {k: v for k, v in residues.items() if k not in waters and len(v) == 1 and v[0].element != "H"}
@@ -212,7 +288,8 @@ def analyze_solvated_system(pdb_text: str, with_checks: bool = True) -> Dict[str
     box = parsed.box
     volume = float(abs(np.linalg.det(box_vectors(box)))) if box else None
     water_density = len(waters) / volume if volume else 0.0
-    solvated = bool(box) and len(waters) >= SOLVATED_MIN_WATERS and water_density >= SOLVATED_MIN_WATER_DENSITY
+    solvated = box_source == "missing" or (
+        bool(box) and len(waters) >= SOLVATED_MIN_WATERS and water_density >= SOLVATED_MIN_WATER_DENSITY)
 
     ion_counts: Dict[str, int] = {}
     for atoms in ions.values():
@@ -221,14 +298,59 @@ def analyze_solvated_system(pdb_text: str, with_checks: bool = True) -> Dict[str
     result: Dict[str, Any] = {
         "solvated": solvated,
         "box": {**box, "shape": box_shape(box), "volume": round(volume, 1)} if box else None,
+        "box_source": box_source if solvated else None,
         "waters": len(waters),
         "ions": dict(sorted(ion_counts.items())),
         "solute_atoms": len(solute_atoms),
         "solute_residues": len({a.res_key for a in solute_atoms}),
     }
+    if box_source == "reconstructed":
+        result["box_reconstruction"] = reconstruction.summary()
     if solvated and with_checks:
-        result["checks"] = _checks(box, volume, waters, ion_counts, solute_atoms, parsed.atoms)
+        if box_source == "missing":
+            reason = reconstruction.reason if reconstruction is not None else "not attempted"
+            result["checks"] = [_check(
+                "box_source", "Box", "error",
+                f"No CRYST1 record and the box could not be reconstructed from the water ({reason}). "
+                "The existing solvent cannot be kept - remove it and solvate again.")]
+        else:
+            checks = _checks(box, volume, waters, ion_counts, solute_atoms, parsed.atoms)
+            if box_source == "reconstructed":
+                checks.insert(0, _check(
+                    "box_source", "Box", "warning",
+                    f"No CRYST1 record - the box was reconstructed from the water: {box_shape(box)}, "
+                    f"{box['a']:.2f} x {box['b']:.2f} x {box['c']:.2f} A. Keeping it moves the structure "
+                    "into the standard orientation of this box; NPT equilibration will settle its size."))
+            result["checks"] = checks
     return result
+
+
+def standardize_reconstructed_box(pdb_text: str) -> Optional[Tuple[str, str]]:
+    """
+    Pro "keep" u PDB bez CRYST1: (PDB otočené a posunuté do standardní
+    orientace rekonstruovaného boxu s CRYST1 na začátku, řádek CRYST1).
+    None, když box rekonstruovat nejde (nebo CRYST1 v souboru je).
+    ANISOU se po rotaci zahodí.
+    """
+    parsed = _parse(pdb_text)
+    reconstruction = _reconstruct(parsed)
+    if reconstruction is None or not reconstruction.ok:
+        return None
+    out = []
+    for line in pdb_text.splitlines():
+        if line.startswith("ANISOU"):
+            continue
+        if line.startswith(("ATOM", "HETATM")):
+            try:
+                xyz = np.array([[float(line[30:38]), float(line[38:46]), float(line[46:54])]])
+            except ValueError:
+                out.append(line)
+                continue
+            x, y, z = reconstruction.transform(xyz)[0]
+            line = f"{line[:30]}{x:8.3f}{y:8.3f}{z:8.3f}{line[54:]}"
+        out.append(line)
+    cryst1 = format_cryst1(_cryst1_box(reconstruction.params))
+    return cryst1 + "\n" + "\n".join(out) + "\n", cryst1
 
 
 def _checks(box, volume, waters, ion_counts, solute_atoms, all_atoms) -> List[Dict[str, str]]:
