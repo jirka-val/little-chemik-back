@@ -146,7 +146,9 @@ class PreparationRequest(PreparationSettings):
     )
     auto_amide_flips: bool = Field(
         False,
-        description="Guided/Standard mode: apply the suggested ASN/GLN amide flips without asking.",
+        description="No longer used: ASN/GLN amide orientations are always chosen by the joint "
+                    "protonation/orientation solver (Structure Check decisions are forced orientations). "
+                    "Kept for API compatibility.",
     )
     existing_solvent: Literal["none", "keep", "rebuild"] = Field(
         "none",

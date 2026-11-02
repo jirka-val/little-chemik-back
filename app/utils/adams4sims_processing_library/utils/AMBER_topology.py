@@ -786,6 +786,184 @@ def correct_VdWmatrix_by_molecule_types(topology):
     return True
 
 
+def getBox(topology):
+    """Return [a, b, c, alpha, beta, gamma] in Angstroms/degrees, or [].
+
+    Decode AMBER BOX_DIMENSIONS=[beta,a,b,c] like cpptraj: 90 degrees
+    means an orthogonal cell, the truncated-octahedron angle is used for
+    all three angles, and the special value 60 represents a rhombic
+    dodecahedron with alpha=gamma=60 and beta=90. Other stored angles
+    are used for all three angles, as in cpptraj; the four-value AMBER
+    format cannot preserve three arbitrary independent cell angles.
+    This is the PDB CRYST1 convention, not GROMACS .gro box vectors in nm.
+    """
+    pointers = topology.get('POINTERS', [])
+    if len(pointers) > 27 and pointers[27] == 0:
+        return []
+    dimensions = topology.get('BOX_DIMENSIONS')
+    if dimensions is None or len(dimensions) == 0:
+        return []
+    if len(dimensions) != 4:
+        raise ValueError('AMBER BOX_DIMENSIONS must contain beta, a, b, c')
+    beta, a, b, c = (float(value) for value in dimensions)
+    if not all(math.isfinite(value) for value in (beta, a, b, c)):
+        raise ValueError('Box dimensions must be finite')
+    alpha = gamma = beta
+    if math.isclose(beta, 60.0, rel_tol=0.0, abs_tol=1e-8):
+        alpha = gamma = 60.0
+        beta = 90.0
+    if min(a, b, c) <= 0 or not all(0 < angle < 180 for angle in (alpha, beta, gamma)):
+        raise ValueError('Invalid box lengths or angles')
+    ca, cb, cg = (math.cos(math.radians(angle)) for angle in (alpha, beta, gamma))
+    if 1 + 2 * ca * cb * cg - ca * ca - cb * cb - cg * cg <= 0:
+        raise ValueError('Box angles do not define a positive-volume cell')
+    return [a, b, c, alpha, beta, gamma]
+
+
+def savePdb(name, topology, coordinates):
+    """Write PDB ATOM records using coordinates in Angstroms, in topology order.
+
+    Solute molecules retain their relative order, followed by all ions and
+    then all waters. Each solute molecule and each solvent section ends in
+    TER. Serial numbers wrap to 1 after 99999, residue numbers after 9999.
+    This intentionally permits repeated identifiers for large systems.
+    Molecules come from ATOMS_PER_MOLECULE, or residue/bond connectivity.
+    MOLECULE_TYPE (per atom) or MOLECULE_TYPE_PER_RES may identify solvent;
+    otherwise water residue names and elemental monatomic ion names are recognized.
+    CRYST1 is written when getBox(topology) returns a periodic cell.
+    The input dictionaries/coordinates are never modified.
+    """
+    names = [str(value).strip() for value in topology['ATOM_NAME']]
+    n = len(names)
+    labels = [str(value).strip() for value in topology['RESIDUE_LABEL']]
+    starts = [value - 1 for value in topology['RESIDUE_POINTER']]
+    numbers = topology['ATOMIC_NUMBER']
+    xyz = [tuple(float(value) for value in row) for row in coordinates]
+    if len(xyz) != n or len(numbers) != n or any(len(row) != 3 for row in xyz):
+        raise ValueError('PDB requires one xyz triplet and atomic number per atom')
+    if n and (not starts or starts[0] != 0 or len(starts) != len(labels)
+              or starts != sorted(set(starts)) or starts[-1] >= n):
+        raise ValueError('Invalid PDB residue pointers')
+    if any(not value or len(value) > 4 or not value.isascii() or any(c.isspace() for c in value)
+           for value in names):
+        raise ValueError('PDB atom names must contain 1 to 4 non-space ASCII characters')
+    if any(not value or len(value) > 3 or not value.isascii() or any(c.isspace() for c in value)
+           for value in labels):
+        raise ValueError('PDB residue names must contain 1 to 3 non-space ASCII characters')
+    for row in xyz:
+        if any(not math.isfinite(v) or len(f'{v:8.3f}') != 8 for v in row):
+            raise ValueError('Coordinate does not fit the PDB 8.3 field')
+    elements = ('X H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn '
+                'Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce '
+                'Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu Hf Ta W Re Os Ir Pt Au Hg Tl Pb Bi Po At Rn '
+                'Fr Ra Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr Rf Db Sg Bh Hs Mt Ds Rg Cn Nh Fl Mc Lv Ts Og').split()
+    if any(not isinstance(z, int) or z < 0 or z >= len(elements) for z in numbers):
+        raise ValueError('Invalid atomic number for PDB export')
+    residue_of = [0] * n
+    for residue, (begin, end) in enumerate(zip(starts, starts[1:] + [n])):
+        residue_of[begin:end] = [residue] * (end - begin)
+
+    sizes = topology.get('ATOMS_PER_MOLECULE')
+    if sizes is not None:
+        if any(not isinstance(size, int) or size <= 0 for size in sizes) or sum(sizes) != n:
+            raise ValueError('Invalid ATOMS_PER_MOLECULE')
+        molecules = []
+        begin = 0
+        for size in sizes:
+            molecules.append(list(range(begin, begin + size)))
+            begin += size
+    else:
+        parent = list(range(n))
+
+        def find(atom):
+            while parent[atom] != atom:
+                parent[atom] = parent[parent[atom]]
+                atom = parent[atom]
+            return atom
+
+        def join(a, b):
+            parent[find(b)] = find(a)
+
+        # Include virtual sites in the same molecule as their residue.
+        for begin, end in zip(starts, starts[1:] + [n]):
+            for atom in range(begin + 1, end):
+                join(begin, atom)
+        for key in ('BONDS_INC_HYDROGEN', 'BONDS_WITHOUT_HYDROGEN'):
+            bonds = topology.get(key, [])
+            if len(bonds) % 3:
+                raise ValueError('Invalid AMBER bond list')
+            for offset in range(0, len(bonds), 3):
+                a, b = bonds[offset], bonds[offset + 1]
+                if a % 3 or b % 3 or not (0 <= a // 3 < n and 0 <= b // 3 < n):
+                    raise ValueError('Invalid AMBER bond atom index')
+                join(a // 3, b // 3)
+        components = {}
+        for atom in range(n):
+            components.setdefault(find(atom), []).append(atom)
+        molecules = list(components.values())
+
+    atom_types = topology.get('MOLECULE_TYPE')
+    residue_types = topology.get('MOLECULE_TYPE_PER_RES')
+    if atom_types is not None and len(atom_types) != n:
+        raise ValueError('Invalid MOLECULE_TYPE length')
+    if residue_types is not None and len(residue_types) != len(labels):
+        raise ValueError('Invalid MOLECULE_TYPE_PER_RES length')
+    solute, ions, waters = [], [], []
+    for molecule in molecules:
+        types = ([str(atom_types[a]) for a in molecule] if atom_types is not None else
+                 [str(residue_types[residue_of[a]]) for a in molecule] if residue_types is not None else [])
+        water = (all(t.startswith('W') for t in types) if types else
+                 all(labels[residue_of[a]].upper() in {'WAT', 'HOH', 'SOL', 'TIP3', 'TIP4'} for a in molecule))
+        ion = (all(t.startswith('I') for t in types) if types else
+               len(molecule) == 1 and numbers[molecule[0]] > 1
+               and labels[residue_of[molecule[0]]].upper().rstrip('0123456789+-')
+               == elements[numbers[molecule[0]]].upper())
+        if water:
+            waters.extend(molecule)
+        elif ion:
+            ions.extend(molecule)
+        else:
+            solute.append(molecule)
+    sections = solute + ([ions] if ions else []) + ([waters] if waters else [])
+    chains = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+    serial = 0
+
+    def next_serial():
+        nonlocal serial
+        serial = serial % 99999 + 1
+        return serial
+
+    box = getBox(topology)
+    cryst1 = None
+    if box:
+        length_fields = [f'{length:9.3f}' for length in box[:3]]
+        angle_fields = [f'{angle:7.2f}' for angle in box[3:]]
+        if any(len(field) != 9 for field in length_fields) or any(len(field) != 7 for field in angle_fields):
+            raise ValueError('Box dimensions do not fit the PDB CRYST1 fields')
+        cryst1 = ('CRYST1' + ''.join(length_fields + angle_fields) + f" {'P 1':<11}{1:4d}").ljust(80)
+
+    with open(name, 'w', encoding='ascii') as output:
+        if cryst1 is not None:
+            output.write(cryst1 + '\n')
+        for section_index, section in enumerate(sections):
+            chain = chains[section_index % len(chains)]
+            for atom in section:
+                residue = residue_of[atom]
+                resseq = residue % 9999 + 1
+                atom_name = names[atom]
+                element = elements[numbers[atom]].upper() if numbers[atom] else ''
+                field = (f' {atom_name:<3}' if len(atom_name) < 4 and len(element) == 1
+                         and not atom_name[0].isdigit() else f'{atom_name:<4}')
+                x, y, z = xyz[atom]
+                output.write(f'ATOM  {next_serial():5d} {field} {labels[residue]:>3} {chain}{resseq:4d}    '
+                             f'{x:8.3f}{y:8.3f}{z:8.3f}{1.0:6.2f}{0.0:6.2f}          {element:>2}  \n')
+            last_residue = residue_of[section[-1]]
+            ter = (f'TER   {next_serial():5d}      {labels[last_residue]:>3} '
+                   f'{chain}{last_residue % 9999 + 1:4d}')
+            output.write(ter.ljust(80) + '\n')
+        output.write('END'.ljust(80) + '\n')
+
+
 def write_ghbfix_file(mol, file_name="ghbfix.f", gHBfix_exceptions=True):
     """Write two AMBER &rst terms per atom pair; return the pair count.
 

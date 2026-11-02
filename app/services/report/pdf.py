@@ -271,9 +271,19 @@ def _section_preparation(pdf: _Report, records: Dict[str, Dict[str, Any]]):
     decisions = s.get("structure_decisions") or {}
     flips = [d for d in decisions.get("amide_flips") or [] if d.get("apply")]
     rebuilds = [d for d in decisions.get("zero_occupancy") or [] if d.get("apply")]
+    orientations = (prep.get("summary") or {}).get("amide_orientations")
+    if orientations is not None:
+        flipped = orientations.get("flipped") or []
+        chosen = sum(1 for f in flipped if f.get("forced"))
+        amide_text = (f"{len(flipped)} of {orientations.get('evaluated', 0)} flipped "
+                      "(optimized together with protonation)"
+                      + (f", {chosen} chosen in Structure Check" if chosen else ""))
+    else:
+        # záznamy z doby před společnou optimalizací s protonací
+        amide_text = ("Recommended flips applied automatically" if s.get("auto_amide_flips")
+                      else f"{len(flips)} chosen in Structure Check")
     rows += [
-        ("ASN/GLN amide flips", "Recommended flips applied automatically" if s.get("auto_amide_flips")
-         else f"{len(flips)} chosen in Structure Check"),
+        ("ASN/GLN amide flips", amide_text),
         ("Rebuilt zero-occupancy side chains", len(rebuilds) or None),
         ("Protonation states set by hand", len(s.get("protonation_overrides") or []) or None),
         ("Side chains built interactively", "Yes" if prep.get("interactive_sidechains") else None),

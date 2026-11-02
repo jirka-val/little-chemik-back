@@ -25,8 +25,8 @@ from forge_molecule_state_assignment import (  # noqa: E402
     ProtonationAssignmentReport,
     ProtonationResidueAssignment,
     _load_protonation_families,
-    _solve_protonation_states,
-    _TitratableResidue,
+    _solve_hydrogen_bond_network_states,
+    _StateVariable,
 )
 
 from app.services.structure.reports import titratable_residue_report  # noqa: E402
@@ -38,7 +38,10 @@ def _his(resname="HIS"):
     families, by_state = _load_protonation_families(STATE_DATA, 7.4)
     family = by_state[("P", "HIE")] if resname == "HIS" else by_state[("P", resname)]
     residue = Residue(chain_id="A", resseq=24, icode="", ff_resname="HIE", atoms={}, index_in_chain=0)
-    return _TitratableResidue(index=0, residue=residue, family=family), family
+    item = _StateVariable(index=0, residue=residue, kind="protonation", options=family.options,
+                          variable_sites=family.variable_sites, default_option=family.default_option,
+                          default_level_index=family.default_level_index)
+    return item, family
 
 
 def _option(family, resname):
@@ -62,7 +65,7 @@ def _nd1_must_donate():
 def test_solver_follows_hbond_evidence_without_override():
     item, family = _his()
     report = ProtonationAssignmentReport(pH=7.4)
-    chosen = _solve_protonation_states([item], _nd1_must_donate(), [], report)
+    chosen = _solve_hydrogen_bond_network_states([item], _nd1_must_donate(), [], report)
     assert chosen[0].resname == "HID"
     assert report.conflicts == []
 
@@ -70,7 +73,7 @@ def test_solver_follows_hbond_evidence_without_override():
 def test_forced_state_wins_and_contradiction_is_reported():
     item, family = _his()
     report = ProtonationAssignmentReport(pH=7.4)
-    chosen = _solve_protonation_states(
+    chosen = _solve_hydrogen_bond_network_states(
         [item], _nd1_must_donate(), [], report, forced={0: _option(family, "HIE")}
     )
     assert chosen[0].resname == "HIE"
@@ -158,3 +161,57 @@ def test_ion_placement_keeps_polymer_numbering():
 
     assert [r.resseq for r in mol.chains["D"].residues] == [20, 21, 24]
     assert [r.resseq for r in mol.chains["W"].residues] == [1, 2]
+
+
+# ---------------------------------------------------------------------------
+# Orientace ASN/GLN v síti vodíkových vazeb (orientation_families) a jejich
+# vynucení uživatelem (forced_orientations)
+# ---------------------------------------------------------------------------
+
+def _ubiquitin_states(**kwargs):
+    from app.services.analysis import build_sequence_tokens
+    from app.services.structure import forge_service
+    from forge_molecule_parser import build_molecule_from_forge_json
+    from forge_molecule_state_assignment import assign_molecule_states
+
+    resources = forge_service._static_resources()
+    pdb = (BACKEND_DIR / "tests" / "fixtures" / "pdb" / "golden" / "HIS_1UBQ_ubiquitin_his68.pdb").read_text()
+    pdb = forge_service._strip_unrecognized_heterogens(pdb, "remove_all")
+    molecule = build_molecule_from_forge_json(
+        {"pdb_text": pdb, "missing_atoms": build_sequence_tokens(pdb, chain=None, fill_gaps=True)},
+        resources.converting_dictionary,
+    )
+    return assign_molecule_states(
+        molecule, resources.converting_dictionary, resources.building_template, resources.state_definitions,
+        pH=7.4, **kwargs,
+    )
+
+
+def _orientation(report, resseq):
+    return next(a for a in report.orientation.assignments if a.residue_key[1] == resseq)
+
+
+def test_solver_flips_gln49_of_ubiquitin():
+    molecule, report = _ubiquitin_states()
+    gln49 = _orientation(report, 49)
+    assert gln49.flipped and gln49.evaluated and not gln49.is_forced
+    assert all(a.evaluated for a in report.orientation.assignments)
+
+
+def test_forced_orientation_keeps_the_input_amide():
+    _molecule, free = _ubiquitin_states()
+    _molecule, report = _ubiquitin_states(forced_orientations={("A", 49, ""): "as_is"})
+    gln49 = _orientation(report, 49)
+    assert not gln49.flipped and gln49.is_forced
+    # ostatní amidy rozhoduje solver dál stejně
+    others = {a.residue_key: a.flipped for a in free.orientation.assignments if a.residue_key[1] != 49}
+    assert {a.residue_key: a.flipped for a in report.orientation.assignments if a.residue_key[1] != 49} == others
+
+
+def test_forced_orientation_and_state_that_do_not_apply_are_reported():
+    _molecule, report = _ubiquitin_states(
+        forced_orientations={("A", 1, ""): "flipped"},       # MET1 nemá amid
+        forced_protonation_states={("A", 49, ""): "HIE"},    # GLN49 nemá protonační varianty
+    )
+    assert [c.kind for c in report.orientation.conflicts] == ["forced_orientation_not_applicable"]
+    assert "forced_state_not_applicable" in [c.kind for c in report.protonation.conflicts]

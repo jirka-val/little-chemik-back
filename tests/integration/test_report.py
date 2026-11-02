@@ -92,3 +92,18 @@ def test_upload_records_structure_citation(client):
     citation = load_records(response.json()["workspace_id"])[SOURCE]["citation"]
     assert citation["pdb_id"] == "1RNA"
     assert citation["doi"] == "10.1016/0022-2836(89)90010-7"
+
+
+def test_amide_orientations_are_described():
+    from app.services.report.procedure import _amide_orientation_sentence
+
+    text = _amide_orientation_sentence({
+        "evaluated": 8,
+        "flipped": [{"residue": "A49", "resname": "GLN", "forced": False},
+                    {"residue": "A60", "resname": "ASN", "forced": True}],
+        "kept_by_user": ["A62"],
+    })
+    assert "8 ASN/GLN amide groups were optimized together with the protonation states" in text
+    assert "2 amides were flipped (GLN A49 and ASN A60), 1 of them as chosen in the structure review" in text
+    assert "1 amide was kept as deposited by choice" in text
+    assert _amide_orientation_sentence({"evaluated": 0}) == ""

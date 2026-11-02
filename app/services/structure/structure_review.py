@@ -199,14 +199,22 @@ def _site_score(position, as_oxygen: bool, partners: List[Tuple[_Atom, str]]) ->
     return score, contacts
 
 
-def find_amide_flips(pdb_text: str, decided: Iterable[ResidueKey] = ()) -> List[Dict[str, Any]]:
+def find_amide_flips(
+    pdb_text: str, decided: Iterable[ResidueKey] = (), only: Optional[Iterable[ResidueKey]] = None,
+) -> List[Dict[str, Any]]:
     """
     ASN/GLN, u kterých má orientace amidu v PDB nevýhodný kontakt a otočená
     vychází lépe (alespoň o jeden bod). Skóre: vodíková vazba se správným partnerem +1,
     s partnerem, který umí obojí (voda, OH, HIS) +0.5, dva akceptory nebo dva
     donory proti sobě -1, kov u kyslíku +2 / u dusíku -2.
+
+    only=klíče reziduí: jen jejich popis (kontakty a skóre obou orientací)
+    bez vlastního prahu - o otočení rozhodl solver protonace a orientací
+    (forge_molecule_state_assignment, orientation_families), tohle je
+    vysvětlení pro uživatele v kroku Structure Check.
     """
     decided = set(decided)
+    only = set(only) if only is not None else None
     atoms = _parse_atoms(pdb_text)
     polar = [(a, role) for a in atoms if not a.is_hydrogen for role in [_partner_role(a)] if role]
 
@@ -217,7 +225,7 @@ def find_amide_flips(pdb_text: str, decided: Iterable[ResidueKey] = ()) -> List[
 
     out = []
     for key, res in residues.items():
-        if key in decided:
+        if key in decided or (only is not None and key not in only):
             continue
         resname = next(iter(res.values())).resname
         o_name, n_name, _h = _AMIDES[resname]
@@ -243,7 +251,7 @@ def find_amide_flips(pdb_text: str, decided: Iterable[ResidueKey] = ()) -> List[
         # donory proti sobě, kov u dusíku) - rozdíl daný jen vodami nebo
         # OH skupinami (umí obojí) není dost silný důkaz.
         has_bad_contact = any(not c["favorable"] for c in o_now_c + n_now_c)
-        if not has_bad_contact or flipped - current < 1.0:
+        if only is None and (not has_bad_contact or flipped - current < 1.0):
             continue
         out.append({
             **_ref(key),

@@ -123,7 +123,10 @@ def box_shape(box: Dict[str, float]) -> str:
     if all(abs(x - 109.4712) < 0.1 for x in angles) or (
             abs(angles[0] - 70.5288) < 0.1 and abs(angles[1] - 109.4712) < 0.1 and abs(angles[2] - 70.5288) < 0.1):
         return "truncated octahedron"
-    if abs(angles[0] - 60) < 0.1 and abs(angles[1] - 60) < 0.1 and abs(angles[2] - 90) < 0.1:
+    # rhombický dodekaedr: dvakrát 60 a jednou 90 stupňů (GROMACS 60/60/90,
+    # cpptraj/AMBER 60/90/60)
+    if sorted(round(x) for x in angles) == [60, 60, 90] and all(
+            min(abs(x - 60), abs(x - 90)) < 0.1 for x in angles):
         return "rhombic dodecahedron"
     return "other"
 

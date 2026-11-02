@@ -283,3 +283,31 @@ class TestStructureCheck:
         ws_id = make_workspace(_with_zero_occupancy(pdb_glu_open_branch, "CB"))
         response = client.post(f"/api/sidechains/start/{ws_id}", json=_start_payload(ws_id))
         assert response.json()["status"] == "missing_dof"
+
+
+class TestAmideOrientationReview:
+    """Amidy ASN/GLN otočené solverem protonace a orientací v kroku Structure Check."""
+
+    @staticmethod
+    def _ubiquitin():
+        from pathlib import Path
+        return (Path(__file__).resolve().parents[1] / "fixtures" / "pdb" / "golden"
+                / "HIS_1UBQ_ubiquitin_his68.pdb").read_text()
+
+    def test_solver_flip_is_offered_and_a_decision_is_respected(self, client, offline_forge_ff, make_workspace):
+        ws_id = make_workspace(self._ubiquitin())
+        response = client.post(f"/api/sidechains/start/{ws_id}", json=_start_payload(ws_id, review_structure=True))
+        assert response.status_code == 200, response.text
+        review = response.json()["structure_review"]
+        [gln49] = [f for f in review["amide_flips"] if f["resseq"] == 49]
+        assert gln49["resname"] == "GLN" and gln49["contacts_current"]
+
+        keep = {"amide_flips": [{"chain": gln49["chain"], "resseq": 49, "icode": "", "apply": False}]}
+        response = client.post(
+            f"/api/sidechains/start/{ws_id}",
+            json=_start_payload(ws_id, review_structure=True, structure_decisions=keep),
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        if body["status"] == "structure_review":
+            assert all(f["resseq"] != 49 for f in body["structure_review"]["amide_flips"])

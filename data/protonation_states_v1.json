@@ -184,6 +184,56 @@
       }
     }
   ],
+  "orientation_families": [
+    {
+      "members": [
+        {
+          "mol_type": "P",
+          "resn": "ASN"
+        },
+        {
+          "mol_type": "P",
+          "resn": "NASN"
+        },
+        {
+          "mol_type": "P",
+          "resn": "CASN"
+        }
+      ],
+      "exchange_atoms": [
+        "OD1",
+        "ND2"
+      ],
+      "rebuild_atoms": [
+        "HD21",
+        "HD22"
+      ]
+    },
+    {
+      "members": [
+        {
+          "mol_type": "P",
+          "resn": "GLN"
+        },
+        {
+          "mol_type": "P",
+          "resn": "NGLN"
+        },
+        {
+          "mol_type": "P",
+          "resn": "CGLN"
+        }
+      ],
+      "exchange_atoms": [
+        "OE1",
+        "NE2"
+      ],
+      "rebuild_atoms": [
+        "HE21",
+        "HE22"
+      ]
+    }
+  ],
   "covalent_state_pairs": {
     "CYS": {
       "unbound": {

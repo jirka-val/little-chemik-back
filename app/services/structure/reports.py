@@ -222,6 +222,24 @@ def build_preparation_summary(result: ForgePreparationResult) -> Dict[str, Any]:
         ]
         summary["protonation_warnings"] = list(prot.warnings)
 
+        # Orientace amidů ASN/GLN vybrané spolu s protonací (orientation_families).
+        orient = getattr(sa, "orientation", None)
+        if orient is not None:
+            summary["amide_orientations"] = {
+                "evaluated": sum(1 for a in orient.assignments if a.evaluated),
+                "flipped": [
+                    {"residue": _format_residue_key(a.residue_key), "resname": a.resname, "forced": a.is_forced}
+                    for a in orient.assignments
+                    if a.flipped
+                ],
+                "kept_by_user": [
+                    _format_residue_key(a.residue_key) for a in orient.assignments if a.is_forced and not a.flipped
+                ],
+                "conflicts": [
+                    {"kind": c.kind, "message": _readable_conflict(c.message)} for c in orient.conflicts
+                ],
+            }
+
     c = result.crystal_ion_cleanup
     if c is not None:
         summary["crystal_ion_cleanup"] = {

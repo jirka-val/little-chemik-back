@@ -15,6 +15,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.services.structure.solvated_system import box_shape
 from app.utils.adams4sims_processing_library.utils import AMBER_topology
 
 TOPOLOGY_EXTENSIONS = (".prmtop", ".parm7", ".top")
@@ -87,15 +88,16 @@ def summarize_topology(path: Path) -> Dict[str, Any]:
         sum(1 for n in atom_names if n.startswith("EP"))
     hydrogen_masses = [m for z, m in zip(atomic_numbers, masses) if z == 1]
 
+    # Box po cpptraj (AMBER_topology.getBox): BOX_DIMENSIONS = [beta, a, b, c],
+    # 60 = rhombický dodekaedr (alpha = gamma = 60, beta = 90).
     box = None
-    ifbox = pointers[27] if len(pointers) > 27 else 0
-    if ifbox:
-        dims = top.get("BOX_DIMENSIONS", [])
-        if len(dims) == 4:
-            beta, a, b, c = dims
-            box = {"a": a, "b": b, "c": c, "beta": beta,
-                   "shape": "truncated octahedron" if abs(beta - 109.4712190) < 0.01 else
-                            "rectangular" if abs(beta - 90.0) < 0.01 else "other"}
+    try:
+        cell = AMBER_topology.getBox(top)
+    except ValueError:
+        cell = []
+    if cell:
+        params = dict(zip(("a", "b", "c", "alpha", "beta", "gamma"), cell))
+        box = {**params, "shape": box_shape(params)}
 
     molecules = len(top["ATOMS_PER_MOLECULE"]) if top.get("ATOMS_PER_MOLECULE") else None
     # TITLE je 20a4 - čtečka ho vrací po čtyřech znacích

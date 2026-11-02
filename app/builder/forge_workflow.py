@@ -92,6 +92,9 @@ class WorkflowSettings:
     # LittleChemik extension: user-forced protonation states, residue key
     # (chain, resseq, icode) -> state name, see assign_protonation_states.
     protonation_overrides: Mapping[Tuple[str, int, str], str] = field(default_factory=dict)
+    # LittleChemik extension: user-forced ASN/GLN amide orientations, residue
+    # key -> "as_is" | "flipped" (relative to the input coordinates).
+    orientation_overrides: Mapping[Tuple[str, int, str], str] = field(default_factory=dict)
 
 
 @dataclass
@@ -144,6 +147,7 @@ def run_forge_workflow(
         covalent_cutoff_angstrom=settings.covalent_cutoff_angstrom,
         hydrogen_bond_settings=settings.hydrogen_bond,
         forced_protonation_states=settings.protonation_overrides,
+        forced_orientations=settings.orientation_overrides,
         modify_myself=True,
     )
 

@@ -297,6 +297,8 @@ class StructureDecisions:
 
     flips: List[tuple]
     amide_flips_decided: List[tuple]
+    # amid -> "flipped" / "as_is"; jde do solveru jako vynucená orientace
+    orientation_overrides: Dict[tuple, str]
     rebuilds: List[tuple]
     zero_occupancy_decided: List[tuple]
     acknowledged_heterogens: set
@@ -313,6 +315,7 @@ class StructureDecisions:
         return cls(
             flips=[key(i) for i in flips if i.get("apply")],
             amide_flips_decided=[key(i) for i in flips],
+            orientation_overrides={key(i): "flipped" if i.get("apply") else "as_is" for i in flips},
             rebuilds=[key(i) for i in zero if i.get("apply")],
             zero_occupancy_decided=[key(i) for i in zero],
             acknowledged_heterogens=set(payload.get("acknowledged_heterogens") or []),
@@ -420,10 +423,14 @@ class ForgeStructureService:
         heterogeny se hledají v původním PDB (bez položek, o kterých už
         uživatel rozhodl); HIS na struktuře s už aplikovanými rozhodnutími.
         """
+        histidine_review, solver_flips = ForgeStructureService._state_review(structure_data, resources, settings)
         review = {
-            **ForgeStructureService._histidine_review(structure_data, resources, settings),
+            **histidine_review,
             "zero_occupancy": find_zero_occupancy(original_pdb, decided=decisions.zero_occupancy_decided),
-            "amide_flips": find_amide_flips(original_pdb, decided=decisions.amide_flips_decided),
+            # o otočení rozhodl solver (spolu s protonací), find_amide_flips je jen vysvětlení
+            "amide_flips": find_amide_flips(
+                original_pdb, decided=decisions.amide_flips_decided, only=solver_flips
+            ) if solver_flips else [],
             "removed_heterogens": [
                 h for h in find_removed_heterogens(original_pdb, crystal_water_mode)
                 if h["key"] not in decisions.acknowledged_heterogens
@@ -434,9 +441,9 @@ class ForgeStructureService:
         return review
 
     @staticmethod
-    def _histidine_review(
+    def _state_review(
         structure_data: Dict[str, Any], resources: WorkflowResources, settings: WorkflowSettings
-    ) -> Dict[str, Any]:
+    ) -> tuple:
         """
         Samostatné přiřazení stavů (stejné volání jako na začátku
         run_forge_workflow) jen kvůli reportu - bez stavby atomů, takže je
@@ -452,9 +459,14 @@ class ForgeStructureService:
             covalent_cutoff_angstrom=settings.covalent_cutoff_angstrom,
             hydrogen_bond_settings=settings.hydrogen_bond,
             forced_protonation_states=settings.protonation_overrides,
+            forced_orientations=settings.orientation_overrides,
             modify_myself=True,
         )
-        return build_histidine_review(report.protonation)
+        # amidy, které solver otočil sám (rozhodnuté uživatelem jsou vynucené)
+        solver_flips = [
+            a.residue_key for a in report.orientation.assignments if a.flipped and not a.is_forced
+        ]
+        return build_histidine_review(report.protonation), solver_flips
 
     def run_workflow(
         self,
@@ -489,8 +501,8 @@ class ForgeStructureService:
         znovu s rozhodnutími (protonation_overrides, structure_decisions) a
         review_structure=False.
 
-        auto_amide_flips=True (Guided/Standard): doporučená otočení amidů
-        ASN/GLN (find_amide_flips) se použijí bez ptaní.
+        auto_amide_flips: už se nepoužívá - orientace amidů ASN/GLN vybírá
+        vždy solver spolu s protonací; parametr zůstává kvůli API.
         """
         logger.info(
             f"FORGE: Preparing structure (pH={ph}, add_solvent_and_ions={add_solvent_and_ions}, "
@@ -500,17 +512,10 @@ class ForgeStructureService:
 
         decisions = StructureDecisions.from_payload(structure_decisions)
         original_pdb = pdb_text
-        flips = list(decisions.flips)
-        if auto_amide_flips:
-            auto = find_amide_flips(original_pdb, decided=decisions.amide_flips_decided)
-            flips += [(f["chain"], f["resseq"], f["icode"]) for f in auto]
-            if auto:
-                names = ", ".join(f"{f['resname']} {f['residue']}" for f in auto)
-                logger.info(f"FORGE: Auto-flipped amides: {names}")
-                console_logger.info(f"Flipped {len(auto)} ASN/GLN amide(s) to fit hydrogen bonds: {names}.")
-        pdb_text = apply_structure_edits(
-            pdb_text, flip_residues=flips, rebuild_residues=decisions.rebuilds
-        )
+        # Orientace amidů ASN/GLN vybírá solver spolu s protonací (v síti
+        # vodíkových vazeb); rozhodnutí z kroku Structure Check jdou do něj
+        # jako vynucené orientace, PDB se kvůli nim nepřepisuje.
+        pdb_text = apply_structure_edits(pdb_text, rebuild_residues=decisions.rebuilds)
         pdb_text = _strip_unrecognized_heterogens(pdb_text, crystal_water_mode)
         sequence_data = build_sequence_tokens(pdb_text, chain=None, fill_gaps=True)
         structure_data = {"pdb_text": pdb_text, "missing_atoms": sequence_data}
@@ -548,6 +553,7 @@ class ForgeStructureService:
             solvation=SolvationSettings(**solvation_kwargs),
             ions=IonPlacementSettings(**ion_kwargs),
             protonation_overrides=protonation_override_map(protonation_overrides),
+            orientation_overrides=decisions.orientation_overrides,
         )
 
         if review_structure:

@@ -143,6 +143,28 @@ def _force_field_paragraph(ffs: Dict[str, Dict[str, Any]], refs: _References, to
     return text
 
 
+def _amide_orientation_sentence(orientations: Dict[str, Any]) -> str:
+    """Orientace amidů ASN/GLN vybrané spolu s protonací v síti vodíkových vazeb."""
+    evaluated = orientations.get("evaluated") or 0
+    if not evaluated:
+        return ""
+    flipped = orientations.get("flipped") or []
+    text = (f" The orientations of {_plural(evaluated, 'ASN/GLN amide group')} were optimized together with the "
+            "protonation states in the hydrogen-bond network")
+    if flipped:
+        names = _join([f"{f.get('resname', '')} {f.get('residue', '')}".strip() for f in flipped])
+        text += f"; {_plural(len(flipped), 'amide')} {'were' if len(flipped) > 1 else 'was'} flipped ({names})"
+        chosen = sum(1 for f in flipped if f.get("forced"))
+        if chosen:
+            text += f", {chosen} of them as chosen in the structure review"
+    else:
+        text += "; none had to be flipped"
+    kept = orientations.get("kept_by_user") or []
+    if kept:
+        text += f". {_plural(len(kept), 'amide')} {'were' if len(kept) > 1 else 'was'} kept as deposited by choice"
+    return text + "."
+
+
 def _preparation_paragraphs(prep: Optional[Dict[str, Any]], water_name: Optional[str]) -> List[str]:
     if not prep:
         return ["The structure was not prepared further."]
@@ -169,7 +191,11 @@ def _preparation_paragraphs(prep: Optional[Dict[str, Any]], water_name: Optional
         pairs = _join([f"{b.get('atom1')}-{b.get('atom2')}" for b in disulfides])
         verb = "were" if len(disulfides) > 1 else "was"
         text += f" {_plural(len(disulfides), 'disulfide bond')} ({pairs}) {verb} formed."
-    if s.get("auto_amide_flips"):
+    orientations = summary.get("amide_orientations")
+    if orientations is not None:
+        text += _amide_orientation_sentence(orientations)
+    elif s.get("auto_amide_flips"):
+        # záznamy z doby před společnou optimalizací s protonací
         text += " Recommended ASN/GLN amide flips were applied automatically."
     else:
         flips = [d for d in (s.get("structure_decisions") or {}).get("amide_flips") or [] if d.get("apply")]

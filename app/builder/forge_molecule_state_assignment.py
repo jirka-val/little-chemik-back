@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Protonation, tautomer, and covalent-state assignment for FORGE molecules.
+"""Hydrogen-bond-network and covalent-state assignment for FORGE molecules.
 
 The layer handles geometry-based covalent state pairs (currently CYS/CYX
-disulfides) and protonation/tautomer assignment from hydrogen-bond geometry.
+disulfides), protonation/tautomer assignment, and coordinate-identity
+ambiguities such as ASN/GLN terminal-amide flips.  Protonation and orientation
+choices are solved together in connected hydrogen-bond-network components.
 It operates after parsing and before build planning so that it can use input
 coordinates while presenting a normalized residue inventory to the planner.
 """
@@ -87,6 +89,7 @@ class FixedSiteEvidence:
     partner_site: AtomKey
     distance_angstrom: float
     donor_deviation_deg: float
+    allowed_option_ids: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -95,6 +98,7 @@ class VariableSiteContact:
     site2: AtomKey
     distance_angstrom: float
     allowed_role_pairs: Tuple[Tuple[str, str], ...]
+    allowed_option_pairs: Tuple[Tuple[str, str], ...] = ()
     donor_deviation_site1_to_site2: Optional[float] = None
     donor_deviation_site2_to_site1: Optional[float] = None
 
@@ -146,9 +150,42 @@ class ProtonationAssignmentReport:
 
 
 @dataclass(frozen=True)
+class OrientationResidueAssignment:
+    residue_key: Tuple[str, int, str]
+    mol_type: str
+    resname: str
+    orientation: str
+    flipped: bool
+    evaluated: bool
+    exchanged_atoms: Tuple[Tuple[str, str], ...]
+    reset_atoms: Tuple[str, ...]
+    # LittleChemik extension: orientation was forced by the user
+    # (forced_orientations), not chosen by the solver.
+    is_forced: bool = False
+
+
+@dataclass
+class OrientationAssignmentReport:
+    assignments: List[OrientationResidueAssignment] = field(default_factory=list)
+    fixed_evidence: List[FixedSiteEvidence] = field(default_factory=list)
+    variable_contacts: List[VariableSiteContact] = field(default_factory=list)
+    site_statuses: Dict[AtomKey, str] = field(default_factory=dict)
+    conflicts: List[ProtonationConflict] = field(default_factory=list)
+    unevaluable_sites: List[Tuple[AtomKey, str]] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+
+    @property
+    def flipped_count(self) -> int:
+        return sum(item.flipped for item in self.assignments)
+
+
+@dataclass(frozen=True)
 class StateAssignmentReport:
     covalent: CovalentStateAssignmentReport
     protonation: ProtonationAssignmentReport
+    orientation: OrientationAssignmentReport = field(
+        default_factory=OrientationAssignmentReport
+    )
 
 
 @dataclass(frozen=True)
@@ -171,31 +208,47 @@ class _Candidate:
 
 
 @dataclass(frozen=True)
-class _ProtonationStateOption:
+class _HydrogenBondStateOption:
+    option_id: str
+    kind: str
     mol_type: str
     resname: str
     level_index: int
     tautomer_index: int
     site_roles: Mapping[str, FrozenSet[str]]
     site_donor_hydrogens: Mapping[str, Tuple[str, ...]]
+    coordinate_exchanges: Tuple[Tuple[str, str], ...] = ()
+    rebuild_atoms: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class _ProtonationFamily:
     index: int
-    options: Tuple[_ProtonationStateOption, ...]
-    levels: Tuple[Tuple[_ProtonationStateOption, ...], ...]
+    options: Tuple[_HydrogenBondStateOption, ...]
+    levels: Tuple[Tuple[_HydrogenBondStateOption, ...], ...]
     pka_values: Tuple[float, ...]
     variable_sites: Tuple[str, ...]
     default_level_index: int
-    default_option: _ProtonationStateOption
+    default_option: _HydrogenBondStateOption
 
 
 @dataclass(frozen=True)
-class _TitratableResidue:
+class _OrientationFamily:
+    index: int
+    members: FrozenSet[Tuple[str, str]]
+    coordinate_exchanges: Tuple[Tuple[str, str], ...]
+    rebuild_atoms: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _StateVariable:
     index: int
     residue: Residue
-    family: _ProtonationFamily
+    kind: str
+    options: Tuple[_HydrogenBondStateOption, ...]
+    variable_sites: Tuple[str, ...]
+    default_option: _HydrogenBondStateOption
+    default_level_index: int
 
 
 @dataclass(frozen=True)
@@ -553,10 +606,10 @@ def _load_protonation_families(
                 "than protonation levels"
             )
         variable_raw = raw_family.get("variable_sites", {})
-        levels: List[Tuple[_ProtonationStateOption, ...]] = []
-        options: List[_ProtonationStateOption] = []
+        levels: List[Tuple[_HydrogenBondStateOption, ...]] = []
+        options: List[_HydrogenBondStateOption] = []
         for level_index, raw_level in enumerate(raw_levels):
-            level_options: List[_ProtonationStateOption] = []
+            level_options: List[_HydrogenBondStateOption] = []
             for tautomer_index, raw_state in enumerate(raw_level):
                 mol_type = str(raw_state["mol_type"])
                 resname = str(raw_state["resn"])
@@ -573,7 +626,9 @@ def _load_protonation_families(
                     donor_hydrogens[site_name] = tuple(
                         str(name) for name in site_data.get("donor_hydrogens", [])
                     )
-                option = _ProtonationStateOption(
+                option = _HydrogenBondStateOption(
+                    option_id=f"{mol_type}:{resname}",
+                    kind="protonation",
                     mol_type=mol_type,
                     resname=resname,
                     level_index=level_index,
@@ -611,6 +666,137 @@ def _load_protonation_families(
                 )
             by_state[key] = family
     return families, by_state
+
+
+def _load_orientation_families(
+    state_data: Mapping[str, Any],
+) -> Tuple[List[_OrientationFamily], Dict[Tuple[str, str], _OrientationFamily]]:
+    """Load generic binary coordinate-exchange families from state data.
+
+    No residue or atom names are hard-coded here.  Each family describes one or
+    more coordinate exchanges that are applied together in its ``flipped``
+    state.  Atom roles themselves remain authoritative in the building
+    template's ``hbond_sites`` section.
+    """
+    families: List[_OrientationFamily] = []
+    by_state: Dict[Tuple[str, str], _OrientationFamily] = {}
+    for family_index, raw in enumerate(state_data.get("orientation_families", [])):
+        members = frozenset(
+            (str(item["mol_type"]), str(item["resn"]))
+            for item in raw.get("members", [])
+        )
+        if not members:
+            raise ValueError(
+                f"Orientation family {family_index} must contain at least one member"
+            )
+        if "coordinate_exchanges" in raw:
+            raw_exchanges = raw["coordinate_exchanges"]
+        elif "exchange_atoms" in raw:
+            raw_exchanges = [raw["exchange_atoms"]]
+        else:
+            raise ValueError(
+                f"Orientation family {family_index} lacks coordinate exchanges"
+            )
+        exchanges: List[Tuple[str, str]] = []
+        used_atoms: Set[str] = set()
+        for raw_pair in raw_exchanges:
+            if len(raw_pair) != 2:
+                raise ValueError(
+                    f"Orientation family {family_index} coordinate exchange "
+                    "must contain exactly two atom names"
+                )
+            pair = (str(raw_pair[0]), str(raw_pair[1]))
+            if pair[0] == pair[1] or any(name in used_atoms for name in pair):
+                raise ValueError(
+                    f"Orientation family {family_index} has overlapping or "
+                    f"degenerate coordinate exchanges: {pair!r}"
+                )
+            used_atoms.update(pair)
+            exchanges.append(pair)
+        family = _OrientationFamily(
+            index=family_index,
+            members=members,
+            coordinate_exchanges=tuple(exchanges),
+            rebuild_atoms=tuple(str(name) for name in raw.get("rebuild_atoms", [])),
+        )
+        families.append(family)
+        for member in members:
+            if member in by_state:
+                raise ValueError(
+                    f"Orientation state {member!r} belongs to more than one family"
+                )
+            by_state[member] = family
+    return families, by_state
+
+
+def _orientation_options_for_residue(
+    residue: Residue,
+    family: _OrientationFamily,
+    building_template: Mapping[str, Any],
+) -> Tuple[_HydrogenBondStateOption, _HydrogenBondStateOption]:
+    """Create as-is/flipped options by mapping chemistry onto spatial sites."""
+    mol_type = residue.group or ""
+    resname = residue.ff_resname
+    try:
+        hbond_sites = building_template[mol_type][resname]["hbond_sites"]
+    except KeyError as exc:
+        raise ValueError(
+            f"Orientation member {mol_type}/{resname} lacks hbond_sites"
+        ) from exc
+
+    site_names = tuple(name for pair in family.coordinate_exchanges for name in pair)
+    for atom_name in site_names:
+        if atom_name not in residue.atoms:
+            raise ValueError(
+                f"Orientation member {mol_type}/{resname} lacks atom {atom_name}"
+            )
+        if atom_name not in hbond_sites:
+            raise ValueError(
+                f"Orientation atom {mol_type}/{resname}/{atom_name} lacks hbond metadata"
+            )
+
+    def mapped_option(
+        option_id: str,
+        mapping: Mapping[str, str],
+        exchanges: Tuple[Tuple[str, str], ...],
+        variant_index: int,
+    ) -> _HydrogenBondStateOption:
+        roles: Dict[str, FrozenSet[str]] = {}
+        donor_hydrogens: Dict[str, Tuple[str, ...]] = {}
+        for spatial_site in site_names:
+            chemical_atom = mapping[spatial_site]
+            raw_site = hbond_sites[chemical_atom]
+            roles[spatial_site] = _roles_from_site(raw_site)
+            donor_hydrogens[spatial_site] = tuple(
+                str(name) for name in raw_site.get("donor_hydrogens", [])
+            )
+        return _HydrogenBondStateOption(
+            option_id=option_id,
+            kind="orientation",
+            mol_type=mol_type,
+            resname=resname,
+            level_index=0,
+            tautomer_index=variant_index,
+            site_roles=roles,
+            site_donor_hydrogens=donor_hydrogens,
+            coordinate_exchanges=exchanges,
+            rebuild_atoms=family.rebuild_atoms,
+        )
+
+    identity_mapping = {name: name for name in site_names}
+    flipped_mapping = dict(identity_mapping)
+    for left, right in family.coordinate_exchanges:
+        flipped_mapping[left] = right
+        flipped_mapping[right] = left
+    return (
+        mapped_option("as_is", identity_mapping, (), 0),
+        mapped_option(
+            "flipped",
+            flipped_mapping,
+            family.coordinate_exchanges,
+            1,
+        ),
+    )
 
 
 def _coord_for_atom_key(molecule: Molecule, atom_key: AtomKey):
@@ -768,42 +954,116 @@ def _donor_deviation_deg(
     return math.degrees(math.acos(cosine))
 
 
-def _best_donor_angle_for_options(
+def _virtual_hydrogen_for_option(
     molecule: Molecule,
     building_template: Mapping[str, Any],
-    titratable: _TitratableResidue,
+    variable: _StateVariable,
+    option: _HydrogenBondStateOption,
+    hydrogen_name: str,
+    acceptor_coord: Tuple[float, float, float],
+) -> Optional[Tuple[float, float, float]]:
+    """Build a virtual H in one option without mutating the persistent molecule."""
+    residue = variable.residue
+    saved_coords: Dict[str, Optional[Tuple[float, float, float]]] = {}
+    saved_hydrogen_state: Dict[
+        str, Tuple[Atom, Optional[Tuple[float, float, float]], bool, Optional[str], Optional[int]]
+    ] = {}
+    for left, right in option.coordinate_exchanges:
+        left_atom = residue.atoms[left]
+        right_atom = residue.atoms[right]
+        saved_coords[left] = left_atom.coord
+        saved_coords[right] = right_atom.coord
+        left_atom.coord, right_atom.coord = right_atom.coord, left_atom.coord
+    for atom_name in option.rebuild_atoms:
+        atom = residue.atoms.get(atom_name)
+        if atom is None:
+            atom = residue.observed_extra_atoms.get(atom_name)
+        if atom is None:
+            continue
+        saved_hydrogen_state[atom_name] = (
+            atom,
+            atom.coord,
+            atom.built,
+            atom.build_source,
+            atom.build_rule_index,
+        )
+        atom.coord = None
+        atom.built = False
+        atom.build_source = None
+        atom.build_rule_index = None
+    try:
+        return _virtual_hydrogen_coord(
+            molecule,
+            building_template,
+            residue,
+            option.mol_type,
+            option.resname,
+            hydrogen_name,
+            acceptor_coord,
+        )
+    finally:
+        for atom_name, coord in saved_coords.items():
+            residue.atoms[atom_name].coord = coord
+        for atom, coord, built, source, rule_index in saved_hydrogen_state.values():
+            atom.coord = coord
+            atom.built = built
+            atom.build_source = source
+            atom.build_rule_index = rule_index
+
+
+def _donor_angle_for_option(
+    molecule: Molecule,
+    building_template: Mapping[str, Any],
+    variable: _StateVariable,
+    option: _HydrogenBondStateOption,
     site_name: str,
     acceptor_coord: Tuple[float, float, float],
 ) -> Optional[float]:
-    donor_atom = titratable.residue.atoms.get(site_name)
+    if "donor" not in option.site_roles.get(site_name, frozenset()):
+        return None
+    donor_atom = variable.residue.atoms.get(site_name)
     if donor_atom is None or donor_atom.coord is None:
         return None
     angles: List[float] = []
-    seen: Set[Tuple[str, str, str]] = set()
-    for option in titratable.family.options:
-        if "donor" not in option.site_roles.get(site_name, frozenset()):
+    for hydrogen_name in option.site_donor_hydrogens.get(site_name, ()):
+        coord = _virtual_hydrogen_for_option(
+            molecule,
+            building_template,
+            variable,
+            option,
+            hydrogen_name,
+            acceptor_coord,
+        )
+        if coord is None:
             continue
-        for hydrogen_name in option.site_donor_hydrogens.get(site_name, ()):
-            key = (option.mol_type, option.resname, hydrogen_name)
-            if key in seen:
-                continue
-            seen.add(key)
-            coord = _virtual_hydrogen_coord(
+        angle = _donor_deviation_deg(coord, donor_atom.coord, acceptor_coord)
+        if angle is not None:
+            angles.append(angle)
+    return min(angles) if angles else None
+
+
+def _best_donor_angle_for_options(
+    molecule: Molecule,
+    building_template: Mapping[str, Any],
+    variable: _StateVariable,
+    site_name: str,
+    acceptor_coord: Tuple[float, float, float],
+) -> Optional[float]:
+    angles = [
+        angle
+        for option in variable.options
+        if (
+            angle := _donor_angle_for_option(
                 molecule,
                 building_template,
-                titratable.residue,
-                option.mol_type,
-                option.resname,
-                hydrogen_name,
+                variable,
+                option,
+                site_name,
                 acceptor_coord,
             )
-            if coord is None:
-                continue
-            angle = _donor_deviation_deg(
-                coord, donor_atom.coord, acceptor_coord
-            )
-            if angle is not None:
-                angles.append(angle)
+        )
+        is not None
+    ]
     return min(angles) if angles else None
 
 
@@ -835,9 +1095,9 @@ def _best_fixed_donor_angle(
 def _collect_hbond_sites(
     molecule: Molecule,
     building_template: Mapping[str, Any],
-    titratables: Sequence[_TitratableResidue],
+    variables: Sequence[_StateVariable],
 ) -> Tuple[List[_HBondSite], Dict[AtomKey, _HBondSite]]:
-    owner_by_residue = {id(item.residue): item for item in titratables}
+    owner_by_residue = {id(item.residue): item for item in variables}
     sites: List[_HBondSite] = []
     by_key: Dict[AtomKey, _HBondSite] = {}
     for residue in _iter_residues(molecule):
@@ -848,7 +1108,7 @@ def _collect_hbond_sites(
         except KeyError:
             continue
         owner = owner_by_residue.get(id(residue))
-        variable_names = set(owner.family.variable_sites) if owner else set()
+        variable_names = set(owner.variable_sites) if owner else set()
         for atom_name, site_data in rt.get("hbond_sites", {}).items():
             atom = residue.atoms.get(atom_name)
             if atom is None or atom.coord is None:
@@ -899,25 +1159,25 @@ def _nearby_sites(
                 yield variable, partner, distance
 
 
-def _option_roles(option: _ProtonationStateOption, site_name: str) -> FrozenSet[str]:
+def _option_roles(option: _HydrogenBondStateOption, site_name: str) -> FrozenSet[str]:
     return option.site_roles.get(site_name, frozenset())
 
 
 def _analyze_hbond_constraints(
     molecule: Molecule,
     building_template: Mapping[str, Any],
-    titratables: Sequence[_TitratableResidue],
+    variables: Sequence[_StateVariable],
     settings: HydrogenBondGeometrySettings,
     report: ProtonationAssignmentReport,
 ) -> Tuple[Dict[AtomKey, FixedSiteEvidence], List[VariableSiteContact]]:
     all_sites, _site_by_key = _collect_hbond_sites(
-        molecule, building_template, titratables
+        molecule, building_template, variables
     )
-    titratable_by_index = {item.index: item for item in titratables}
+    variable_by_index = {item.index: item for item in variables}
     variable_sites = [site for site in all_sites if site.variable_owner is not None]
     found_variable_keys = {site.atom_key for site in variable_sites}
-    for item in titratables:
-        for site_name in item.family.variable_sites:
+    for item in variables:
+        for site_name in item.variable_sites:
             key = _atom_key(item.residue, site_name)
             if key not in found_variable_keys:
                 report.unevaluable_sites.append((key, "missing variable-site coordinates"))
@@ -931,42 +1191,67 @@ def _analyze_hbond_constraints(
         all_sites,
         settings.heavy_atom_cutoff_angstrom,
     ):
-        owner = titratable_by_index[variable.variable_owner]  # type: ignore[index]
+        owner = variable_by_index[variable.variable_owner]  # type: ignore[index]
         if partner.variable_owner is not None:
-            other = titratable_by_index[partner.variable_owner]
-            allowed: List[Tuple[str, str]] = []
-            angle_forward = _best_donor_angle_for_options(
-                molecule, building_template, owner, variable.atom_name, partner.coord
-            )
-            if (
-                angle_forward is not None
-                and angle_forward <= settings.max_donor_deviation_deg
-                and any(
-                    "acceptor" in _option_roles(option, partner.atom_name)
-                    for option in other.family.options
+            other = variable_by_index[partner.variable_owner]
+            allowed_roles: Set[Tuple[str, str]] = set()
+            allowed_options: Set[Tuple[str, str]] = set()
+            forward_angles: List[float] = []
+            reverse_angles: List[float] = []
+            for left_option in owner.options:
+                forward_angle = _donor_angle_for_option(
+                    molecule,
+                    building_template,
+                    owner,
+                    left_option,
+                    variable.atom_name,
+                    partner.coord,
                 )
-            ):
-                allowed.append(("donor", "acceptor"))
-            angle_reverse = _best_donor_angle_for_options(
-                molecule, building_template, other, partner.atom_name, variable.coord
-            )
-            if (
-                angle_reverse is not None
-                and angle_reverse <= settings.max_donor_deviation_deg
-                and any(
-                    "acceptor" in _option_roles(option, variable.atom_name)
-                    for option in owner.family.options
-                )
-            ):
-                allowed.append(("acceptor", "donor"))
-            if allowed:
+                for right_option in other.options:
+                    if (
+                        forward_angle is not None
+                        and forward_angle <= settings.max_donor_deviation_deg
+                        and "acceptor"
+                        in _option_roles(right_option, partner.atom_name)
+                    ):
+                        allowed_roles.add(("donor", "acceptor"))
+                        allowed_options.add(
+                            (left_option.option_id, right_option.option_id)
+                        )
+                        forward_angles.append(forward_angle)
+
+                    reverse_angle = _donor_angle_for_option(
+                        molecule,
+                        building_template,
+                        other,
+                        right_option,
+                        partner.atom_name,
+                        variable.coord,
+                    )
+                    if (
+                        reverse_angle is not None
+                        and reverse_angle <= settings.max_donor_deviation_deg
+                        and "acceptor"
+                        in _option_roles(left_option, variable.atom_name)
+                    ):
+                        allowed_roles.add(("acceptor", "donor"))
+                        allowed_options.add(
+                            (left_option.option_id, right_option.option_id)
+                        )
+                        reverse_angles.append(reverse_angle)
+            if allowed_options:
                 contact = VariableSiteContact(
                     site1=variable.atom_key,
                     site2=partner.atom_key,
                     distance_angstrom=distance,
-                    allowed_role_pairs=tuple(allowed),
-                    donor_deviation_site1_to_site2=angle_forward,
-                    donor_deviation_site2_to_site1=angle_reverse,
+                    allowed_role_pairs=tuple(sorted(allowed_roles)),
+                    allowed_option_pairs=tuple(sorted(allowed_options)),
+                    donor_deviation_site1_to_site2=(
+                        min(forward_angles) if forward_angles else None
+                    ),
+                    donor_deviation_site2_to_site1=(
+                        min(reverse_angles) if reverse_angles else None
+                    ),
                 )
                 variable_contacts.append(contact)
                 report.variable_contacts.append(contact)
@@ -975,16 +1260,33 @@ def _analyze_hbond_constraints(
         partner_is_donor = bool(partner.donor_hydrogens)
         partner_is_acceptor = partner.acceptor
         if partner_is_acceptor and not partner_is_donor:
-            angle = _best_donor_angle_for_options(
-                molecule, building_template, owner, variable.atom_name, partner.coord
-            )
-            if angle is not None and angle <= settings.max_donor_deviation_deg:
+            allowed_options_with_angles = [
+                (option.option_id, angle)
+                for option in owner.options
+                if (
+                    angle := _donor_angle_for_option(
+                        molecule,
+                        building_template,
+                        owner,
+                        option,
+                        variable.atom_name,
+                        partner.coord,
+                    )
+                )
+                is not None
+                and angle <= settings.max_donor_deviation_deg
+            ]
+            if allowed_options_with_angles:
+                angle = min(item[1] for item in allowed_options_with_angles)
                 evidence = FixedSiteEvidence(
                     variable_site=variable.atom_key,
                     required_role="donor",
                     partner_site=partner.atom_key,
                     distance_angstrom=distance,
                     donor_deviation_deg=angle,
+                    allowed_option_ids=tuple(
+                        sorted(item[0] for item in allowed_options_with_angles)
+                    ),
                 )
                 evidence_by_site_role[(variable.atom_key, "donor")].append(evidence)
                 report.fixed_evidence.append(evidence)
@@ -993,12 +1295,22 @@ def _analyze_hbond_constraints(
                 molecule, building_template, partner, variable.coord
             )
             if angle is not None and angle <= settings.max_donor_deviation_deg:
+                allowed_option_ids = tuple(
+                    sorted(
+                        option.option_id
+                        for option in owner.options
+                        if "acceptor" in _option_roles(option, variable.atom_name)
+                    )
+                )
+                if not allowed_option_ids:
+                    continue
                 evidence = FixedSiteEvidence(
                     variable_site=variable.atom_key,
                     required_role="acceptor",
                     partner_site=partner.atom_key,
                     distance_angstrom=distance,
                     donor_deviation_deg=angle,
+                    allowed_option_ids=allowed_option_ids,
                 )
                 evidence_by_site_role[(variable.atom_key, "acceptor")].append(evidence)
                 report.fixed_evidence.append(evidence)
@@ -1030,8 +1342,8 @@ def _analyze_hbond_constraints(
     selected_evidence: Dict[AtomKey, FixedSiteEvidence] = {}
     all_variable_keys = {
         _atom_key(item.residue, site_name)
-        for item in titratables
-        for site_name in item.family.variable_sites
+        for item in variables
+        for site_name in item.variable_sites
     }
     variable_contact_keys = {
         key for contact in variable_contacts for key in (contact.site1, contact.site2)
@@ -1086,11 +1398,44 @@ def _analyze_hbond_constraints(
 
 
 def _state_supports_role(
-    option: _ProtonationStateOption,
+    option: _HydrogenBondStateOption,
     site_name: str,
     role: str,
 ) -> bool:
     return role in option.site_roles.get(site_name, frozenset())
+
+
+def _option_satisfies_evidence(
+    option: _HydrogenBondStateOption,
+    site_name: str,
+    evidence: FixedSiteEvidence,
+) -> bool:
+    if evidence.allowed_option_ids:
+        return option.option_id in evidence.allowed_option_ids
+    return _state_supports_role(option, site_name, evidence.required_role)
+
+
+def _options_satisfy_contact(
+    left: _HydrogenBondStateOption,
+    right: _HydrogenBondStateOption,
+    left_site_name: str,
+    right_site_name: str,
+    contact: VariableSiteContact,
+) -> bool:
+    if contact.allowed_option_pairs:
+        return (left.option_id, right.option_id) in contact.allowed_option_pairs
+    left_roles = left.site_roles.get(left_site_name, frozenset())
+    right_roles = right.site_roles.get(right_site_name, frozenset())
+    return any(
+        left_role in left_roles and right_role in right_roles
+        for left_role, right_role in contact.allowed_role_pairs
+    )
+
+
+def _option_label(option: _HydrogenBondStateOption) -> str:
+    if option.kind == "orientation":
+        return f"{option.resname}:{option.option_id}"
+    return option.resname
 
 
 def _component_indices(
@@ -1122,216 +1467,34 @@ def _component_indices(
     return components
 
 
-def _solve_protonation_states(
-    titratables: Sequence[_TitratableResidue],
-    fixed_requirements: Mapping[AtomKey, FixedSiteEvidence],
-    contacts: Sequence[VariableSiteContact],
+def _forced_options(
+    variables: Sequence[_StateVariable],
+    forced_states: Mapping[Tuple[str, int, str], str],
+    forced_orientations: Mapping[Tuple[str, int, str], str],
     report: ProtonationAssignmentReport,
-    forced: Optional[Mapping[int, _ProtonationStateOption]] = None,
-) -> Dict[int, _ProtonationStateOption]:
-    forced = forced or {}
-    owner_by_site: Dict[AtomKey, int] = {}
-    site_name_by_key: Dict[AtomKey, str] = {}
-    for item in titratables:
-        for site_name in item.family.variable_sites:
-            key = _atom_key(item.residue, site_name)
-            owner_by_site[key] = item.index
-            site_name_by_key[key] = site_name
+    orientation_report: OrientationAssignmentReport,
+) -> Dict[int, _HydrogenBondStateOption]:
+    """LittleChemik extension: user requests -> forced option per variable."""
+    forced: Dict[int, _HydrogenBondStateOption] = {}
+    by_kind_key = {(item.kind, _residue_key(item.residue)): item for item in variables}
 
-    chosen: Dict[int, _ProtonationStateOption] = {}
-    for component in _component_indices(len(titratables), contacts, owner_by_site):
-        component_set = set(component)
-        component_contacts = [
-            contact
-            for contact in contacts
-            if owner_by_site[contact.site1] in component_set
-            and owner_by_site[contact.site2] in component_set
-        ]
-        # A forced residue offers only its forced option; its contacts still
-        # constrain the other residues of the component.
-        option_lists = [
-            (forced[index],) if index in forced else titratables[index].family.options
-            for index in component
-        ]
-        best_score = None
-        best_deterministic = None
-        best_combo = None
-        for combo in itertools.product(*option_lists):
-            option_by_index = dict(zip(component, combo))
-            fixed_satisfied = 0
-            fixed_distance = 0.0
-            for site_key, evidence in fixed_requirements.items():
-                owner_index = owner_by_site[site_key]
-                if owner_index not in component_set:
-                    continue
-                option = option_by_index[owner_index]
-                if _state_supports_role(
-                    option, site_name_by_key[site_key], evidence.required_role
-                ):
-                    fixed_satisfied += 1
-                    fixed_distance += evidence.distance_angstrom
-            variable_satisfied = 0
-            variable_distance = 0.0
-            for contact in component_contacts:
-                left_index = owner_by_site[contact.site1]
-                right_index = owner_by_site[contact.site2]
-                left_roles = option_by_index[left_index].site_roles.get(
-                    site_name_by_key[contact.site1], frozenset()
-                )
-                right_roles = option_by_index[right_index].site_roles.get(
-                    site_name_by_key[contact.site2], frozenset()
-                )
-                if any(
-                    left_role in left_roles and right_role in right_roles
-                    for left_role, right_role in contact.allowed_role_pairs
-                ):
-                    variable_satisfied += 1
-                    variable_distance += contact.distance_angstrom
-            defaults = sum(
-                option.resname == titratables[index].family.default_option.resname
-                and option.mol_type == titratables[index].family.default_option.mol_type
-                for index, option in option_by_index.items()
-            )
-            level_penalty = sum(
-                abs(option.level_index - titratables[index].family.default_level_index)
-                for index, option in option_by_index.items()
-            )
-            tautomer_penalty = sum(option.tautomer_index for option in combo)
-            score = (
-                fixed_satisfied,
-                variable_satisfied,
-                -(fixed_distance + variable_distance),
-                defaults,
-                -level_penalty,
-                -tautomer_penalty,
-            )
-            deterministic = tuple(
-                (option.level_index, option.tautomer_index, option.resname)
-                for option in combo
-            )
-            if (
-                best_score is None
-                or score > best_score
-                or (score == best_score and deterministic < best_deterministic)
-            ):
-                best_score = score
-                best_deterministic = deterministic
-                best_combo = combo
-        assert best_combo is not None
-        chosen.update(dict(zip(component, best_combo)))
-
-    for site_key, evidence in fixed_requirements.items():
-        option = chosen[owner_by_site[site_key]]
-        if not _state_supports_role(
-            option, site_name_by_key[site_key], evidence.required_role
-        ):
+    for residue_key, wanted in forced_states.items():
+        item = by_kind_key.get(("protonation", tuple(residue_key)))
+        if item is None:
             report.conflicts.append(
                 ProtonationConflict(
-                    kind="unsatisfied_fixed_evidence",
+                    kind="forced_state_not_applicable",
                     message=(
-                        f"Selected {option.resname} cannot make {site_key} "
-                        f"a required {evidence.required_role}"
+                        f"Requested state {wanted} for {residue_key} ignored - "
+                        "the residue has no protonation alternatives"
                     ),
-                    sites=(site_key,),
                 )
             )
-    for contact in contacts:
-        left_index = owner_by_site[contact.site1]
-        right_index = owner_by_site[contact.site2]
-        left = chosen[left_index]
-        right = chosen[right_index]
-        left_roles = left.site_roles.get(site_name_by_key[contact.site1], frozenset())
-        right_roles = right.site_roles.get(site_name_by_key[contact.site2], frozenset())
-        if not any(
-            role1 in left_roles and role2 in right_roles
-            for role1, role2 in contact.allowed_role_pairs
-        ):
-            report.conflicts.append(
-                ProtonationConflict(
-                    kind="unsatisfied_variable_contact",
-                    message=(
-                        f"Selected {left.resname}/{right.resname} do not satisfy "
-                        f"the variable contact {contact.site1} -- {contact.site2}"
-                    ),
-                    sites=(contact.site1, contact.site2),
-                )
-            )
-    return chosen
-
-
-def assign_protonation_states(
-    molecule: Molecule,
-    converting: Mapping[str, Any],
-    building_template: Mapping[str, Any],
-    state_data: Mapping[str, Any],
-    *,
-    pH: float = 7.0,
-    geometry_settings: Optional[HydrogenBondGeometrySettings] = None,
-    forced_states: Optional[Mapping[Tuple[str, int, str], str]] = None,
-    modify_myself: bool = False,
-) -> Tuple[Molecule, ProtonationAssignmentReport]:
-    """Assign protonation levels and tautomers from pH and H-bond geometry.
-
-    ``forced_states`` (LittleChemik extension) maps a residue key to a state
-    name chosen by the user (e.g. ``"HIE"``); terminal variants match by base
-    name (``"HIE"`` selects ``NHIE`` on an N-terminus). A name outside the
-    residue's family is reported as a conflict and ignored.
-    """
-    if not math.isfinite(pH):
-        raise ValueError("pH must be finite")
-    settings = geometry_settings or HydrogenBondGeometrySettings()
-    if settings.heavy_atom_cutoff_angstrom <= 0.0:
-        raise ValueError("heavy_atom_cutoff_angstrom must be positive")
-    if not 0.0 <= settings.max_donor_deviation_deg <= 180.0:
-        raise ValueError("max_donor_deviation_deg must be between 0 and 180")
-
-    target = molecule if modify_myself else copy.deepcopy(molecule)
-    report = ProtonationAssignmentReport(pH=float(pH))
-    families, by_state = _load_protonation_families(state_data, pH)
-    for family in families:
-        family_names = tuple(option.resname for option in family.options)
-        report.family_defaults.append(
-            (family_names, family.default_option.resname)
-        )
-
-    original_identity: Dict[int, Tuple[Optional[str], str]] = {}
-    titratables: List[_TitratableResidue] = []
-    for residue in _iter_residues(target):
-        family = by_state.get((residue.group or "", residue.ff_resname))
-        if family is None:
-            continue
-        index = len(titratables)
-        original_identity[index] = (residue.group, residue.ff_resname)
-        assign_residue_identity(
-            residue,
-            family.default_option.mol_type,
-            family.default_option.resname,
-            converting,
-            assignment_source="protonation_ph_default",
-        )
-        titratables.append(
-            _TitratableResidue(index=index, residue=residue, family=family)
-        )
-
-    if not titratables:
-        return target, report
-
-    fixed_requirements, variable_contacts = _analyze_hbond_constraints(
-        target,
-        building_template,
-        titratables,
-        settings,
-        report,
-    )
-    forced: Dict[int, _ProtonationStateOption] = {}
-    for item in titratables:
-        wanted = (forced_states or {}).get(_residue_key(item.residue))
-        if wanted is None:
             continue
         match = next(
             (
                 option
-                for option in item.family.options
+                for option in item.options
                 if option.resname == wanted
                 or (option.resname[:1] in ("N", "C") and option.resname[1:] == wanted)
             ),
@@ -1350,54 +1513,476 @@ def assign_protonation_states(
             continue
         forced[item.index] = match
 
-    titratable_keys = {_residue_key(item.residue) for item in titratables}
-    for residue_key, wanted in (forced_states or {}).items():
-        if tuple(residue_key) not in titratable_keys:
-            report.conflicts.append(
+    for residue_key, wanted in forced_orientations.items():
+        item = by_kind_key.get(("orientation", tuple(residue_key)))
+        match = (
+            next((option for option in item.options if option.option_id == wanted), None)
+            if item is not None
+            else None
+        )
+        if match is None:
+            orientation_report.conflicts.append(
                 ProtonationConflict(
-                    kind="forced_state_not_applicable",
+                    kind="forced_orientation_not_applicable",
                     message=(
-                        f"Requested state {wanted} for {residue_key} ignored - "
-                        "the residue has no protonation alternatives"
+                        f"Requested orientation {wanted} for {residue_key} ignored - "
+                        "the residue has no evaluable orientation alternatives"
                     ),
                 )
             )
+            continue
+        forced[item.index] = match
+    return forced
 
-    chosen = _solve_protonation_states(
-        titratables,
+
+def _solve_hydrogen_bond_network_states(
+    variables: Sequence[_StateVariable],
+    fixed_requirements: Mapping[AtomKey, FixedSiteEvidence],
+    contacts: Sequence[VariableSiteContact],
+    report: ProtonationAssignmentReport,
+    forced: Optional[Mapping[int, _HydrogenBondStateOption]] = None,
+) -> Dict[int, _HydrogenBondStateOption]:
+    forced = forced or {}
+    owner_by_site: Dict[AtomKey, int] = {}
+    site_name_by_key: Dict[AtomKey, str] = {}
+    for item in variables:
+        for site_name in item.variable_sites:
+            key = _atom_key(item.residue, site_name)
+            owner_by_site[key] = item.index
+            site_name_by_key[key] = site_name
+
+    chosen: Dict[int, _HydrogenBondStateOption] = {}
+    for component in _component_indices(len(variables), contacts, owner_by_site):
+        component_set = set(component)
+        component_contacts = [
+            contact
+            for contact in contacts
+            if owner_by_site[contact.site1] in component_set
+            and owner_by_site[contact.site2] in component_set
+        ]
+        # LittleChemik extension: a forced variable offers only its forced
+        # option; its contacts still constrain the rest of the component.
+        option_lists = [
+            (forced[index],) if index in forced else variables[index].options
+            for index in component
+        ]
+        best_score = None
+        best_deterministic = None
+        best_combo = None
+        for combo in itertools.product(*option_lists):
+            option_by_index = dict(zip(component, combo))
+            fixed_satisfied = 0
+            fixed_distance = 0.0
+            for site_key, evidence in fixed_requirements.items():
+                owner_index = owner_by_site[site_key]
+                if owner_index not in component_set:
+                    continue
+                option = option_by_index[owner_index]
+                if _option_satisfies_evidence(
+                    option, site_name_by_key[site_key], evidence
+                ):
+                    fixed_satisfied += 1
+                    fixed_distance += evidence.distance_angstrom
+            variable_satisfied = 0
+            variable_distance = 0.0
+            for contact in component_contacts:
+                left_index = owner_by_site[contact.site1]
+                right_index = owner_by_site[contact.site2]
+                left_option = option_by_index[left_index]
+                right_option = option_by_index[right_index]
+                if _options_satisfy_contact(
+                    left_option,
+                    right_option,
+                    site_name_by_key[contact.site1],
+                    site_name_by_key[contact.site2],
+                    contact,
+                ):
+                    variable_satisfied += 1
+                    variable_distance += contact.distance_angstrom
+            defaults = sum(
+                option.option_id == variables[index].default_option.option_id
+                for index, option in option_by_index.items()
+            )
+            level_penalty = sum(
+                abs(option.level_index - variables[index].default_level_index)
+                for index, option in option_by_index.items()
+            )
+            tautomer_penalty = sum(option.tautomer_index for option in combo)
+            score = (
+                fixed_satisfied,
+                variable_satisfied,
+                -(fixed_distance + variable_distance),
+                defaults,
+                -level_penalty,
+                -tautomer_penalty,
+            )
+            deterministic = tuple(
+                (
+                    option.kind,
+                    option.level_index,
+                    option.tautomer_index,
+                    option.option_id,
+                )
+                for option in combo
+            )
+            if (
+                best_score is None
+                or score > best_score
+                or (score == best_score and deterministic < best_deterministic)
+            ):
+                best_score = score
+                best_deterministic = deterministic
+                best_combo = combo
+        assert best_combo is not None
+        chosen.update(dict(zip(component, best_combo)))
+
+    for site_key, evidence in fixed_requirements.items():
+        option = chosen[owner_by_site[site_key]]
+        if not _option_satisfies_evidence(
+            option, site_name_by_key[site_key], evidence
+        ):
+            report.conflicts.append(
+                ProtonationConflict(
+                    kind="unsatisfied_fixed_evidence",
+                    message=(
+                        f"Selected {_option_label(option)} cannot make {site_key} "
+                        f"a required {evidence.required_role}"
+                    ),
+                    sites=(site_key,),
+                )
+            )
+    for contact in contacts:
+        left_index = owner_by_site[contact.site1]
+        right_index = owner_by_site[contact.site2]
+        left = chosen[left_index]
+        right = chosen[right_index]
+        if not _options_satisfy_contact(
+            left,
+            right,
+            site_name_by_key[contact.site1],
+            site_name_by_key[contact.site2],
+            contact,
+        ):
+            report.conflicts.append(
+                ProtonationConflict(
+                    kind="unsatisfied_variable_contact",
+                    message=(
+                        f"Selected {_option_label(left)}/{_option_label(right)} "
+                        "do not satisfy "
+                        f"the variable contact {contact.site1} -- {contact.site2}"
+                    ),
+                    sites=(contact.site1, contact.site2),
+                )
+            )
+    return chosen
+
+
+def _apply_orientation_option(
+    residue: Residue,
+    option: _HydrogenBondStateOption,
+) -> None:
+    """Apply a selected coordinate permutation and invalidate dependent atoms."""
+    for left, right in option.coordinate_exchanges:
+        left_atom = residue.atoms[left]
+        right_atom = residue.atoms[right]
+        for attribute in ("coord", "occupancy", "bfactor"):
+            left_value = getattr(left_atom, attribute)
+            right_value = getattr(right_atom, attribute)
+            setattr(left_atom, attribute, right_value)
+            setattr(right_atom, attribute, left_value)
+    if not option.coordinate_exchanges:
+        return
+    for atom_name in option.rebuild_atoms:
+        atom = residue.atoms.get(atom_name)
+        if atom is None:
+            atom = residue.observed_extra_atoms.get(atom_name)
+        if atom is None:
+            continue
+        atom.coord = None
+        atom.built = False
+        atom.build_source = None
+        atom.build_rule_index = None
+
+
+def _partition_hbond_network_report(
+    report: ProtonationAssignmentReport,
+    orientation_report: OrientationAssignmentReport,
+    variables: Sequence[_StateVariable],
+) -> None:
+    """Keep legacy protonation reporting while exposing joint/orientation evidence."""
+    protonation_keys = {
+        _atom_key(item.residue, site_name)
+        for item in variables
+        if item.kind == "protonation"
+        for site_name in item.variable_sites
+    }
+    orientation_keys = {
+        _atom_key(item.residue, site_name)
+        for item in variables
+        if item.kind == "orientation"
+        for site_name in item.variable_sites
+    }
+
+    orientation_report.fixed_evidence = [
+        item for item in report.fixed_evidence if item.variable_site in orientation_keys
+    ]
+    orientation_report.variable_contacts = [
+        item
+        for item in report.variable_contacts
+        if item.site1 in orientation_keys or item.site2 in orientation_keys
+    ]
+    orientation_report.site_statuses = {
+        key: value
+        for key, value in report.site_statuses.items()
+        if key in orientation_keys
+    }
+    orientation_report.unevaluable_sites = [
+        item for item in report.unevaluable_sites if item[0] in orientation_keys
+    ]
+    # LittleChemik extension: requests that did not apply have no sites -
+    # keep them in their own report.
+    forced_orientation_conflicts = [
+        item for item in orientation_report.conflicts
+        if item.kind == "forced_orientation_not_applicable"
+    ]
+    forced_state_conflicts = [
+        item for item in report.conflicts if item.kind == "forced_state_not_applicable"
+    ]
+    orientation_report.conflicts = forced_orientation_conflicts + [
+        item
+        for item in report.conflicts
+        if any(site in orientation_keys for site in item.sites)
+    ]
+
+    report.fixed_evidence = [
+        item for item in report.fixed_evidence if item.variable_site in protonation_keys
+    ]
+    report.variable_contacts = [
+        item
+        for item in report.variable_contacts
+        if item.site1 in protonation_keys and item.site2 in protonation_keys
+    ]
+    report.ambivalent_contacts = [
+        item
+        for item in report.ambivalent_contacts
+        if item.variable_site in protonation_keys
+    ]
+    report.site_statuses = {
+        key: value
+        for key, value in report.site_statuses.items()
+        if key in protonation_keys
+    }
+    report.unevaluable_sites = [
+        item for item in report.unevaluable_sites if item[0] in protonation_keys
+    ]
+    report.conflicts = forced_state_conflicts + [
+        item
+        for item in report.conflicts
+        if item.sites and all(site in protonation_keys for site in item.sites)
+    ]
+
+
+def _assign_hydrogen_bond_network_states(
+    molecule: Molecule,
+    converting: Mapping[str, Any],
+    building_template: Mapping[str, Any],
+    state_data: Mapping[str, Any],
+    *,
+    pH: float = 7.0,
+    geometry_settings: Optional[HydrogenBondGeometrySettings] = None,
+    include_orientations: bool = True,
+    forced_states: Optional[Mapping[Tuple[str, int, str], str]] = None,
+    forced_orientations: Optional[Mapping[Tuple[str, int, str], str]] = None,
+    modify_myself: bool = False,
+) -> Tuple[Molecule, ProtonationAssignmentReport, OrientationAssignmentReport]:
+    """Jointly solve protonation/tautomer and coordinate-orientation choices.
+
+    LittleChemik extensions: ``forced_states`` maps a residue key to a state
+    name chosen by the user (e.g. ``"HIE"``; terminal variants match by base
+    name, ``"HIE"`` selects ``NHIE``), ``forced_orientations`` maps a residue
+    key to ``"as_is"`` or ``"flipped"`` (relative to the input coordinates).
+    A forced variable keeps only that option; its contacts still constrain
+    the rest of the network, contradicting evidence is reported as usual.
+    Requests that do not apply are reported as conflicts and ignored.
+    """
+    if not math.isfinite(pH):
+        raise ValueError("pH must be finite")
+    settings = geometry_settings or HydrogenBondGeometrySettings()
+    if settings.heavy_atom_cutoff_angstrom <= 0.0:
+        raise ValueError("heavy_atom_cutoff_angstrom must be positive")
+    if not 0.0 <= settings.max_donor_deviation_deg <= 180.0:
+        raise ValueError("max_donor_deviation_deg must be between 0 and 180")
+
+    target = molecule if modify_myself else copy.deepcopy(molecule)
+    report = ProtonationAssignmentReport(pH=float(pH))
+    orientation_report = OrientationAssignmentReport()
+    protonation_families, protonation_by_state = _load_protonation_families(
+        state_data, pH
+    )
+    for family in protonation_families:
+        family_names = tuple(option.resname for option in family.options)
+        report.family_defaults.append(
+            (family_names, family.default_option.resname)
+        )
+
+    original_identity: Dict[int, Tuple[Optional[str], str]] = {}
+    variables: List[_StateVariable] = []
+    variable_residue_ids: Set[int] = set()
+    for residue in _iter_residues(target):
+        family = protonation_by_state.get((residue.group or "", residue.ff_resname))
+        if family is None:
+            continue
+        index = len(variables)
+        original_identity[index] = (residue.group, residue.ff_resname)
+        assign_residue_identity(
+            residue,
+            family.default_option.mol_type,
+            family.default_option.resname,
+            converting,
+            assignment_source="protonation_ph_default",
+        )
+        variables.append(
+            _StateVariable(
+                index=index,
+                residue=residue,
+                kind="protonation",
+                options=family.options,
+                variable_sites=family.variable_sites,
+                default_option=family.default_option,
+                default_level_index=family.default_level_index,
+            )
+        )
+        variable_residue_ids.add(id(residue))
+
+    if include_orientations:
+        _orientation_families, orientation_by_state = _load_orientation_families(
+            state_data
+        )
+        for residue in _iter_residues(target):
+            family = orientation_by_state.get(
+                (residue.group or "", residue.ff_resname)
+            )
+            if family is None:
+                continue
+            if id(residue) in variable_residue_ids:
+                raise ValueError(
+                    f"Residue {_residue_key(residue)} is configured as both a "
+                    "protonation and orientation variable; coupled transformations "
+                    "within one residue require a combined family definition"
+                )
+            missing_coordinates = sorted(
+                atom_name
+                for pair in family.coordinate_exchanges
+                for atom_name in pair
+                if residue.atoms.get(atom_name) is None
+                or residue.atoms[atom_name].coord is None
+            )
+            if missing_coordinates:
+                message = (
+                    f"Cannot evaluate orientation of {_residue_key(residue)} "
+                    f"{residue.ff_resname}: missing coordinates for "
+                    f"{', '.join(missing_coordinates)}"
+                )
+                orientation_report.warnings.append(message)
+                orientation_report.assignments.append(
+                    OrientationResidueAssignment(
+                        residue_key=_residue_key(residue),
+                        mol_type=residue.group or "",
+                        resname=residue.ff_resname,
+                        orientation="unevaluable",
+                        flipped=False,
+                        evaluated=False,
+                        exchanged_atoms=family.coordinate_exchanges,
+                        reset_atoms=family.rebuild_atoms,
+                    )
+                )
+                continue
+            options = _orientation_options_for_residue(
+                residue, family, building_template
+            )
+            index = len(variables)
+            variables.append(
+                _StateVariable(
+                    index=index,
+                    residue=residue,
+                    kind="orientation",
+                    options=options,
+                    variable_sites=tuple(
+                        name for pair in family.coordinate_exchanges for name in pair
+                    ),
+                    default_option=options[0],
+                    default_level_index=0,
+                )
+            )
+            variable_residue_ids.add(id(residue))
+
+    forced = _forced_options(
+        variables, forced_states or {}, forced_orientations or {}, report, orientation_report
+    )
+    if not variables:
+        return target, report, orientation_report
+
+    fixed_requirements, variable_contacts = _analyze_hbond_constraints(
+        target,
+        building_template,
+        variables,
+        settings,
+        report,
+    )
+    chosen = _solve_hydrogen_bond_network_states(
+        variables,
         fixed_requirements,
         variable_contacts,
         report,
         forced,
     )
 
-    for item in titratables:
+    for item in variables:
         option = chosen[item.index]
-        old_mol_type, old_resname = original_identity[item.index]
-        assign_residue_identity(
-            item.residue,
-            option.mol_type,
-            option.resname,
-            converting,
-            assignment_source="protonation_hbond_assignment",
-        )
-        default = item.family.default_option
-        report.assignments.append(
-            ProtonationResidueAssignment(
-                residue_key=_residue_key(item.residue),
-                old_mol_type=old_mol_type,
-                old_resname=old_resname,
-                new_mol_type=option.mol_type,
-                new_resname=option.resname,
-                default_resname=default.resname,
-                is_default=(
-                    option.mol_type == default.mol_type
-                    and option.resname == default.resname
-                ),
-                is_forced=item.index in forced,
+        if item.kind == "protonation":
+            old_mol_type, old_resname = original_identity[item.index]
+            assign_residue_identity(
+                item.residue,
+                option.mol_type,
+                option.resname,
+                converting,
+                assignment_source="protonation_hbond_assignment",
             )
-        )
+            default = item.default_option
+            report.assignments.append(
+                ProtonationResidueAssignment(
+                    residue_key=_residue_key(item.residue),
+                    old_mol_type=old_mol_type,
+                    old_resname=old_resname,
+                    new_mol_type=option.mol_type,
+                    new_resname=option.resname,
+                    default_resname=default.resname,
+                    is_default=(option.option_id == default.option_id),
+                    is_forced=item.index in forced,
+                )
+            )
+        elif item.kind == "orientation":
+            _apply_orientation_option(item.residue, option)
+            item.residue.state_assignment_source = "hbond_network_orientation"
+            orientation_report.assignments.append(
+                OrientationResidueAssignment(
+                    residue_key=_residue_key(item.residue),
+                    mol_type=item.residue.group or "",
+                    resname=item.residue.ff_resname,
+                    orientation=option.option_id,
+                    flipped=bool(option.coordinate_exchanges),
+                    evaluated=True,
+                    exchanged_atoms=option.coordinate_exchanges,
+                    reset_atoms=(
+                        option.rebuild_atoms if option.coordinate_exchanges else ()
+                    ),
+                    is_forced=item.index in forced,
+                )
+            )
+        else:
+            raise RuntimeError(f"Unknown hydrogen-bond state kind {item.kind!r}")
 
+    _partition_hbond_network_report(report, orientation_report, variables)
     if report.conflicts:
         warning = (
             f"Protonation assignment completed with {len(report.conflicts)} "
@@ -1405,6 +1990,67 @@ def assign_protonation_states(
         )
         report.warnings.append(warning)
         target.warnings.append(warning)
+    if orientation_report.conflicts:
+        warning = (
+            "Orientation assignment completed with "
+            f"{len(orientation_report.conflicts)} conflicting or unsatisfied "
+            "hydrogen-bond constraints"
+        )
+        orientation_report.warnings.append(warning)
+    target.warnings.extend(orientation_report.warnings)
+    return target, report, orientation_report
+
+
+def assign_hydrogen_bond_network_states(
+    molecule: Molecule,
+    converting: Mapping[str, Any],
+    building_template: Mapping[str, Any],
+    state_data: Mapping[str, Any],
+    *,
+    pH: float = 7.0,
+    geometry_settings: Optional[HydrogenBondGeometrySettings] = None,
+    forced_states: Optional[Mapping[Tuple[str, int, str], str]] = None,
+    forced_orientations: Optional[Mapping[Tuple[str, int, str], str]] = None,
+    modify_myself: bool = False,
+) -> Tuple[Molecule, ProtonationAssignmentReport, OrientationAssignmentReport]:
+    """Public joint solver for protonation, tautomer, and orientation states."""
+    return _assign_hydrogen_bond_network_states(
+        molecule,
+        converting,
+        building_template,
+        state_data,
+        pH=pH,
+        geometry_settings=geometry_settings,
+        include_orientations=True,
+        forced_states=forced_states,
+        forced_orientations=forced_orientations,
+        modify_myself=modify_myself,
+    )
+
+
+def assign_protonation_states(
+    molecule: Molecule,
+    converting: Mapping[str, Any],
+    building_template: Mapping[str, Any],
+    state_data: Mapping[str, Any],
+    *,
+    pH: float = 7.0,
+    geometry_settings: Optional[HydrogenBondGeometrySettings] = None,
+    forced_states: Optional[Mapping[Tuple[str, int, str], str]] = None,
+    modify_myself: bool = False,
+) -> Tuple[Molecule, ProtonationAssignmentReport]:
+    """Backward-compatible protonation/tautomer-only assignment entry point."""
+    target, report, _orientation_report = _assign_hydrogen_bond_network_states(
+        molecule,
+        converting,
+        building_template,
+        state_data,
+        pH=pH,
+        geometry_settings=geometry_settings,
+        include_orientations=False,
+        forced_states=forced_states,
+        modify_myself=modify_myself,
+    )
     return target, report
 
 
@@ -1418,9 +2064,14 @@ def assign_molecule_states(
     covalent_cutoff_angstrom: float = 2.3,
     hydrogen_bond_settings: Optional[HydrogenBondGeometrySettings] = None,
     forced_protonation_states: Optional[Mapping[Tuple[str, int, str], str]] = None,
+    forced_orientations: Optional[Mapping[Tuple[str, int, str], str]] = None,
     modify_myself: bool = False,
 ) -> Tuple[Molecule, StateAssignmentReport]:
-    """Run covalent assignment followed by protonation/tautomer assignment."""
+    """Run covalent assignment, then joint H-bond-network state assignment.
+
+    ``forced_protonation_states`` / ``forced_orientations``: LittleChemik
+    user decisions, see _assign_hydrogen_bond_network_states.
+    """
     target = molecule if modify_myself else copy.deepcopy(molecule)
     target, covalent_report = assign_covalent_states(
         target,
@@ -1429,19 +2080,23 @@ def assign_molecule_states(
         cutoff_angstrom=covalent_cutoff_angstrom,
         modify_myself=True,
     )
-    target, protonation_report = assign_protonation_states(
-        target,
-        converting,
-        building_template,
-        state_data,
-        pH=pH,
-        geometry_settings=hydrogen_bond_settings,
-        forced_states=forced_protonation_states,
-        modify_myself=True,
+    target, protonation_report, orientation_report = (
+        assign_hydrogen_bond_network_states(
+            target,
+            converting,
+            building_template,
+            state_data,
+            pH=pH,
+            geometry_settings=hydrogen_bond_settings,
+            forced_states=forced_protonation_states,
+            forced_orientations=forced_orientations,
+            modify_myself=True,
+        )
     )
     return target, StateAssignmentReport(
         covalent=covalent_report,
         protonation=protonation_report,
+        orientation=orientation_report,
     )
 
 
@@ -1478,10 +2133,28 @@ def summarize_protonation_assignment(
     }
 
 
+def summarize_orientation_assignment(
+    report: OrientationAssignmentReport,
+) -> Dict[str, int]:
+    return {
+        "assigned_residues": len(report.assignments),
+        "evaluated_residues": sum(item.evaluated for item in report.assignments),
+        "flipped_residues": report.flipped_count,
+        "unevaluable_residues": sum(
+            not item.evaluated for item in report.assignments
+        ),
+        "fixed_evidence": len(report.fixed_evidence),
+        "variable_contacts": len(report.variable_contacts),
+        "conflicts": len(report.conflicts),
+        "warnings": len(report.warnings),
+    }
+
+
 def summarize_molecule_state_assignment(
     report: StateAssignmentReport,
 ) -> Dict[str, Dict[str, int]]:
     return {
         "covalent": summarize_covalent_assignment(report.covalent),
         "protonation": summarize_protonation_assignment(report.protonation),
+        "orientation": summarize_orientation_assignment(report.orientation),
     }
