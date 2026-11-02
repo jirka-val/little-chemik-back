@@ -7,28 +7,27 @@ Soubor je tabulka párů typů atomů se sloupci
 
 - NBfix (R, eps): upravené LJ parametry pro daný pár typů - patří do
   topologie (prmtop), ne do mdin. FF instance je má načtené v `ff.nbfix`
-  (FF_IDA.ff, parametr ghbfix_nbfix_file), do LENNARD_JONES_ACOEF/BCOEF
-  je zatím nepromítá create_AMBER_topology.
+  (FF_IDA.ff, parametr ghbfix_nbfix_file) a create_AMBER_topology je
+  promítá do LENNARD_JONES_ACOEF/BCOEF.
 - gHBfix (eta, rbeg, rend, c): korekce vodíkových vazeb, kterou simulace
   načítá jako restrainty - mdin dostane `nmropt=1`, blok `&wt` a
-  `DISANG=ghbfix.f` (render_amber_mdin), soubor ghbfix.f se exportuje
-  spolu s topologií.
+  `DISANG=ghbfix.f` (render_amber_mdin). Soubor ghbfix.f (bloky `&rst`
+  pro jednotlivé páry atomů) zapisuje create_AMBER_topology
+  (write_ghbfix_file) spolu s topologií.
 
-Formát ghbfix.f zatím není ověřený: obsahuje nenulové gHBfix řádky ve
-stejném sloupcovém formátu jako FF z IDA. Ke konzultaci, viz plán.
+Tady se jen zjišťuje, jestli FF nějaké korekce má (has_ghbfix/has_nbfix
+pro FF endpoint a report).
 """
 
 import base64
 import logging
 from functools import lru_cache
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple
+from typing import Any, Dict, List, NamedTuple, Tuple
 
 logger = logging.getLogger(__name__)
 
 GHBFIX_FILENAME = "ghbfix.f"
 GHBFIX_LISTOUT = "ghbfix.out"
-
-_HEADER = ";Type1 Type2   R       eps      eta      rbeg     rend     c"
 
 
 class CorrectionRows(NamedTuple):
@@ -71,22 +70,3 @@ def correction_flags(ff_data: Dict[str, Any]) -> Dict[str, bool]:
     """`has_ghbfix`/`has_nbfix` pro odpověď FF endpointu."""
     rows = correction_rows(ff_data)
     return {"has_ghbfix": bool(rows.ghbfix), "has_nbfix": bool(rows.nbfix)}
-
-
-def render_ghbfix_file(ff_selections: Dict[str, Any]) -> Optional[str]:
-    """Obsah ghbfix.f pro vybrané FF, nebo None, když žádný gHBfix nemá."""
-    sections = []
-    for ff_data in ff_selections.values():
-        rows = correction_rows(ff_data)
-        if not rows.ghbfix:
-            continue
-        name = ff_data.get("display_name") or ff_data.get("ff_name") or "unknown_ff"
-        sections.append(f"; gHBfix terms of {name} ({len(rows.ghbfix)} type pairs)\n" + "\n".join(rows.ghbfix))
-    if not sections:
-        return None
-    return (
-        "; gHBfix restraint definitions exported by FORGE.\n"
-        "; Non-zero gHBfix rows of the selected force fields, in the column\n"
-        "; format of the force field's ghbfix_nbfix file.\n"
-        f"{_HEADER}\n" + "\n".join(sections) + "\n"
-    )

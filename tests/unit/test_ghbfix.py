@@ -1,6 +1,6 @@
 """
-gHBfix/NBfix řádky z `ghbfix_nbfix_ff_file` a jejich promítnutí do mdin a
-ghbfix.f (app/services/ghbfix.py, simulation.render_amber_mdin).
+gHBfix/NBfix řádky z `ghbfix_nbfix_ff_file` a jejich promítnutí do
+mdin (app/services/ghbfix.py, simulation.render_amber_mdin).
 """
 
 import base64
@@ -8,7 +8,7 @@ import base64
 import pytest
 
 from app.api.v1.endpoints.simulation import AmberMdinRequest, render_amber_mdin
-from app.services.ghbfix import correction_flags, correction_rows, render_ghbfix_file
+from app.services.ghbfix import correction_flags, correction_rows
 
 pytestmark = pytest.mark.unit
 
@@ -34,14 +34,6 @@ def test_all_zero_table_and_missing_file():
     zeros = _ff("FF14SB", ";header\nRAC2  RAC2  0 0 0 0 0 0\n")
     assert correction_flags(zeros) == {"has_ghbfix": False, "has_nbfix": False}
     assert correction_flags({"ff_name": "none"}) == {"has_ghbfix": False, "has_nbfix": False}
-
-
-def test_ghbfix_file_lists_only_ghbfix_rows():
-    content = render_ghbfix_file({"R": _ff("OL3CP_gHBfix21"), "P": _ff("FF14SB", "RAC2 RAC2 0 0 0 0 0 0\n")})
-    assert "RAH6  RAN1" in content
-    assert "RBO3" not in content
-    assert "OL3CP_gHBfix21" in content and "FF14SB" not in content
-    assert render_ghbfix_file({"P": _ff("FF14SB", "RAC2 RAC2 0 0 0 0 0 0\n")}) is None
 
 
 def test_mdin_ghbfix_block():

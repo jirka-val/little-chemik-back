@@ -8,9 +8,8 @@ from app.services.pdb_service import PDBService, ion_group_for_resname, parse_pd
 from app.services.forcefield_service import ForceFieldService
 from app.services.structure.groups import ION_GROUPS, drop_unused_ion_groups
 from app.services.topology_patches import apply_topology_patches
-from app.services.ghbfix import GHBFIX_FILENAME, correction_flags, render_ghbfix_file
+from app.services.ghbfix import GHBFIX_FILENAME, correction_flags
 from app.services.report import records as report_records
-from app.services.hmr import apply_hmr, DEFAULT_HMR_H_MASS
 from app.utils.adams4sims_processing_library.utils import AMBER_topology
 from app.utils.adams4sims_processing_library import FF_IDA
 from app.workspaces.manager import WorkspaceManager
@@ -111,7 +110,7 @@ class TopologyService:
         """
         Main pipeline for generating AMBER topology (.prmtop) and updated PDB from a PDB file.
 
-        hmr=True přerozdělí hmoty vodíků (viz app/services/hmr.py) - volí se
+        hmr=True přerozdělí hmoty vodíků (create_AMBER_topology, HMR=True) - volí se
         v Simulation panelu, protože se týká timestepu simulace, ale musí se
         zapsat už do topologie.
         """
@@ -225,7 +224,12 @@ class TopologyService:
 
             # 6. Výpočet AMBER topologie z opravených dat
             logger.info("Running AMBER topology calculation...")
-            topology_data = AMBER_topology.create_AMBER_topology(mol)
+            ghbfix_path = workspace_dir / GHBFIX_FILENAME
+            if ghbfix_path.exists():
+                ghbfix_path.unlink()
+            topology_data = AMBER_topology.create_AMBER_topology(
+                mol, HMR=hmr, ghbfix_file=ghbfix_path,
+            )
             pdb_atoms = sum(
                 1 for line in fixed_pdb_content.splitlines() if line.startswith(("ATOM", "HETATM"))
             )
@@ -236,8 +240,7 @@ class TopologyService:
                     "some PDB records were not recognised"
                 )
             if hmr:
-                count = apply_hmr(topology_data)
-                logger.info(f"HMR applied: {count} hydrogens repartitioned to {DEFAULT_HMR_H_MASS} Da")
+                logger.info("HMR applied to non-water hydrogens: target mass 3 Da")
 
             # 7. Uložení souborů
             # A) Uložení .prmtop (Topologie)
@@ -256,13 +259,8 @@ class TopologyService:
             self._generate_amber_crd(fixed_pdb_content, crd_path)
 
             # D) gHBfix restrainty vybraných FF (mdin na ně odkazuje přes DISANG)
-            ghbfix_path = workspace_dir / GHBFIX_FILENAME
-            ghbfix_content = render_ghbfix_file(ff_selections)
-            if ghbfix_content:
-                ghbfix_path.write_text(ghbfix_content, encoding="utf-8")
+            if ghbfix_path.exists():
                 logger.info(f"gHBfix restraints saved to {ghbfix_path}")
-            elif ghbfix_path.exists():
-                ghbfix_path.unlink()
 
             report_records.save_record(workspace_id, report_records.TOPOLOGY, {
                 "hmr": hmr,

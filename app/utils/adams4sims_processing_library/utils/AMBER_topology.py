@@ -3,6 +3,7 @@
 import re
 import math
 import bisect
+from builtins import id as object_id
 from itertools import combinations
 from collections import deque
 from datetime import datetime
@@ -785,7 +786,73 @@ def correct_VdWmatrix_by_molecule_types(topology):
     return True
 
 
-def create_AMBER_topology(mol):
+def write_ghbfix_file(mol, file_name="ghbfix.f", gHBfix_exceptions=True):
+    """Write two AMBER &rst terms per atom pair; return the pair count.
+
+    Input eta is kcal/mol, rbeg/rend are Angstroms, c is dimensionless. The
+    published convention is E(short)=0, E(long)=eta (positive stabilizes
+    the short contact). Output uses kcal/mol and Angstroms.
+    Atom numbering follows the residue/unit order in create_AMBER_topology.
+    """
+    base_types = set("RGN9 RGN7 RGN3 RGN2 RGH2 RGN1 RGH1 RGO6 "
+                     "RAN9 RAN7 RAN3 RAN1 RAN6 RAH6 RCN1 RCO2 RCN3 "
+                     "RCN4 RCH4 RUN1 RUO2 RUN3 RUH3 RUO4".split())
+    base_types.update('D' + t[1:].replace('U', 'T') for t in tuple(base_types))
+    vicinal_pairs = {frozenset(pair) for pair in (
+        ('RBO2', 'RBO3'), ('RBO2', 'RBo3'),
+        ('RBh2', 'RBO3'), ('RBh2', 'RBo3'), ('RBO2', 'RBh3'))}
+    atoms_by_ff = {}
+    atom_number = 0
+    for residue_index, res in enumerate(mol['residues']):
+        ff = mol['force_field_data'][res['mol_type']]
+        _, atoms = atoms_by_ff.setdefault(object_id(ff), (ff, {}))
+        for atom_type in ff.units[res['resn']]['atoms']['type']:
+            atom_number += 1
+            atoms.setdefault(atom_type, []).append((atom_number, residue_index))
+
+    # Validate active definitions before opening the destination.
+    terms = []
+    for ff, atoms in atoms_by_ff.values():
+        for (type1, type2), values in getattr(ff, 'ghbfix', {}).items():
+            eta, rbeg, rend, c = values
+            if eta == 0 or type1 not in atoms or type2 not in atoms:
+                continue
+            if not all(math.isfinite(v) for v in values) or not (0 <= rbeg < rend and 0 < c < 1):
+                raise ValueError(f"Invalid gHBfix parameters for {type1}-{type2}: {values}")
+            beg, end, energy = rbeg, rend, eta
+            width = end - beg
+            # The linear tails cancel above end. Their sum reproduces the
+            # published piecewise quadratic potential, including its sign.
+            k_end = -energy / ((1 - c) * width ** 2)
+            k_mid = -k_end / c
+            terms.append((type1, type2, atoms[type1], atoms[type2],
+                          beg, end, beg + c * width, k_end, k_mid))
+
+    count = 0
+    with open(file_name, 'w', encoding='utf-8') as output:
+        for type1, type2, atoms1, atoms2, beg, end, mid, k_end, k_mid in terms:
+            for a, residue_a in atoms1:
+                for b, residue_b in atoms2:
+                    if a == b or (type1 == type2 and a > b):
+                        continue
+                    if gHBfix_exceptions and residue_a == residue_b:
+                        if (type1 in base_types and type2 in base_types
+                                or frozenset((type1, type2)) in vicinal_pairs):
+                            continue
+                    i, j = sorted((a, b))
+                    for r4, rk3 in ((end, k_end), (mid, k_mid)):
+                        output.write(
+                            f"&rst iat={i}, {j},\n"
+                            "iresid=0,nstep1=0,nstep2=0,\n"
+                            "irstyp=0,ifvari=0,ninc=0,imult=0,ir6=0,ifntyp=0,ialtd=0,\n"
+                            f"r1=0.0, r2={beg:.12g}, r3={beg:.12g}, r4={r4:.12g}, "
+                            f"rk2=0.0, rk3={rk3:.12g},\n/\n")
+                    count += 1
+    return count
+
+
+def create_AMBER_topology(mol, HMR=False, gHBfix_exceptions=True, *, ghbfix_file="ghbfix.f"):
+    """Build topology, optionally repartition non-water H to 3 Da, and export gHBfix."""
     # initial setting
     top = {}
     bondii_screen_by_Z = {
@@ -885,6 +952,40 @@ def create_AMBER_topology(mol):
     iptres = 0
     solute = True
 
+    # Identify genuine pair overrides in the input units (sigma: nm, epsilon: kJ/mol).
+    # Scope names by FF instance: aliases may reference the same instance, while
+    # unrelated force fields may reuse the same atom type names.
+    used_ff = {}
+    for res in mol['residues']:
+        ff = mol['force_field_data'][res['mol_type']]
+        entry = used_ff.setdefault(object_id(ff), (ff, {}))
+        atoms = ff.units[res['resn']]['atoms']
+        for atom_type, sigma, epsilon in zip(atoms['type'], atoms['R'], atoms['eps']):
+            entry[1].setdefault(atom_type, set()).add((sigma, epsilon))
+
+    nbfix_terms = []
+    nbfix_types = set()
+    for ff_id, (ff, parameters) in used_ff.items():
+        for (type1, type2), (sigma, epsilon) in getattr(ff, 'nbfix', {}).items():
+            if (sigma == 0 and epsilon == 0) or type1 not in parameters or type2 not in parameters:
+                continue
+            # Six decimal places are used in the pair table. Standard pairs
+            # rounded to that precision should retain the original calculation.
+            # CHYBA?: porovnává NBfix (v A a kcal/mol) s atomovými
+            # sigma/eps v nm a kJ/mol, takže nevyjde nikdy - viz komentář u
+            # zápisu NBfixu do LENNARD_JONES_ACOEF/BCOEF níže.
+            is_standard = all(
+                math.isclose(sigma, (s1 + s2) / 2, rel_tol=0.0, abs_tol=1e-6)
+                and math.isclose(epsilon, math.sqrt(e1 * e2), rel_tol=0.0, abs_tol=1e-6)
+                for s1, e1 in parameters[type1] for s2, e2 in parameters[type2]
+            )
+            if not is_standard:
+                nbfix_terms.append((ff_id, type1, type2, sigma, epsilon))
+                nbfix_types.update(((ff_id, type1), (ff_id, type2)))
+
+    vdw_keys = {}
+    type_vdw_indices = {}
+
     # atomic parameters
     for res in mol['residues']:
         res_name = res['resn']
@@ -910,14 +1011,20 @@ def create_AMBER_topology(mol):
                 hw_type = 1
             else:
                 hw_type = 0
-            if (R, eps, hw_type) not in VdW:
+            scoped_type = (object_id(force_field), type)
+            # Equal atomic LJ parameters do not imply equal pair interactions.
+            vdw_key = (R, eps, hw_type, scoped_type if scoped_type in nbfix_types else None)
+            if vdw_key not in vdw_keys:
+                vdw_keys[vdw_key] = len(VdW)
                 VdW.append((R, eps, hw_type))
+            vdw_index = vdw_keys[vdw_key]
+            type_vdw_indices.setdefault(scoped_type, set()).add(vdw_index)
             mol_types.append(mol_type)
             top['ATOM_NAME'].append(name)
             top['CHARGE'].append(charge * 18.2223)
             top['ATOMIC_NUMBER'].append(at_num)
             top['MASS'].append(mass)
-            top['ATOM_TYPE_INDEX'].append(VdW.index((R, eps, hw_type)) + 1)
+            top['ATOM_TYPE_INDEX'].append(vdw_index + 1)
             new_types.append(type)
             top['AMBER_ATOM_TYPE'].append(force_field.types[type])
             if force_field.types[type] not in old_types:
@@ -965,6 +1072,12 @@ def create_AMBER_topology(mol):
         previous_subsum = natom
         natom += len(unit['atoms']['name'])
 
+    # End-group 1-4 interactions must be emitted once per atom pair, and
+    # never for atoms that are also connected by one or two bonds. The full
+    # EXCLUDED_ATOMS_LIST below includes 1-4 pairs too, so cannot be used here.
+    bonded_neighbors = {atom: set(neighbors) for atom, neighbors in connectivity.items()}
+    counted_14_pairs = set()
+
     # bonded parameters
     for b, neighbors in connectivity.items():
         if mol_types[b].startswith('W'):
@@ -989,7 +1102,10 @@ def create_AMBER_topology(mol):
                               (new_types[d], new_types[c], new_types[b], new_types[a]))
                     # print(force_field.b['dihedraltypes'][key])
                     dihedral_p = force_field.b['dihedraltypes'][key]
-                    pn_fact = 1
+                    end_pair = tuple(sorted((a, d)))
+                    short_path = (d in bonded_neighbors[a]
+                                  or not bonded_neighbors[a].isdisjoint(bonded_neighbors[d]))
+                    pn_fact = -1 if short_path or end_pair in counted_14_pairs else 1
                     for dihe_term in dihedral_p:
                         if abs(dihe_term[0]) < 1e-7:
                             continue
@@ -1001,6 +1117,8 @@ def create_AMBER_topology(mol):
                         else:
                             top['DIHEDRALS_WITHOUT_HYDROGEN'].extend(
                                 [3 * a, 3 * b, 3 * c * pn_fact, 3 * d, dihedral_parms.index(dihe_term)])
+                        if pn_fact == 1:
+                            counted_14_pairs.add(end_pair)
                         pn_fact = -1
     for ic0, neighbors in connectivity.items():
         if mol_types[ic0].startswith('W'):
@@ -1140,6 +1258,41 @@ def create_AMBER_topology(mol):
                     top['LENNARD_JONES_ACOEF'].append(A)
                     top['LENNARD_JONES_BCOEF'].append(B)
 
+    # Pair sigma is converted to the full Rmin, unlike atomic sigma above,
+    # which is converted to Rmin/2. Both symmetric entries share one LJ slot.
+
+    # CHYBA?: hodnoty NBfixu z IDA (ghbfix_nbfix_*.itp) nejsou
+    # sigma v nm a eps v kJ/mol, ale rovnou AMBER Rmin v A a eps v kcal/mol.
+
+    # Příklad OL3CP_gHBfix21_NBfix-0BPh, pár RAH2-RBO3:
+    #   standardní pár z atomových parametrů: Rmin = 3.1308 A, eps = 0.0505 kcal/mol
+    #   řádek NBfixu:                         R    = 2.8808,   eps = 0.0505
+    #   -> přesně standard - 0.25 A a stejné eps, tedy A a kcal/mol.
+
+    # Přepočet níže z toho dělá Rmin = 2.8808 * 2^(1/6) * 10 = 32.3 A a
+    # eps = 0.0121 kcal/mol - páry báze-H / O3', O5' se obrovsky odpuzují.
+
+    # Oprava (pokud data v IDA zůstanou v A a kcal/mol):
+    #   R_pair = sigma
+    #   eps_pair = epsilon
+
+    # a stejně tak upravit test is_standard výše (porovnávat s
+    # (s1 + s2) / 2 * 2 ** (1 / 6) * 10 a math.sqrt(e1 * e2) / 4.184).
+
+    # Hlídá to tests/unit/test_amber_topology_corrections.py (xfail test NBfixu).
+    for ff_id, type1, type2, sigma, epsilon in nbfix_terms:
+        R_pair = sigma * (2 ** (1 / 6)) * 10
+        eps_pair = epsilon / 4.184
+        A = eps_pair * R_pair ** 12
+        B = 2 * eps_pair * R_pair ** 6
+        for i in type_vdw_indices[(ff_id, type1)]:
+            for j in type_vdw_indices[(ff_id, type2)]:
+                pair_index = top['NONBONDED_PARM_INDEX'][i * VdW_types + j]
+                if pair_index <= 0:
+                    raise ValueError("NBFIX for the special HW-HW interaction is not supported")
+                top['LENNARD_JONES_ACOEF'][pair_index - 1] = A
+                top['LENNARD_JONES_BCOEF'][pair_index - 1] = B
+
     # tree chain classification
     for at in range(natom):
         neighbors = connectivity.get(at, [])
@@ -1203,6 +1356,52 @@ def create_AMBER_topology(mol):
     top['POINTERS'][28] = nmxrs
     top['POINTERS'][29] = 0
     top['POINTERS'][30] = numextra
+
+    if HMR:
+        # Work on a copy so invalid connectivity/masses cannot leave a partial
+        # repartition. Use the actual initial H mass to conserve total mass.
+        masses = top['MASS'].copy()
+        for hydrogen, atomic_number in enumerate(top['ATOMIC_NUMBER']):
+            if atomic_number != 1 or mol_types[hydrogen].startswith('W'):
+                continue
+            heavy_neighbors = {neighbor for neighbor in connectivity.get(hydrogen, [])
+                               if top['ATOMIC_NUMBER'][neighbor] > 1}
+            if len(heavy_neighbors) != 1:
+                raise ValueError(
+                    f"HMR requires exactly one bonded heavy atom for hydrogen {hydrogen + 1}")
+            heavy = next(iter(heavy_neighbors))
+            # CHYBA?: cílová hmota vodíku je tu natvrdo
+            
+
+            # 3.0 Da, zatímco frontend (simulation-panel.ts) uvádí
+            # 3.024 Da. Standardní HMR (ParmEd HMassRepartition, AMBER
+
+            # workflow) používá 3.024 Da = 3 x 1.008, tj. hmotnost H se přesně
+            # ztrojnásobí a na těžký atom se převede přesně 2 x 1.008 =
+
+            # 2.016 Da (u 3.0 Da je to "kulatých" 1.992 Da). Pro krok 4 fs
+
+            # funguje obojí, ale 3.024 odpovídá ParmEdu a jde citovat.
+
+            # Navržený fix: místo 3.0 na dvou řádcích níže použít 3.024
+            # (ideálně jako konstantu HMR_HYDROGEN_MASS = 3.024):
+            #     transfer = 3.024 - masses[hydrogen]
+            #     masses[hydrogen] = 3.024
+            transfer = 3.0 - masses[hydrogen]
+            masses[hydrogen] = 3.0
+            masses[heavy] -= transfer
+        if any(not math.isfinite(mass) or mass <= 0
+               for mass, atomic_number in zip(masses, top['ATOMIC_NUMBER'])
+               if atomic_number > 0):
+            raise ValueError("HMR would produce a non-positive or non-finite atomic mass")
+        if not math.isclose(math.fsum(masses), math.fsum(top['MASS']), rel_tol=1e-12, abs_tol=1e-10):
+            raise ValueError("HMR failed to conserve total mass")
+        top['MASS'] = masses
+
+    if any(values[0] != 0
+           for ff, _ in used_ff.values()
+           for values in getattr(ff, 'ghbfix', {}).values()):
+        write_ghbfix_file(mol, ghbfix_file, gHBfix_exceptions)
 
     return top
 
