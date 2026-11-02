@@ -720,6 +720,10 @@
       "maxLength": 500,
       "type": "string"
      },
+     "heat_pressure": {
+      "default": false,
+      "type": "boolean"
+     },
      "kind": {
       "enum": [
        "minimization",
@@ -733,6 +737,18 @@
       "maximum": 1000000.0,
       "minimum": 1.0,
       "type": "number"
+     },
+     "log_interval_ps": {
+      "anyOf": [
+       {
+        "exclusiveMinimum": 0.0,
+        "maximum": 1000000.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ]
      },
      "maxcyc": {
       "default": 5000,
@@ -805,6 +821,18 @@
        {
         "maximum": 1000.0,
         "minimum": 0.0,
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "traj_interval_ps": {
+      "anyOf": [
+       {
+        "exclusiveMinimum": 0.0,
+        "maximum": 1000000.0,
         "type": "number"
        },
        {

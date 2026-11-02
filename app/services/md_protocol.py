@@ -19,7 +19,7 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 from app.api.v1.endpoints.simulation import (
-    AmberMdinRequest, _NTC_NTF, _fmt, _mdin_filename, ghbfix_wt_lines, render_amber_mdin,
+    AmberMdinRequest, _BAROSTAT, _NTC_NTF, _fmt, _mdin_filename, ghbfix_wt_lines, render_amber_mdin,
 )
 from app.core.exceptions import BadRequestError
 from app.workspaces.manager import workspace_manager
@@ -112,10 +112,15 @@ def _minimization(step: ProtocolStep, req: AmberMdinRequest, mask: Optional[str]
              "  imin=1,",
              f"  maxcyc={step.maxcyc}, ncyc={ncyc},",
              f"  ntb=1, cut={_fmt(req.cut)},",
-             "  ntpr=100,",
+             "  ntpr=10,",
              *_restraint_line(step, mask),
              "/"]
     return "\n".join(lines) + "\n"
+
+
+def _interval_steps(interval_ps: Optional[float], dt_ps: float, default: int) -> int:
+    """Interval výpisu v ps -> počet kroků integrace (aspoň 1); None = výchozí."""
+    return default if interval_ps is None else max(1, round(interval_ps / dt_ps))
 
 
 def _temperature_segments(step: ProtocolStep, target: float, nstlim: int,
@@ -148,20 +153,31 @@ def _heating(step: ProtocolStep, req: AmberMdinRequest, mask: Optional[str], con
     nstlim = max(1, round(step.length_ps / dt_ps))
     ntc = _NTC_NTF[req.constraints]
     segments = _temperature_segments(step, target, nstlim, dt_ps)
-    title = (f"Heating {step.name}: {step.temp_start:g} -> {target:g} K, NVT, {step.length_ps:g} ps"
+    # NPT: barostat z produkce, jinak Monte Carlo (jako u ekvilibrace)
+    barostat = None
+    if step.heat_pressure:
+        barostat = req.barostat if req.barostat not in (None, "none") else "monte-carlo"
+    box_line = (f"  ntb=2, ntp=1, cut={_fmt(req.cut)}, barostat={_BAROSTAT[barostat]}, "
+                f"pres0={_fmt(req.pres0)}, taup={_fmt(req.taup)},"
+                if barostat else f"  ntb=1, ntp=0, cut={_fmt(req.cut)},")
+    default_interval = max(1, nstlim // 100)
+    ntpr = _interval_steps(step.log_interval_ps, dt_ps, default_interval)
+    ntwx = _interval_steps(step.traj_interval_ps, dt_ps, default_interval)
+    title = (f"Heating {step.name}: {step.temp_start:g} -> {target:g} K, {'NPT' if barostat else 'NVT'}, "
+             f"{step.length_ps:g} ps"
              + (f", {len(segments)} temperature segments" if step.temp_points else "")
              + (", restrained" if mask else ""))
     lines = [title, "&cntrl",
              # po MD kroku navazuje na jeho rychlosti, jinak je přiřadí podle temp_start
              "  imin=0, irest=1, ntx=5," if continues else "  imin=0, irest=0, ntx=1,",
              f"  nstlim={nstlim}, dt={_fmt(dt_ps)},",
-             f"  ntb=1, ntp=0, cut={_fmt(req.cut)},",
+             box_line,
              f"  ntc={ntc}, ntf={ntc}, tol={_fmt(req.tol)},",
              ("  ntt=3, " if continues else f"  ntt=3, tempi={_fmt(step.temp_start)}, ")
              + f"temp0={_fmt(target)}, "
              f"gamma_ln={_fmt(max(req.gamma_ln, 1.0))}, ig=-1,",
              *_restraint_line(step, mask),
-             f"  ntpr={max(1, nstlim // 100)}, ntwx={max(1, nstlim // 100)}, ntwr={nstlim},",
+             f"  ntpr={ntpr}, ntwx={ntwx}, ntwr={nstlim},",
              f"  ioutfm={req.ioutfm}, ntxo={req.ntxo},",
              "  nmropt=1,",
              "/"]
@@ -187,6 +203,9 @@ def _equilibration(step: ProtocolStep, req: AmberMdinRequest, mask: Optional[str
         # navazuje na rychlosti předchozího MD kroku, po minimalizaci začíná znovu
         "protocol": continues, "run_type": "continue" if continues else "new",
         "ensemble": "NPT" if step.pressure else "NVT", "thermostat": thermostat, "barostat": barostat,
+        # vlastní intervaly kroku, jinak produkční
+        **({"log_interval_ps": step.log_interval_ps} if step.log_interval_ps is not None else {}),
+        **({"traj_interval_ps": step.traj_interval_ps} if step.traj_interval_ps is not None else {}),
     })
     lines = render_amber_mdin(equil).split("\n")
     lines[0] = (f"Equilibration {step.name}: {'NPT' if step.pressure else 'NVT'}, {temp:g} K, {step.length_ps:g} ps"

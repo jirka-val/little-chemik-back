@@ -250,3 +250,55 @@ def test_schedule_is_described_in_the_report():
                         temp_points=_schedule((0, 10.0), (20, 50.0), (90, 298.16), (100, 298.16)))
     text = describe_step(step, 298.16)
     assert "from 10 K to 298.16 K over 100 ps" in text and "50 K at 20 ps" in text
+
+
+# ---------------------------------------------------------------------------
+# Ohřev v NPT a intervaly výpisu/trajektorie v ps (referenční vstupy skupiny)
+# ---------------------------------------------------------------------------
+
+def _files(steps, **req):
+    return dict(render_protocol(AmberMdinRequest(protocol=True, steps=steps, **req), None))
+
+
+def test_heating_in_npt_uses_the_production_barostat():
+    step = ProtocolStep(name="heat", kind="heating", heat_pressure=True, length_ps=500.0,
+                        temp_points=_schedule((0, 10.0), (400, 298.16), (500, 298.16)))
+    heat = _files([step], temp0=298.16, ensemble="NPT", barostat="monte-carlo", pres0=1.0, taup=2.0)["heat.in"]
+    assert "ntb=2, ntp=1, cut=10.0, barostat=2, pres0=1.0, taup=2.0," in heat
+    assert "NPT" in heat.splitlines()[0] and "nstlim=250000," in heat
+    # bez barostatu v produkci Monte Carlo (jako u ekvilibrace)
+    heat = _files([step], temp0=298.16, ensemble="NVT")["heat.in"]
+    assert "barostat=2," in heat
+
+
+def test_heating_is_nvt_by_default():
+    heat = _files([ProtocolStep(name="heat", kind="heating", length_ps=100.0)], temp0=300.0)["heat.in"]
+    assert "ntb=1, ntp=0," in heat and "barostat" not in heat
+
+
+def test_output_intervals_in_ps():
+    steps = [
+        ProtocolStep(name="heat", kind="heating", length_ps=100.0, log_interval_ps=1.0, traj_interval_ps=5.0),
+        ProtocolStep(name="eq", kind="equilibration", length_ps=100.0, pressure=False,
+                     log_interval_ps=2.0, traj_interval_ps=10.0),
+    ]
+    files = _files(steps, temp0=300.0, dt_fs=2.0)
+    assert "ntpr=500, ntwx=2500," in files["heat.in"]          # 1 ps a 5 ps po 2 fs
+    assert "ntpr=1000, ntwx=5000," in files["eq.in"]
+    # bez vlastních intervalů: ohřev 1 % kroku, ekvilibrace podle produkce
+    files = _files([ProtocolStep(name="heat", kind="heating", length_ps=100.0),
+                    ProtocolStep(name="eq", kind="equilibration", length_ps=100.0)],
+                   temp0=300.0, log_interval_ps=4.0, traj_interval_ps=8.0)
+    assert "ntpr=500, ntwx=500," in files["heat.in"]
+    assert "ntpr=2000, ntwx=4000," in files["eq.in"]
+
+
+def test_output_interval_longer_than_the_step_is_rejected():
+    with pytest.raises(ValidationError, match="log interval"):
+        ProtocolStep(name="eq", kind="equilibration", length_ps=10.0, log_interval_ps=20.0)
+
+
+def test_minimization_prints_every_10_cycles():
+    files = _files([ProtocolStep(name="mini", kind="minimization"),
+                    ProtocolStep(name="heat", kind="heating", length_ps=10.0)], temp0=300.0)
+    assert "ntpr=10," in files["mini.in"]

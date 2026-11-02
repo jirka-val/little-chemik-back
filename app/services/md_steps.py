@@ -64,6 +64,13 @@ class ProtocolStep(BaseModel):
     # kroku a pak držení. Když je zadaný, temp_start/temp_target se z něj odvodí.
     temp_points: Optional[List[TempPoint]] = Field(None, max_length=MAX_TEMP_POINTS)
     pressure: bool = True                            # ekvilibrace: NPT (jinak NVT)
+    # ohřev: NPT s barostatem z produkce (jinak NVT); samostatné pole, ať se
+    # dřív uložené ohřevy s pressure=True (výchozí hodnota) nezmění
+    heat_pressure: bool = False
+    # MD kroky: intervaly výpisu (ntpr) a trajektorie (ntwx) v ps;
+    # None = ohřev 1 % kroku, ekvilibrace podle produkce
+    log_interval_ps: Optional[float] = Field(None, gt=0, le=1_000_000)
+    traj_interval_ps: Optional[float] = Field(None, gt=0, le=1_000_000)
     # další položky &cntrl ("drms=0.01, dx0=0.01") - parametry, které model nemá
     extra: str = Field("", max_length=500)
 
@@ -78,6 +85,9 @@ class ProtocolStep(BaseModel):
         extra_items(self.extra, self.name)
         if self.temp_points is not None:
             self._check_temp_points()
+        for label, value in (("log", self.log_interval_ps), ("trajectory", self.traj_interval_ps)):
+            if value is not None and self.kind in _MD_KINDS and value > self.length_ps:
+                raise ValueError(f"step {self.name}: the {label} interval must not exceed the step length")
         return self
 
     def _check_temp_points(self):
@@ -188,7 +198,8 @@ def describe_step(step: ProtocolStep, temp0: Optional[float]) -> str:
         if step.temp_points and len(step.temp_points) > 2:
             listed = ", ".join(f"{_g(float(p.temp))} K at {_g(float(p.time_ps))} ps" for p in step.temp_points)
             schedule = f" along a piecewise-linear temperature schedule ({listed})"
-        return (f"heating from {_g(step.temp_start)} K{to} over {_length(step.length_ps)}{schedule} "
+        ensemble = " at constant pressure (NPT)" if step.heat_pressure else ""
+        return (f"heating from {_g(step.temp_start)} K{to} over {_length(step.length_ps)}{ensemble}{schedule} "
                 f"({_restraint_text(step)})")
     ensemble = "NPT" if step.pressure else "NVT"
     at = f" at {_g(target)} K" if target is not None else ""
