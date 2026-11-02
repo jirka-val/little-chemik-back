@@ -189,3 +189,64 @@ def test_protocol_ghbfix_in_md_steps_only():
     assert "DISANG" not in files["mini0.in"]
     # bez PDB aspoň všechno kromě vody
     assert "restraintmask='!:WAT,HOH,SOL & !@H='" in files["mini0.in"]
+
+
+# ---------------------------------------------------------------------------
+# Teplotní průběh ohřevu (temp_points)
+# ---------------------------------------------------------------------------
+
+def _schedule(*points):
+    return [{"time_ps": t, "temp": temp} for t, temp in points]
+
+
+def test_heating_schedule_renders_one_wt_block_per_segment():
+    # průběh z referenčního vstupu skupiny: 10 -> 50 K, 50 -> 298.16 K, držení; 100 ps po 2 fs
+    step = ProtocolStep(name="heat1", kind="heating", length_ps=100.0,
+                        temp_points=_schedule((0, 10.0), (20, 50.0), (90, 298.16), (100, 298.16)))
+    assert (step.temp_start, step.temp_target) == (10.0, 298.16)
+    heat = dict(render_protocol(AmberMdinRequest(protocol=True, steps=[step], temp0=298.16), None))["heat1.in"]
+    assert "nstlim=50000," in heat
+    assert "tempi=10.0, temp0=298.16" in heat
+    assert "type='TEMP0', istep1=0, istep2=10000, value1=10.0, value2=50.0," in heat
+    assert "type='TEMP0', istep1=10001, istep2=45000, value1=50.0, value2=298.16," in heat
+    assert "type='TEMP0', istep1=45001, istep2=50000, value1=298.16, value2=298.16," in heat
+    assert heat.count("type='TEMP0'") == 3
+    assert "3 temperature segments" in heat.splitlines()[0]
+
+
+def test_heating_without_schedule_is_unchanged():
+    step = ProtocolStep(name="heat", kind="heating", temp_start=0.0, length_ps=100.0)
+    heat = dict(render_protocol(AmberMdinRequest(protocol=True, steps=[step], temp0=300.0), None))["heat.in"]
+    assert "istep1=0, istep2=40000, value1=0.0, value2=300.0," in heat
+    assert "istep1=40001, istep2=50000, value1=300.0, value2=300.0," in heat
+
+
+def test_heating_schedule_with_ghbfix_keeps_the_rest_block():
+    step = ProtocolStep(name="heat1", kind="heating", length_ps=10.0,
+                        temp_points=_schedule((0, 0.0), (5, 300.0), (10, 300.0)))
+    heat = dict(render_protocol(AmberMdinRequest(protocol=True, steps=[step], temp0=300.0, ghbfix=True), None))["heat1.in"]
+    assert heat.count("type='TEMP0'") == 2 and "type='REST'" in heat and "DISANG=" in heat
+
+
+@pytest.mark.parametrize("points, length, message", [
+    (((0, 10.0),), 100.0, "at least 2 points"),
+    (((5, 10.0), (100, 300.0)), 100.0, "start at 0 ps"),
+    (((0, 10.0), (50, 100.0), (40, 200.0), (100, 300.0)), 100.0, "time order"),
+    (((0, 10.0), (50, 300.0)), 100.0, "end at the step length"),
+])
+def test_invalid_heating_schedules(points, length, message):
+    with pytest.raises(ValidationError, match=message):
+        ProtocolStep(name="heat1", kind="heating", length_ps=length, temp_points=_schedule(*points))
+
+
+def test_schedule_only_for_heating():
+    with pytest.raises(ValidationError, match="only for heating"):
+        ProtocolStep(name="eq", kind="equilibration", length_ps=10.0, temp_points=_schedule((0, 300.0), (10, 300.0)))
+
+
+def test_schedule_is_described_in_the_report():
+    from app.services.md_steps import describe_step
+    step = ProtocolStep(name="heat1", kind="heating", length_ps=100.0,
+                        temp_points=_schedule((0, 10.0), (20, 50.0), (90, 298.16), (100, 298.16)))
+    text = describe_step(step, 298.16)
+    assert "from 10 K to 298.16 K over 100 ps" in text and "50 K at 20 ps" in text

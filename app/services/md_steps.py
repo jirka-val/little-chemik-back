@@ -24,8 +24,19 @@ Restraint = Literal["none", "solute", "heavy", "custom"]
 MAX_STEPS = 50
 MAX_TEMPERATURE = 1000.0   # K - víc je u biomolekul jistě překlep
 MIN_MD_LENGTH_PS = 1.0     # kratší MD krok by měl pár (nebo nula) kroků integrace
+# Teplotní průběh ohřevu (temp_points): lomená čára, každý úsek = jeden &wt TEMP0.
+MAX_TEMP_POINTS = 20
+MIN_TEMP_SEGMENT_PS = 0.1  # kratší úsek by po zaokrouhlení na kroky integrace zmizel
 _MD_KINDS = ("heating", "equilibration")
 _EXTRA_ITEM = re.compile(r"^([a-z_][a-z0-9_]*)\s*=\s*([^=,/&]+)$", re.IGNORECASE)
+
+
+class TempPoint(BaseModel):
+    """Bod teplotního průběhu ohřevu: čas od začátku kroku (ps) a teplota (K)."""
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    time_ps: float = Field(ge=0, le=1_000_000)
+    temp: float = Field(ge=0, le=MAX_TEMPERATURE)
 
 
 class ProtocolStep(BaseModel):
@@ -48,6 +59,10 @@ class ProtocolStep(BaseModel):
     temp_start: float = Field(0.0, ge=0, le=MAX_TEMPERATURE)   # ohřev: počáteční teplota
     # ohřev: konečná teplota, ekvilibrace: držená teplota; None = temp0 produkce
     temp_target: Optional[float] = Field(None, ge=0, le=MAX_TEMPERATURE)
+    # ohřev: teplotní průběh jako lomená čára (první bod v 0 ps, poslední na
+    # konci kroku). None = lineární rampa temp_start -> temp_target přes 80 %
+    # kroku a pak držení. Když je zadaný, temp_start/temp_target se z něj odvodí.
+    temp_points: Optional[List[TempPoint]] = Field(None, max_length=MAX_TEMP_POINTS)
     pressure: bool = True                            # ekvilibrace: NPT (jinak NVT)
     # další položky &cntrl ("drms=0.01, dx0=0.01") - parametry, které model nemá
     extra: str = Field("", max_length=500)
@@ -61,7 +76,28 @@ class ProtocolStep(BaseModel):
         if "'" in self.restraint_mask or "\n" in self.restraint_mask:
             raise ValueError(f"step {self.name}: the restraint mask must not contain quotes or line breaks")
         extra_items(self.extra, self.name)
+        if self.temp_points is not None:
+            self._check_temp_points()
         return self
+
+    def _check_temp_points(self):
+        points = self.temp_points
+        if self.kind != "heating":
+            raise ValueError(f"step {self.name}: a temperature schedule is only for heating steps")
+        if len(points) < 2:
+            raise ValueError(f"step {self.name}: the temperature schedule needs at least 2 points")
+        if points[0].time_ps != 0:
+            raise ValueError(f"step {self.name}: the temperature schedule must start at 0 ps")
+        for a, b in zip(points, points[1:]):
+            if b.time_ps - a.time_ps < MIN_TEMP_SEGMENT_PS - 1e-9:
+                raise ValueError(f"step {self.name}: schedule points must be at least "
+                                 f"{MIN_TEMP_SEGMENT_PS:g} ps apart and in time order")
+        if abs(points[-1].time_ps - self.length_ps) > 1e-6:
+            raise ValueError(f"step {self.name}: the temperature schedule must end at the step length "
+                             f"({self.length_ps:g} ps)")
+        # začátek a konec ohřevu podle průběhu (tempi, navazování kroků, report)
+        self.temp_start = points[0].temp
+        self.temp_target = points[-1].temp
 
 
 def extra_items(extra: str, step_name: str = "") -> List[tuple]:
@@ -148,7 +184,12 @@ def describe_step(step: ProtocolStep, temp0: Optional[float]) -> str:
     target = step.temp_target if step.temp_target is not None else temp0
     if step.kind == "heating":
         to = f" to {_g(target)} K" if target is not None else ""
-        return f"heating from {_g(step.temp_start)} K{to} over {_length(step.length_ps)} ({_restraint_text(step)})"
+        schedule = ""
+        if step.temp_points and len(step.temp_points) > 2:
+            listed = ", ".join(f"{_g(float(p.temp))} K at {_g(float(p.time_ps))} ps" for p in step.temp_points)
+            schedule = f" along a piecewise-linear temperature schedule ({listed})"
+        return (f"heating from {_g(step.temp_start)} K{to} over {_length(step.length_ps)}{schedule} "
+                f"({_restraint_text(step)})")
     ensemble = "NPT" if step.pressure else "NVT"
     at = f" at {_g(target)} K" if target is not None else ""
     return f"{ensemble} equilibration{at} for {_length(step.length_ps)} ({_restraint_text(step)})"

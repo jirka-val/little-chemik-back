@@ -780,6 +780,20 @@
       "maximum": 100000.0,
       "type": "number"
      },
+     "temp_points": {
+      "anyOf": [
+       {
+        "items": {
+         "$ref": "#/components/schemas/TempPoint"
+        },
+        "maxItems": 20,
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
      "temp_start": {
       "default": 0.0,
       "maximum": 1000.0,
@@ -1132,6 +1146,25 @@
       "type": "object"
      }
     },
+    "type": "object"
+   },
+   "TempPoint": {
+    "properties": {
+     "temp": {
+      "maximum": 1000.0,
+      "minimum": 0.0,
+      "type": "number"
+     },
+     "time_ps": {
+      "maximum": 1000000.0,
+      "minimum": 0.0,
+      "type": "number"
+     }
+    },
+    "required": [
+     "time_ps",
+     "temp"
+    ],
     "type": "object"
    },
    "TopologyRequest": {

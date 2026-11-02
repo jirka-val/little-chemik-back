@@ -118,13 +118,38 @@ def _minimization(step: ProtocolStep, req: AmberMdinRequest, mask: Optional[str]
     return "\n".join(lines) + "\n"
 
 
+def _temperature_segments(step: ProtocolStep, target: float, nstlim: int,
+                          dt_ps: float) -> List[Tuple[int, int, float, float]]:
+    """
+    Úseky teploty ohřevu jako (istep1, istep2, value1, value2) pro &wt TEMP0.
+    Bez temp_points: lineární rampa přes prvních 80 % kroku a pak držení
+    cílové teploty. S temp_points: každý úsek lomené čáry jeden blok
+    (stejná teplota na obou koncích = držení). Hranice úseků jsou kroky
+    integrace; další úsek začíná o krok dál (0-10000, 10001-45000 ...).
+    """
+    if step.temp_points:
+        temps = [p.temp for p in step.temp_points]
+        bounds = [min(nstlim, round(p.time_ps / dt_ps)) for p in step.temp_points]
+        bounds[-1] = nstlim
+    else:
+        temps = [step.temp_start, target, target]
+        bounds = [0, max(1, round(nstlim * 0.8)), nstlim]
+    segments = []
+    for i in range(len(bounds) - 1):
+        istep1 = bounds[i] if i == 0 else bounds[i] + 1
+        segments.append((istep1, max(istep1, bounds[i + 1]), temps[i], temps[i + 1]))
+    return segments
+
+
 def _heating(step: ProtocolStep, req: AmberMdinRequest, mask: Optional[str], continues: bool) -> str:
     target = step_temperature(step, req.temp0)
     dt_fs = min(req.dt_fs, HEAT_DT_FS)
     dt_ps = dt_fs / 1000.0
     nstlim = max(1, round(step.length_ps / dt_ps))
     ntc = _NTC_NTF[req.constraints]
+    segments = _temperature_segments(step, target, nstlim, dt_ps)
     title = (f"Heating {step.name}: {step.temp_start:g} -> {target:g} K, NVT, {step.length_ps:g} ps"
+             + (f", {len(segments)} temperature segments" if step.temp_points else "")
              + (", restrained" if mask else ""))
     lines = [title, "&cntrl",
              # po MD kroku navazuje na jeho rychlosti, jinak je přiřadí podle temp_start
@@ -140,12 +165,8 @@ def _heating(step: ProtocolStep, req: AmberMdinRequest, mask: Optional[str], con
              f"  ioutfm={req.ioutfm}, ntxo={req.ntxo},",
              "  nmropt=1,",
              "/"]
-    # teplota roste lineárně přes prvních 80 % ohřevu, zbytek drží cílovou
-    ramp_end = max(1, round(nstlim * 0.8))
-    ramp = ("&wt", f"  type='TEMP0', istep1=0, istep2={ramp_end}, value1={_fmt(step.temp_start)}, "
-                   f"value2={_fmt(target)},", "/",
-            "&wt", f"  type='TEMP0', istep1={ramp_end + 1}, istep2={nstlim}, value1={_fmt(target)}, "
-                   f"value2={_fmt(target)},", "/")
+    ramp = tuple(line for istep1, istep2, value1, value2 in segments for line in (
+        "&wt", f"  type='TEMP0', istep1={istep1}, istep2={istep2}, value1={_fmt(value1)}, value2={_fmt(value2)},", "/"))
     if req.ghbfix:
         lines += ghbfix_wt_lines(nstlim, ramp)
     else:
