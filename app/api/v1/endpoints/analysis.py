@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from typing import Dict, List
 
 from app.services.report import records as report_records
-from app.services.structure.solvated_system import analyze_solvated_system
+from app.services.structure.solvated_system import analyze_solvated_system, strip_solvent
 from app.core.exceptions import AppBaseException, ExternalServiceError, InternalError, RemoteMoleculeNotFoundError
 from app.core.http_client import external_http_client
 from app.workspaces.manager import workspace_manager
@@ -212,6 +212,27 @@ async def analyze_solvation(workspace_id: str):
         logger.info(f"Workspace {workspace_id}: solvated system detected ({result['waters']} waters, "
                     f"issues: {problems or 'none'})")
     return result
+
+
+@router.post("/solvation/{workspace_id}/remove", summary="Odstraní vodu a monovalentní ionty nahraného solvatovaného systému")
+async def remove_existing_solvent(workspace_id: str):
+    """
+    "Solvatovat znovu" hned po načtení: ze structure.pdb zmizí voda,
+    monovalentní ionty a CRYST1 (multivalentní ionty zůstanou). Nový box
+    pak postaví příprava jako u každé struktury bez vody. Viz
+    solvated_system.strip_solvent.
+    """
+    workspace_manager.require_workspace(workspace_id)
+    file_path = workspace_manager.get_file_path(workspace_id, "structure.pdb")
+    async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+        pdb_text = await f.read()
+    stripped, removed = await run_in_threadpool(strip_solvent, pdb_text)
+    async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
+        await f.write(stripped)
+    logger.info(f"Workspace {workspace_id}: existing solvent removed ({removed['waters']} waters, "
+                f"ions {removed['ions'] or 'none'}).")
+    report_records.update_record(workspace_id, report_records.SOURCE, {"solvent_removed": removed})
+    return {"status": "success", "removed": removed}
 
 
 @router.post("/altloc-breaks/{workspace_id}", summary="Zlomy řetězce, které vytvoří daný výběr AltLocs")

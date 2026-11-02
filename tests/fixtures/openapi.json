@@ -1515,6 +1515,42 @@
     ]
    }
   },
+  "/api/analysis/solvation/{workspace_id}/remove": {
+   "post": {
+    "operationId": "remove_existing_solvent_api_analysis_solvation__workspace_id__remove_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "analysis"
+    ]
+   }
+  },
   "/api/download/{workspace_id}": {
    "get": {
     "operationId": "download_workspace_single_file_api_download__workspace_id__get",

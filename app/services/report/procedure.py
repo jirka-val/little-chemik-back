@@ -94,7 +94,8 @@ def _input_paragraph(records: Dict[str, Dict[str, Any]], refs: _References) -> s
 
     conf = records.get(CONFORMATIONS)
     if not conf:
-        return text + " It contained a single model without alternative locations, so no conformational choices were needed."
+        return (text + " It contained a single model without alternative locations, so no conformational choices "
+                "were needed." + _solvent_removed_sentence(source))
     parts = [f"Model {conf.get('model', 1)} was used"]
     parts.append("the biological assembly was built from the symmetry operators in REMARK 350"
                  if conf.get("apply_symmetry") else "the asymmetric unit was kept as deposited")
@@ -111,7 +112,18 @@ def _input_paragraph(records: Dict[str, Dict[str, Any]], refs: _References) -> s
     removed = conf.get("remove_chains") or []
     if removed:
         text += f" Chain{'s' if len(removed) > 1 else ''} {_join(removed)} {'were' if len(removed) > 1 else 'was'} removed as identical copies of the molecule."
-    return text
+    return text + _solvent_removed_sentence(source)
+
+
+def _solvent_removed_sentence(source: Dict[str, Any]) -> str:
+    """Nahraný solvatovaný systém, jehož voda se po načtení odstranila (solvatovat znovu)."""
+    removed = source.get("solvent_removed")
+    if not removed:
+        return ""
+    ions = removed.get("ions") or {}
+    ion_text = f" and {_plural(sum(ions.values()), 'monovalent ion')}" if ions else ""
+    return (f" The uploaded structure was already a solvated system; its {_plural(removed.get('waters', 0), 'water molecule')}"
+            f"{ion_text} and periodic box were removed so that it could be solvated again.")
 
 
 def _force_field_paragraph(ffs: Dict[str, Dict[str, Any]], refs: _References, topology_done: bool) -> str:

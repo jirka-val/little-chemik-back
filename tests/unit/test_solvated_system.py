@@ -8,6 +8,7 @@ import pytest
 
 from app.services.structure.solvated_system import (
     analyze_solvated_system, box_vectors, min_image_distance, restore_cryst1, standardize_reconstructed_box,
+    strip_solvent,
 )
 
 pytestmark = pytest.mark.unit
@@ -167,6 +168,28 @@ def test_crystal_waters_without_cryst1_are_not_solvated():
     pdb = _without_cryst1(_system(spacing=12.0))
     result = analyze_solvated_system(pdb)
     assert result["solvated"] is False and result["box_source"] is None
+
+
+def test_strip_solvent_removes_water_monovalent_ions_and_box():
+    mg = _line(99998, "MG", "MG", "M", 1, (4.0, 26.0, 4.0), "MG", "HETATM")
+    pdb = _system().replace("END\n", mg + "\nTER\nCONECT    1    2\nCONECT 9999 9998\nEND\n")
+    stripped, removed = strip_solvent(pdb)
+    assert removed["ions"] == {"CL": 1, "NA": 1}
+    assert removed["waters"] == analyze_solvated_system(pdb)["waters"]
+    assert "CRYST1" not in stripped and " WAT " not in stripped
+    assert " MG " in stripped                               # multivalentní iont zůstává
+    assert sum(1 for l in stripped.splitlines() if l.startswith("ATOM")) == 6
+    result = analyze_solvated_system(stripped)
+    assert result["solvated"] is False and result["waters"] == 0
+
+
+def test_strip_solvent_keeps_a_structure_without_solvent():
+    lines = [_line(i + 1, name, "ALA", "A", 1, (i * 1.5, 0.0, 0.0), el) for i, (name, el) in
+             enumerate((("N", "N"), ("CA", "C"), ("C", "C")))]
+    pdb = "\n".join(lines) + "\nTER\nEND\n"
+    stripped, removed = strip_solvent(pdb)
+    assert removed == {"waters": 0, "ions": {}}
+    assert stripped == pdb
 
 
 def test_restore_cryst1():

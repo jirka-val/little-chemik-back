@@ -440,6 +440,64 @@ def _checks(box, volume, waters, ion_counts, solute_atoms, all_atoms) -> List[Di
     return checks
 
 
+def strip_solvent(pdb_text: str) -> Tuple[str, Dict[str, Any]]:
+    """
+    Odstraní vodu, monovalentní ionty a CRYST1 nahraného solvatovaného
+    systému ("solvatovat znovu" hned po načtení). Multivalentní ionty
+    (Mg, Zn ... často strukturální) zůstanou - o nich rozhodne příprava.
+    Spolu s atomy zmizí i jejich ANISOU, CONECT a osiřelé TER.
+    Vrací (PDB, {"waters": n, "ions": {jméno: počet}}).
+    """
+    lines = pdb_text.splitlines()
+    # Rezidua jako souvislé běhy řádků se stejným (řetězec, číslo, jméno) -
+    # čísla vod se u velkých boxů opakují (přetečení přes 9999).
+    runs: List[List[int]] = []
+    last_key = None
+    for i, line in enumerate(lines):
+        if not line.startswith(("ATOM", "HETATM")):
+            continue
+        key = (line[21], line[22:27], line[17:21].strip())
+        if key != last_key:
+            runs.append([])
+            last_key = key
+        runs[-1].append(i)
+
+    removed_lines = set()
+    removed_serials = set()
+    waters = 0
+    ions: Dict[str, int] = {}
+    for run in runs:
+        first = lines[run[0]]
+        resname = first[17:21].strip()
+        if resname in WATER_RESNAMES:
+            waters += 1
+        elif len(run) == 1 and _element(first) != "H" and _ion_charge(resname) in (1, -1):
+            ions[resname] = ions.get(resname, 0) + 1
+        else:
+            continue
+        removed_lines.update(run)
+        removed_serials.update(lines[i][6:11].strip() for i in run)
+
+    out = []
+    previous_atom_removed = False
+    for i, line in enumerate(lines):
+        if line.startswith("CRYST1") or i in removed_lines:
+            previous_atom_removed = previous_atom_removed or i in removed_lines
+            continue
+        if line.startswith("ANISOU") and line[6:11].strip() in removed_serials:
+            continue
+        if line.startswith("CONECT"):
+            serials = {line[k:k + 5].strip() for k in range(6, len(line), 5)} - {""}
+            if serials & removed_serials:
+                continue
+        if line.startswith("TER") and previous_atom_removed:
+            continue
+        if line.startswith(("ATOM", "HETATM", "TER")):
+            previous_atom_removed = False
+        out.append(line)
+    return "\n".join(out) + "\n", {"waters": waters, "ions": dict(sorted(ions.items()))}
+
+
 def cryst1_line(pdb_text: str) -> Optional[str]:
     return next((line for line in pdb_text.splitlines() if line.startswith("CRYST1")), None)
 

@@ -193,6 +193,11 @@ def _section_input(pdf: _Report, records: Dict[str, Dict[str, Any]]):
             rows.append(("PDB DOI", pdb_entry_doi(pdb_id)))
         rows.append(("Primary citation", format_article(source.get("citation") or {})
                      or "Not given in the PDB header (JRNL)"))
+        removed = source.get("solvent_removed")
+        if removed:
+            ions = ", ".join(f"{name} {count}" for name, count in (removed.get("ions") or {}).items())
+            rows.append(("Existing solvent removed", f"{removed.get('waters', 0)} water molecules"
+                         + (f", ions {ions}" if ions else "") + ", box (solvated again in preparation)"))
         pdf.kv(rows)
     else:
         pdf.para("Source not recorded.")

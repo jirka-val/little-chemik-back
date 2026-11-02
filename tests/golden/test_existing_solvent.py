@@ -93,3 +93,27 @@ def test_solvated_system_without_cryst1_keeps_a_reconstructed_box(client, frozen
     top = summarize_topology(workspace_manager.get_file_path(kept.workspace_id, "structure.prmtop"))
     assert top["box"]["shape"] == "truncated octahedron"
     assert top["total_charge"] == 0.0
+
+
+def test_removing_the_solvent_right_after_upload(client, frozen_force_fields, tmp_path):  # noqa: F811
+    """Okno po načtení, "solvatovat znovu": voda a ionty pryč hned, pak běžná příprava."""
+    first = run_pipeline(client, _SOLVATED_PROTEIN)
+    solvated = first.files["structure.pdb"]
+    waters, _ions, _cryst1 = _counts(solvated)
+
+    ws = client.post("/api/molecules/upload", files={"file": ("s.pdb", solvated.encode())}).json()["workspace_id"]
+    response = client.post(f"/api/analysis/solvation/{ws}/remove")
+    assert response.status_code == 200
+    removed = response.json()["removed"]
+    assert removed["waters"] == waters and removed["ions"]
+    analysis = client.get(f"/api/analysis/solvation/{ws}").json()
+    assert analysis["solvated"] is False and analysis["waters"] == 0
+
+    stripped = tmp_path / "stripped.pdb"
+    stripped.write_text(workspace_manager.get_file_path(ws, "structure.pdb").read_text(encoding="utf-8"),
+                        encoding="utf-8")
+    assert _counts(stripped.read_text()) == (0, 0, None)
+    # bez vody se struktura připraví jako každá jiná (default add_solvent)
+    again = run_pipeline(client, replace(_SOLVATED_PROTEIN, pdb_path=stripped))
+    new_waters, new_ions, new_cryst1 = _counts(again.files["structure.pdb"])
+    assert new_waters > 0 and new_ions > 0 and new_cryst1 is not None
