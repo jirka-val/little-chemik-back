@@ -64,11 +64,11 @@ def _atom(top, residue, name):
     return start + top["ATOM_NAME"][start:end].index(name)
 
 
-def test_hmr_sets_hydrogens_to_3_da_and_keeps_total_mass(build):
+def test_hmr_sets_hydrogens_to_3_024_da_and_keeps_total_mass(build):
     plain, _ = build()
     hmr, _ = build(HMR=True)
     hydrogens = [i for i, z in enumerate(hmr["ATOMIC_NUMBER"]) if z == 1]
-    assert hydrogens and all(hmr["MASS"][i] == 3.0 for i in hydrogens)
+    assert hydrogens and all(hmr["MASS"][i] == pytest.approx(3.024) for i in hydrogens)
     assert math.fsum(hmr["MASS"]) == pytest.approx(math.fsum(plain["MASS"]))
     heavy = [i for i, z in enumerate(hmr["ATOMIC_NUMBER"]) if z > 1]
     assert any(hmr["MASS"][i] < plain["MASS"][i] for i in heavy)

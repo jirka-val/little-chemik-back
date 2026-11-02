@@ -1163,6 +1163,47 @@ def _option_roles(option: _HydrogenBondStateOption, site_name: str) -> FrozenSet
     return option.site_roles.get(site_name, frozenset())
 
 
+# LittleChemik extension: metal ions whose coordination fixes a site as acceptor.
+METAL_ELEMENTS = frozenset({
+    "ZN", "FE", "CU", "CO", "NI", "MN", "MG", "CA", "CD", "HG", "PT", "PD", "SR", "BA",
+})
+METAL_COORDINATION_CUTOFF_ANGSTROM = 2.6
+
+
+def _metal_coordination_evidence(
+    molecule: Molecule,
+    variable_sites: Sequence[_HBondSite],
+    variable_by_index: Mapping[int, _StateVariable],
+) -> List[FixedSiteEvidence]:
+    metals = [
+        record for record in getattr(molecule, "passthrough_atoms", ())
+        if (record.element or "").strip().upper() in METAL_ELEMENTS and record.coord is not None
+    ]
+    evidence: List[FixedSiteEvidence] = []
+    for site in variable_sites:
+        owner = variable_by_index[site.variable_owner]  # type: ignore[index]
+        for metal in metals:
+            distance = math.dist(site.coord, metal.coord)
+            if distance > METAL_COORDINATION_CUTOFF_ANGSTROM:
+                continue
+            allowed = tuple(sorted(
+                option.option_id for option in owner.options
+                if "acceptor" in _option_roles(option, site.atom_name)
+                and "donor" not in _option_roles(option, site.atom_name)
+            ))
+            if not allowed:
+                continue
+            evidence.append(FixedSiteEvidence(
+                variable_site=site.atom_key,
+                required_role="acceptor",
+                partner_site=(metal.chain_id, metal.resseq, metal.icode, metal.atom_name),
+                distance_angstrom=distance,
+                donor_deviation_deg=0.0,
+                allowed_option_ids=allowed,
+            ))
+    return evidence
+
+
 def _analyze_hbond_constraints(
     molecule: Molecule,
     building_template: Mapping[str, Any],
@@ -1338,6 +1379,27 @@ def _analyze_hbond_constraints(
                             distance_angstrom=distance,
                         )
                     )
+
+    # LittleChemik extension: a polar site coordinated to a metal ion uses its
+    # lone pair for the metal, so it must stay an acceptor (no hydrogen).
+    # The coordination distance (~2 A) is shorter than any H-bond, so the
+    # distance-based selection below prefers it over opposing H-bond evidence.
+    metal_sites: Set[AtomKey] = set()
+    for evidence in _metal_coordination_evidence(molecule, variable_sites, variable_by_index):
+        evidence_by_site_role[(evidence.variable_site, "acceptor")].append(evidence)
+        report.fixed_evidence.append(evidence)
+        metal_sites.add(evidence.variable_site)
+    if metal_sites:
+        # Two sites coordinating a metal sit close together, but neither has
+        # a hydrogen - their "contact" is not a hydrogen bond.
+        variable_contacts = [
+            contact for contact in variable_contacts
+            if not (contact.site1 in metal_sites and contact.site2 in metal_sites)
+        ]
+        report.variable_contacts = [
+            contact for contact in report.variable_contacts
+            if not (contact.site1 in metal_sites and contact.site2 in metal_sites)
+        ]
 
     selected_evidence: Dict[AtomKey, FixedSiteEvidence] = {}
     all_variable_keys = {

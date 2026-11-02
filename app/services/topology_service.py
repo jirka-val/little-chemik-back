@@ -240,7 +240,7 @@ class TopologyService:
                     "some PDB records were not recognised"
                 )
             if hmr:
-                logger.info("HMR applied to non-water hydrogens: target mass 3 Da")
+                logger.info("HMR applied to non-water hydrogens: target mass 3.024 Da")
 
             # 7. Uložení souborů
             # A) Uložení .prmtop (Topologie)

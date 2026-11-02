@@ -215,3 +215,30 @@ def test_forced_orientation_and_state_that_do_not_apply_are_reported():
     )
     assert [c.kind for c in report.orientation.conflicts] == ["forced_orientation_not_applicable"]
     assert "forced_state_not_applicable" in [c.kind for c in report.protonation.conflicts]
+
+
+def test_metal_coordinated_histidines_keep_the_lone_pair_for_zinc():
+    """1CA2: HIS94/96 koordinují zinek přes NE2 (HID), HIS119 přes ND1 (HIE);
+    GLN92 dělá H-vazbu na ND1-H HIS94 a nemá se otáčet."""
+    from app.services.analysis import build_sequence_tokens
+    from app.services.structure import forge_service
+    from forge_molecule_parser import build_molecule_from_forge_json
+    from forge_molecule_state_assignment import assign_molecule_states
+
+    resources = forge_service._static_resources()
+    pdb = (BACKEND_DIR / "tests" / "fixtures" / "pdb" / "golden" / "HIS_1CA2_carbonic_anhydrase_zinc.pdb").read_text()
+    pdb = forge_service._strip_unrecognized_heterogens(pdb, "remove_all")
+    molecule = build_molecule_from_forge_json(
+        {"pdb_text": pdb, "missing_atoms": build_sequence_tokens(pdb, chain=None, fill_gaps=True)},
+        resources.converting_dictionary,
+    )
+    _molecule, report = assign_molecule_states(
+        molecule, resources.converting_dictionary, resources.building_template, resources.state_definitions,
+        pH=7.4,
+    )
+    states = {a.residue_key[1]: a.new_resname for a in report.protonation.assignments}
+    assert (states[94], states[96], states[119]) == ("HID", "HID", "HIE")
+    assert not _orientation(report, 92).flipped
+    assert report.protonation.conflicts == []
+    metal = [e for e in report.protonation.fixed_evidence if e.partner_site[3] == "ZN"]
+    assert {e.variable_site[1] for e in metal} == {94, 96, 119}

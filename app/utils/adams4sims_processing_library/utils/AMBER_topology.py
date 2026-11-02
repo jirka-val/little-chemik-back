@@ -1029,8 +1029,12 @@ def write_ghbfix_file(mol, file_name="ghbfix.f", gHBfix_exceptions=True):
     return count
 
 
+# HMR: cílová hmota vodíku (Da), 3 x 1.008 jako ParmEd HMassRepartition.
+HMR_HYDROGEN_MASS = 3.024
+
+
 def create_AMBER_topology(mol, HMR=False, gHBfix_exceptions=True, *, ghbfix_file="ghbfix.f"):
-    """Build topology, optionally repartition non-water H to 3 Da, and export gHBfix."""
+    """Build topology, optionally repartition non-water H to 3.024 Da, and export gHBfix."""
     # initial setting
     top = {}
     bondii_screen_by_Z = {
@@ -1548,25 +1552,10 @@ def create_AMBER_topology(mol, HMR=False, gHBfix_exceptions=True, *, ghbfix_file
                 raise ValueError(
                     f"HMR requires exactly one bonded heavy atom for hydrogen {hydrogen + 1}")
             heavy = next(iter(heavy_neighbors))
-            # CHYBA?: cílová hmota vodíku je tu natvrdo
-            
-
-            # 3.0 Da, zatímco frontend (simulation-panel.ts) uvádí
-            # 3.024 Da. Standardní HMR (ParmEd HMassRepartition, AMBER
-
-            # workflow) používá 3.024 Da = 3 x 1.008, tj. hmotnost H se přesně
-            # ztrojnásobí a na těžký atom se převede přesně 2 x 1.008 =
-
-            # 2.016 Da (u 3.0 Da je to "kulatých" 1.992 Da). Pro krok 4 fs
-
-            # funguje obojí, ale 3.024 odpovídá ParmEdu a jde citovat.
-
-            # Navržený fix: místo 3.0 na dvou řádcích níže použít 3.024
-            # (ideálně jako konstantu HMR_HYDROGEN_MASS = 3.024):
-            #     transfer = 3.024 - masses[hydrogen]
-            #     masses[hydrogen] = 3.024
-            transfer = 3.0 - masses[hydrogen]
-            masses[hydrogen] = 3.0
+            # Cílová hmota vodíku 3.024 Da = 3 x 1.008 (jako ParmEd HMassRepartition):
+            # hmotnost H se přesně ztrojnásobí, na těžký atom se převede 2 x 1.008 Da.
+            transfer = HMR_HYDROGEN_MASS - masses[hydrogen]
+            masses[hydrogen] = HMR_HYDROGEN_MASS
             masses[heavy] -= transfer
         if any(not math.isfinite(mass) or mass <= 0
                for mass, atomic_number in zip(masses, top['ATOMIC_NUMBER'])
