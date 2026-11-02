@@ -7,8 +7,13 @@ AMBER systems with the vendored FORGE builder.
 python -m venv .venv
 .venv/Scripts/pip install -r requirements-dev.txt     # Linux: .venv/bin/pip
 cp .env.example .env
-.venv/Scripts/python -m uvicorn app.main:app --reload --port 8000
+.venv/Scripts/python scripts/dev_server.py --port 8000
 ```
+
+`scripts/dev_server.py` restarts the server when a `.py` file in `app/` changes.
+Avoid `uvicorn --reload` on Windows: its restart waits for a Ctrl+C event that a
+server started without a console (IDE, script, background job) never receives,
+so it hangs on "Reloading...".
 
 API docs while running: http://localhost:8000/docs
 

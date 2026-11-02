@@ -27,7 +27,7 @@ import numpy as np
 
 from app.services.pdb_service import ion_group_for_resname
 from app.services.structure.box_reconstruction import MIN_WATERS as LIQUID_MIN_WATERS
-from app.services.structure.box_reconstruction import BoxReconstruction, reconstruct_box
+from app.services.structure.box_reconstruction import BoxReconstruction, reconstruct_box, standard_vectors
 
 WATER_RESNAMES = {"HOH", "WAT", "SOL", "TIP", "DOD"}
 
@@ -245,6 +245,20 @@ def format_cryst1(box: Dict[str, float]) -> str:
             f"{box['alpha']:7.2f}{box['beta']:7.2f}{box['gamma']:7.2f} P 1           1")
 
 
+def _override_params(box_override: Optional[Dict[str, Any]]) -> Optional[Dict[str, float]]:
+    return _cryst1_box(box_override) if box_override else None
+
+
+def _adjusted(reconstruction: BoxReconstruction, params: Dict[str, float]) -> BoxReconstruction:
+    """Rekonstrukce s rozměry/tvarem od uživatele: natočení a střed zůstanou,
+    struktura se vycentruje do nového boxu."""
+    return replace(
+        reconstruction, params=dict(params),
+        std_center=standard_vectors(params).sum(axis=0) / 2,
+        volume=float(abs(np.linalg.det(standard_vectors(params)))),
+    )
+
+
 def _reconstruct(parsed: _Parsed) -> Optional[BoxReconstruction]:
     """Rekonstrukce boxu pro PDB bez CRYST1, None když v něm není kapalná voda."""
     if parsed.box:
@@ -255,7 +269,10 @@ def _reconstruct(parsed: _Parsed) -> Optional[BoxReconstruction]:
     return reconstruct_box(oxygens)
 
 
-def analyze_solvated_system(pdb_text: str, with_checks: bool = True, reconstruct: bool = True) -> Dict[str, Any]:
+def analyze_solvated_system(
+    pdb_text: str, with_checks: bool = True, reconstruct: bool = True,
+    box_override: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """
     {"solvated": bool, ...}. Když je systém solvatovaný, obsahuje i box,
     počty a seznam kontrol (status ok/warning/error) pro volbu "keep".
@@ -264,6 +281,12 @@ def analyze_solvated_system(pdb_text: str, with_checks: bool = True, reconstruct
     vody, kontroly jsou ve standardní orientaci boxu) | "missing" (kapalná
     voda bez CRYST1, tvar boxu poznat nejde) | None (žádný box).
     reconstruct=False jen pozná solvataci, box nerekonstruuje (rychlé).
+
+    box_override (Expert, jen PDB bez CRYST1): {"mode": "reconstructed" |
+    "manual", a, b, c, alpha, beta, gamma}. "reconstructed" = rekonstruovaný
+    box s upraveným tvarem/rozměry (natočení z rekonstrukce), "manual" = box
+    zadaný ručně pro souřadnice tak, jak jsou (jako dopsaný CRYST1) ->
+    box_source "manual".
     """
     parsed = _parse(pdb_text)
     box_source = "cryst1" if parsed.box else None
@@ -275,7 +298,13 @@ def analyze_solvated_system(pdb_text: str, with_checks: bool = True, reconstruct
             liquid_without_box = reconstruction is not None
         else:
             liquid_without_box = _is_liquid_water(_water_oxygens(parsed.atoms))
-    if reconstruction is not None and reconstruction.ok:
+    override = _override_params(box_override) if box_source is None else None
+    if override is not None and box_override.get("mode") == "manual":
+        box_source = "manual"
+        parsed.box = override
+    elif reconstruction is not None and reconstruction.ok:
+        if override is not None:
+            reconstruction = _adjusted(reconstruction, override)
         box_source = "reconstructed"
         parsed.box = _cryst1_box(reconstruction.params)
         moved = reconstruction.transform(np.array([a.xyz for a in parsed.atoms], dtype=float))
@@ -309,6 +338,8 @@ def analyze_solvated_system(pdb_text: str, with_checks: bool = True, reconstruct
     }
     if box_source == "reconstructed":
         result["box_reconstruction"] = reconstruction.summary()
+    if override is not None and box_source in ("reconstructed", "manual"):
+        result["box_override"] = box_override.get("mode")
     if solvated and with_checks:
         if box_source == "missing":
             reason = reconstruction.reason if reconstruction is not None else "not attempted"
@@ -318,27 +349,45 @@ def analyze_solvated_system(pdb_text: str, with_checks: bool = True, reconstruct
                 "The existing solvent cannot be kept - remove it and solvate again.")]
         else:
             checks = _checks(box, volume, waters, ion_counts, solute_atoms, parsed.atoms)
+            size = f"{box_shape(box)}, {box['a']:.2f} x {box['b']:.2f} x {box['c']:.2f} A"
             if box_source == "reconstructed":
+                how = "reconstructed from the water and adjusted by hand" if override else "reconstructed from the water"
                 checks.insert(0, _check(
                     "box_source", "Box", "warning",
-                    f"No CRYST1 record - the box was reconstructed from the water: {box_shape(box)}, "
-                    f"{box['a']:.2f} x {box['b']:.2f} x {box['c']:.2f} A. Keeping it moves the structure "
+                    f"No CRYST1 record - the box was {how}: {size}. Keeping it moves the structure "
                     "into the standard orientation of this box; NPT equilibration will settle its size."))
+            elif box_source == "manual":
+                checks.insert(0, _check(
+                    "box_source", "Box", "warning",
+                    f"No CRYST1 record - box entered by hand: {size}, angles {box['alpha']:g}/{box['beta']:g}/"
+                    f"{box['gamma']:g}. The coordinates are used as they are."))
             result["checks"] = checks
     return result
 
 
-def standardize_reconstructed_box(pdb_text: str) -> Optional[Tuple[str, str]]:
+def standardize_reconstructed_box(
+    pdb_text: str, box_override: Optional[Dict[str, Any]] = None,
+) -> Optional[Tuple[str, str]]:
     """
     Pro "keep" u PDB bez CRYST1: (PDB otočené a posunuté do standardní
     orientace rekonstruovaného boxu s CRYST1 na začátku, řádek CRYST1).
     None, když box rekonstruovat nejde (nebo CRYST1 v souboru je).
-    ANISOU se po rotaci zahodí.
+    ANISOU se po rotaci zahodí. box_override viz analyze_solvated_system
+    ("manual" = jen dopsaný CRYST1, souřadnice beze změny).
     """
     parsed = _parse(pdb_text)
+    if parsed.box:
+        return None
+    override = _override_params(box_override)
+    if override is not None and box_override.get("mode") == "manual":
+        cryst1 = format_cryst1(override)
+        lines = [line for line in pdb_text.splitlines() if not line.startswith("CRYST1")]
+        return cryst1 + "\n" + "\n".join(lines) + "\n", cryst1
     reconstruction = _reconstruct(parsed)
     if reconstruction is None or not reconstruction.ok:
         return None
+    if override is not None:
+        reconstruction = _adjusted(reconstruction, override)
     out = []
     for line in pdb_text.splitlines():
         if line.startswith("ANISOU"):

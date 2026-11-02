@@ -240,6 +240,57 @@
     ],
     "type": "object"
    },
+   "BoxOverride": {
+    "properties": {
+     "a": {
+      "maximum": 1000.0,
+      "minimum": 10.0,
+      "type": "number"
+     },
+     "alpha": {
+      "default": 90.0,
+      "exclusiveMaximum": 150.0,
+      "exclusiveMinimum": 30.0,
+      "type": "number"
+     },
+     "b": {
+      "maximum": 1000.0,
+      "minimum": 10.0,
+      "type": "number"
+     },
+     "beta": {
+      "default": 90.0,
+      "exclusiveMaximum": 150.0,
+      "exclusiveMinimum": 30.0,
+      "type": "number"
+     },
+     "c": {
+      "maximum": 1000.0,
+      "minimum": 10.0,
+      "type": "number"
+     },
+     "gamma": {
+      "default": 90.0,
+      "exclusiveMaximum": 150.0,
+      "exclusiveMinimum": 30.0,
+      "type": "number"
+     },
+     "mode": {
+      "enum": [
+       "reconstructed",
+       "manual"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "mode",
+     "a",
+     "b",
+     "c"
+    ],
+    "type": "object"
+   },
    "CheckedProtocol": {
     "properties": {
      "filename": {
@@ -601,6 +652,16 @@
      "auto_amide_flips": {
       "default": false,
       "type": "boolean"
+     },
+     "box_override": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/BoxOverride"
+       },
+       {
+        "type": "null"
+       }
+      ]
      },
      "box_padding_nm": {
       "default": 1.0,
@@ -1553,6 +1614,52 @@
       }
      }
     ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "analysis"
+    ]
+   }
+  },
+  "/api/analysis/solvation/{workspace_id}/check-box": {
+   "post": {
+    "operationId": "check_solvation_box_api_analysis_solvation__workspace_id__check_box_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/BoxOverride"
+       }
+      }
+     },
+     "required": true
+    },
     "responses": {
      "200": {
       "content": {

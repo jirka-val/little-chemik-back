@@ -117,3 +117,31 @@ def test_removing_the_solvent_right_after_upload(client, frozen_force_fields, tm
     again = run_pipeline(client, replace(_SOLVATED_PROTEIN, pdb_path=stripped))
     new_waters, new_ions, new_cryst1 = _counts(again.files["structure.pdb"])
     assert new_waters > 0 and new_ions > 0 and new_cryst1 is not None
+
+
+def test_box_entered_by_hand_is_checked_and_kept(client, frozen_force_fields, tmp_path):  # noqa: F811
+    """Expert: PDB bez CRYST1, box zadaný ručně pro souřadnice tak, jak jsou."""
+    first = run_pipeline(client, _SOLVATED_PROTEIN)
+    original = first.files["structure.pdb"]
+    cryst1 = next(line for line in original.splitlines() if line.startswith("CRYST1"))
+    stripped = tmp_path / "no_cryst1.pdb"
+    stripped.write_text("\n".join(l for l in original.splitlines() if not l.startswith("CRYST1")) + "\n",
+                        encoding="utf-8")
+    box = {"mode": "manual", "a": float(cryst1[6:15]), "b": float(cryst1[15:24]), "c": float(cryst1[24:33]),
+           "alpha": float(cryst1[33:40]), "beta": float(cryst1[40:47]), "gamma": float(cryst1[47:54])}
+
+    ws = client.post("/api/molecules/upload", files={"file": ("s.pdb", stripped.read_bytes())}).json()["workspace_id"]
+    checked = client.post(f"/api/analysis/solvation/{ws}/check-box", json=box)
+    assert checked.status_code == 200, checked.text
+    body = checked.json()
+    assert body["box_source"] == "manual" and body["box"]["shape"] == "truncated octahedron"
+    assert all(c["status"] != "error" for c in body["checks"]), body["checks"]
+    bad = client.post(f"/api/analysis/solvation/{ws}/check-box", json={**box, "a": 5.0})
+    assert bad.status_code == 422
+
+    kept = run_pipeline(client, replace(_SOLVATED_PROTEIN, pdb_path=stripped,
+                                        prepare_overrides={"existing_solvent": "keep", "box_override": box}))
+    _waters, _ions, kept_cryst1 = _counts(kept.files["structure.pdb"])
+    assert kept_cryst1 is not None and float(kept_cryst1[6:15]) == box["a"]
+    top = summarize_topology(workspace_manager.get_file_path(kept.workspace_id, "structure.prmtop"))
+    assert top["box"]["shape"] == "truncated octahedron"

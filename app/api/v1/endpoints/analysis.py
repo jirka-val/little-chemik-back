@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from typing import Dict, List
 
 from app.services.report import records as report_records
+from app.api.v1.schemas.preparation import BoxOverride
 from app.services.structure.solvated_system import analyze_solvated_system, strip_solvent
 from app.core.exceptions import AppBaseException, ExternalServiceError, InternalError, RemoteMoleculeNotFoundError
 from app.core.http_client import external_http_client
@@ -212,6 +213,20 @@ async def analyze_solvation(workspace_id: str):
         logger.info(f"Workspace {workspace_id}: solvated system detected ({result['waters']} waters, "
                     f"issues: {problems or 'none'})")
     return result
+
+
+@router.post("/solvation/{workspace_id}/check-box",
+             summary="Expert: kontroly solvatovaného systému s boxem upraveným nebo zadaným ručně")
+async def check_solvation_box(workspace_id: str, box: BoxOverride):
+    """
+    PDB bez CRYST1: stejná analýza jako GET /solvation/{ws}, ale s boxem od
+    uživatele (BoxOverride) - frontend ukáže kontroly dřív, než box ponechá.
+    """
+    workspace_manager.require_workspace(workspace_id)
+    file_path = workspace_manager.get_file_path(workspace_id, "structure.pdb")
+    async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+        pdb_text = await f.read()
+    return await run_in_threadpool(analyze_solvated_system, pdb_text, True, True, box.model_dump())
 
 
 @router.post("/solvation/{workspace_id}/remove", summary="Odstraní vodu a monovalentní ionty nahraného solvatovaného systému")

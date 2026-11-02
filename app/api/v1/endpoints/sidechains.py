@@ -70,10 +70,13 @@ def _resolve_existing_solvent(workspace_id: str, pdb_text: str, request: Prepara
     if request.existing_solvent == "keep":
         line = cryst1_line(pdb_text)
         if not line:
-            standardized = standardize_reconstructed_box(pdb_text)
+            override = request.box_override.model_dump() if request.box_override else None
+            standardized = standardize_reconstructed_box(pdb_text, box_override=override)
             if standardized is not None:
                 pdb_text, line = standardized
-                logger.info(f"Workspace {workspace_id}: no CRYST1, box reconstructed from the water.")
+                how = {"manual": "entered by hand", "reconstructed": "reconstructed and adjusted by hand"}.get(
+                    (override or {}).get("mode"), "reconstructed from the water")
+                logger.info(f"Workspace {workspace_id}: no CRYST1, box {how} ({line}).")
             elif analyze_solvated_system(pdb_text, with_checks=False, reconstruct=False)["solvated"]:
                 raise BadRequestError(
                     "The structure has no CRYST1 record and its box could not be reconstructed from "

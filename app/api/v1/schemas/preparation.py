@@ -5,7 +5,7 @@ translation into the arguments the FORGE builder takes.
 
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.exceptions import BadRequestError
 from app.services.analysis import resolve_ion_mol_type
@@ -156,6 +156,41 @@ class PreparationRequest(PreparationSettings):
                     "water and ions as they are (no solvation, CRYST1 kept); 'rebuild' = remove water and "
                     "monovalent ions and solvate again with the request's settings.",
     )
+    box_override: Optional["BoxOverride"] = Field(
+        None,
+        description="Expert, 'keep' of a PDB without CRYST1: box adjusted or entered by hand "
+                    "(see BoxOverride). Ignored when the PDB has a CRYST1 record.",
+    )
+
+
+class BoxOverride(BaseModel):
+    """
+    Box solvatovaného systému bez CRYST1 upravený uživatelem (Expert):
+    mode "reconstructed" = rekonstruovaný box s jiným tvarem/rozměry (natočení
+    z rekonstrukce), "manual" = box pro souřadnice tak, jak jsou (jako
+    dopsaný CRYST1). Úhly v CRYST1 konvenci (stupně).
+    """
+
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    mode: Literal["reconstructed", "manual"]
+    a: float = Field(..., ge=10.0, le=1000.0)
+    b: float = Field(..., ge=10.0, le=1000.0)
+    c: float = Field(..., ge=10.0, le=1000.0)
+    alpha: float = Field(90.0, gt=30.0, lt=150.0)
+    beta: float = Field(90.0, gt=30.0, lt=150.0)
+    gamma: float = Field(90.0, gt=30.0, lt=150.0)
+
+    @model_validator(mode="after")
+    def _positive_volume(self):
+        import math
+        ca, cb, cg = (math.cos(math.radians(x)) for x in (self.alpha, self.beta, self.gamma))
+        if 1 + 2 * ca * cb * cg - ca * ca - cb * cb - cg * cg <= 1e-6:
+            raise ValueError("the box angles do not define a cell with positive volume")
+        return self
+
+
+PreparationRequest.model_rebuild()
 
 
 def build_request_salt_specs(request: "PreparationRequest") -> List[Dict[str, Any]]:

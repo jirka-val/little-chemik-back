@@ -196,3 +196,52 @@ def test_restore_cryst1():
     line = "CRYST1   51.551   51.551   51.551  70.53 109.47  70.53 P 1           1"
     assert restore_cryst1("ATOM ...\n", line).startswith("CRYST1")
     assert restore_cryst1(line + "\nATOM ...\n", line).count("CRYST1") == 1
+
+
+# ---------------------------------------------------------------------------
+# Expert: box bez CRYST1 upravený nebo zadaný ručně (box_override)
+# ---------------------------------------------------------------------------
+
+def _cube(a, mode):
+    return {"mode": mode, "a": a, "b": a, "c": a, "alpha": 90.0, "beta": 90.0, "gamma": 90.0}
+
+
+def test_reconstructed_box_with_edited_size():
+    pdb = _without_cryst1(_system(box=34.0, solute_at=(17.0, 17.0, 17.0)), _rotation(27, 41), (5.0, -12.0, 30.0))
+    result = analyze_solvated_system(pdb, box_override=_cube(36.0, "reconstructed"))
+    assert result["box_source"] == "reconstructed" and result["box_override"] == "reconstructed"
+    assert result["box"]["a"] == 36.0
+    assert "adjusted by hand" in result["checks"][0]["detail"]
+    text, cryst1 = standardize_reconstructed_box(pdb, box_override=_cube(36.0, "reconstructed"))
+    assert cryst1.startswith("CRYST1   36.000   36.000   36.000")
+
+
+def test_manual_box_keeps_the_coordinates():
+    pdb = _without_cryst1(_system(box=34.0, solute_at=(17.0, 17.0, 17.0)))
+    result = analyze_solvated_system(pdb, box_override=_cube(34.0, "manual"))
+    assert result["solvated"] is True and result["box_source"] == "manual"
+    assert "entered by hand" in result["checks"][0]["detail"]
+    text, cryst1 = standardize_reconstructed_box(pdb, box_override=_cube(34.0, "manual"))
+    original = [l for l in pdb.splitlines() if l.startswith(("ATOM", "HETATM"))]
+    assert [l for l in text.splitlines() if l.startswith(("ATOM", "HETATM"))] == original
+    assert text.startswith(cryst1)
+
+
+def test_manual_box_for_water_without_a_recognizable_shape():
+    lines, serial = [], 1
+    grid = np.arange(-20.0, 20.1, 3.1)
+    for x in grid:
+        for y in grid:
+            for z in grid:
+                if np.linalg.norm([x, y, z]) < 19.0:
+                    lines.append(_line(serial, "O", "WAT", "W", serial % 10000, (x, y, z), "O", "HETATM"))
+                    serial += 1
+    droplet = "\n".join(lines) + "\nEND\n"
+    assert analyze_solvated_system(droplet)["box_source"] == "missing"
+    result = analyze_solvated_system(droplet, box_override=_cube(41.0, "manual"))
+    assert result["box_source"] == "manual" and result["box"]["a"] == 41.0 and result["checks"]
+
+
+def test_override_is_ignored_when_cryst1_exists():
+    result = analyze_solvated_system(_system(box=34.0), box_override=_cube(50.0, "manual"))
+    assert result["box_source"] == "cryst1" and result["box"]["a"] == 34.0 and "box_override" not in result
