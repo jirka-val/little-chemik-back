@@ -191,6 +191,13 @@ def offline_forge_ff(monkeypatch, tmp_path_factory):
         shutil.copyfile(source_dir / f"bonded_{ff_name}.itp", target_dir / f"bonded_{ff_name}.itp")
         return target_dir
 
+    # Příprava a topologie berou FF z katalogu (app/services/ff_selection.py) -
+    # bez staženého katalogu by požadavek skončil 400, ne přeskočením.
+    from app.services.ff_catalog_service import catalog_service
+    if not catalog_service.get_forcefields():
+        pytest.skip("data/ff_catalog.json not present locally - this test needs the force-field catalog "
+                    "downloaded through the IDA API at least once.")
+
     monkeypatch.setattr(ForceFieldService, "prepare_forge_force_field_directory", _fake_prepare)
 
 

@@ -1,15 +1,19 @@
-fastapi
-uvicorn[standard]
-pydantic
-pandas
-numpy>=1.24
-pydantic-settings
-httpx
-python-multipart
-propka>=3.5.0
-aiofiles
-requests
-openmm
-rdkit
-pdbfixer
-fpdf2>=2.8
+# Přesné verze - stejné, se kterými prochází testy včetně golden (tests/golden).
+# Nepřímé závislosti fixuje constraints.txt. Aktualizace: změnit verzi tady,
+# `pip install -r requirements-dev.txt -c constraints.txt`, pustit
+# scripts/check_all.sh (vč. golden) a pak `pip freeze > constraints.txt`.
+fastapi==0.143.0
+uvicorn[standard]==0.54.0
+pydantic==2.14.1
+pydantic-settings==2.15.0
+pandas==3.0.6
+numpy==2.5.4
+httpx==0.28.1
+python-multipart==0.0.32
+propka==3.5.1
+aiofiles==25.1.0
+requests==2.34.2
+openmm==8.6.1
+rdkit==2026.9.1
+pdbfixer==1.12.0
+fpdf2==2.8.9

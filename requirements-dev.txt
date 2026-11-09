@@ -1,6 +1,6 @@
 # Development and test tools (not installed in the Docker image).
 -r requirements.txt
-pytest>=9
-pytest-asyncio>=1.4
-ruff>=0.16
-psutil>=7  # tests/load: paměť a CPU serverového procesu
+pytest==9.1.1
+pytest-asyncio==1.4.0
+ruff==0.17.0
+psutil==7.2.2  # tests/load: paměť a CPU serverového procesu

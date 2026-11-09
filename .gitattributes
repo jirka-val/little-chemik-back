@@ -1,0 +1,2 @@
+# Shellové skripty spouští Linux v Dockeru - vždy LF, i při checkoutu na Windows.
+*.sh text eol=lf

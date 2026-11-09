@@ -8,7 +8,8 @@ from app.services.report.citation import (
     RCSB_PDB_REFERENCE, format_article, parse_jrnl, pdb_entry_doi, structure_references,
 )
 
-PDB_FILES = Path(__file__).resolve().parents[2] / "data" / "pdb_files"
+# Kopie z RCSB v repu (data/pdb_files je jen lokální cache stažených struktur, není v gitu).
+PDB_FILES = Path(__file__).resolve().parents[1] / "fixtures" / "pdb" / "golden"
 
 
 def test_parse_jrnl_joins_continuation_lines():

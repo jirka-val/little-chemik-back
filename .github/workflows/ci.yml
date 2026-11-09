@@ -1,0 +1,36 @@
+# Lint a testy při každém pushi a pull requestu.
+#
+# Běží výchozí sada (unit + integration, viz pytest.ini). Testy, které
+# potřebují stažený katalog a cache silových polí z IDA (data/ff_catalog.json,
+# data/ff_cache - nejsou v gitu), se tu samy přeskočí; ty a golden testy je
+# potřeba pustit lokálně: scripts/check_all.sh.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.10"   # stejná jako v Dockerfile
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            constraints.txt
+
+      - name: Install dependencies (pinned)
+        run: pip install -r requirements-dev.txt -c constraints.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Tests
+        run: pytest -q

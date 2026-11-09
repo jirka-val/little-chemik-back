@@ -94,6 +94,9 @@ class TestRemoveResidue:
 
 class TestIonOptions:
     def test_returns_buildable_ions_per_group(self, client):
+        from app.services.ff_catalog_service import catalog_service
+        if not catalog_service.get_forcefields():
+            pytest.skip("FF catalog (data/ff_catalog.json) not downloaded - ions come from it")
         response = client.get("/api/validation/ions")
         assert response.status_code == 200, response.text
         body = response.json()

@@ -85,7 +85,7 @@ def test_export_errors_name_what_is_missing(client, make_workspace, pdb_alanine_
 
 
 def test_upload_records_structure_citation(client):
-    pdb = (Path(__file__).resolve().parents[2] / "data" / "pdb_files" / "1RNA.pdb").read_text()
+    pdb = (Path(__file__).resolve().parents[1] / "fixtures" / "pdb" / "golden" / "1RNA.pdb").read_text()
     response = client.post("/api/molecules/upload", files={"file": ("1RNA.pdb", pdb.encode(), "chemical/x-pdb")})
     assert response.status_code == 200, response.text
 
