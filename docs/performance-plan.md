@@ -59,7 +59,6 @@ Vývojové PC (24 jader), 1 worker uvicornu jako v Dockerfile, střední systém
 | 1.3 | **Cache sekvence**: tokeny podle (workspace, mtime souboru) | −5 % CPU, rychlejší přepínání panelů | single.*.server_cpu_s, light_burst |
 | 1.4 | **JSON mimo event loop**: velké odpovědi (příprava, sekvence, FF) serializovat přes `orjson` / `ORJSONResponse`, případně zmenšit payload | −5 % CPU, menší špičky lehkých požadavků | responsiveness |
 | 1.5 | **gzip odpovědí** (nginx `gzip on` pro JSON/PDB/prmtop) | rychlejší přenos u pomalejšího připojení; lokálně se neprojeví | velikost odpovědí (doplnit do benchmarku) |
-
 | 1.6 | **Zúžit odpověď silových polí** (nově zjištěno): `GET /api/forcefields` posílá celé obsahy FF souborů (7,1 MB) a frontend je posílá zpátky v `ff_selections` při přípravě i topologii. Frontend by měl posílat jen identifikátor FF, backend obsah vezme z katalogu (zároveň bezpečnější - klient teď může podstrčit libovolný obsah FF). | −7 MB stahování a −1–2 MB uploadu na session | velikost požadavků/odpovědí |
 
 ### Výsledky fáze 1 (2026-11-09, `2026-11-09_1329_phase1_feff387.json`)
@@ -91,6 +90,25 @@ Poučení:
   PDB), pokud to bude v provozu vadit.
 - Samotné zrychlení výpočtu je zatím malé (−4 až −10 %), velký zbytek je v
   builderu (fáze 3).
+
+### Výsledek bodu 1.6 (2026-11-09, `2026-11-09_1407_1.6-ff-by-id_00cf797.json`)
+
+FF endpoint posílá FF bez obsahů souborů (`app/services/ff_selection.py`,
+`public_ff`); příprava a topologie berou obsah z katalogu podle `id`
+(`resolve_ff_selections`), FF mimo katalog odmítnou (400 `unknown_force_field`).
+Hlavní soubor FF pro tlačítko Download: `GET /api/forcefields/catalog/{id}/main-file`.
+Frontend beze změny formátu - posílá dál to, co dostal (jen už bez souborů).
+
+| | před | po |
+|---|---|---|
+| seznam FF (stahování) | 7,1 MB | 61 kB |
+| příprava + topologie (nahrávání) | 3,4 MB | 14 kB |
+| špička RAM, 16 uživatelů | 493 MB | 384 MB |
+| health / sekvence při zátěži, p95 | 0,14 / 0,65 s | 0,095 / 0,45 s |
+| uživatel každé 2 s: p95 zpomalení | 19,7× | 15,7× |
+
+Zároveň opravena bezpečnostní díra: obsah FF i `display_name` (z něj se
+skládá cesta ke složce FF cache) dřív přicházely od klienta.
 
 ## Fáze 2: víc jader (2–4 dny)
 

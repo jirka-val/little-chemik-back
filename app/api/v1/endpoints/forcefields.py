@@ -3,10 +3,12 @@ from typing import Any, Dict, List
 
 import aiofiles
 from app.core.responses import large_json_response
+from app.services.ff_selection import public_ff
 from fastapi import APIRouter, Header, Query
+from fastapi.responses import PlainTextResponse
 from fastapi.concurrency import run_in_threadpool
 
-from app.core.exceptions import AppBaseException, BadRequestError, ExternalServiceError, InternalError
+from app.core.exceptions import AppBaseException, BadRequestError, ExternalServiceError, InternalError, NotFoundError
 from app.core.security import require_admin
 from app.services.analysis import required_ff_groups, resolve_ion_mol_type
 from app.services.ff_catalog_service import catalog_service
@@ -208,7 +210,14 @@ async def get_my_forcefields(
 
         water_profiles = _build_water_profiles(ffs_by_group, mode) if "W" in required else []
 
-        # ~7 MB (obsahy FF souborů) - kódování mimo event loop (app/core/responses.py).
+        # Bez obsahů FF souborů (~7 MB) - frontend je nepotřebuje a backend je
+        # při přípravě/topologii bere z katalogu (app/services/ff_selection.py).
+        enriched_by_group = {g: [public_ff(ff) for ff in group] for g, group in enriched_by_group.items()}
+        water_profiles = [{**p, "water_ff": public_ff(p["water_ff"]),
+                           "ion_ffs": {mt: public_ff(ff) for mt, ff in p["ion_ffs"].items()}}
+                          for p in water_profiles]
+
+        # Kódování mimo event loop (app/core/responses.py).
         return await large_json_response({
             "mode": mode,
             "catalog_fetched_at": catalog_service.fetched_at(),
@@ -217,7 +226,7 @@ async def get_my_forcefields(
             "forcefields_by_group": enriched_by_group,
             "water_profiles": water_profiles,
             # Zachováno pro zpětnou kompatibilitu s dosavadním plochým seznamem.
-            "forcefields": [{**ff, **correction_flags(ff)} for ff in ffs],
+            "forcefields": [public_ff({**ff, **correction_flags(ff)}) for ff in ffs],
         })
 
     except AppBaseException:
@@ -225,6 +234,20 @@ async def get_my_forcefields(
     except Exception as e:
         logger.exception(f"Error fetching forcefields for workspace {workspace_id}")
         raise InternalError(f"Internal server error while fetching forcefields: {str(e)}")
+
+
+@router.get("/catalog/{ff_id}/main-file", summary="Hlavní soubor FF z katalogu (tlačítko Download ve FF panelu)")
+async def download_ff_main_file(ff_id: int):
+    """
+    FF endpoint už neposílá obsahy souborů (app/services/ff_selection.py) -
+    tlačítko "Download RAW Data" ve FF panelu si hlavní soubor stáhne odsud.
+    """
+    ff = next((f for f in catalog_service.get_forcefields() if f.get("id") == ff_id), None)
+    if ff is None or not ff.get("force_field_file"):
+        raise NotFoundError(f"Force field {ff_id} is not in the catalog.")
+    content = await run_in_threadpool(ff_validator._decode_content, ff["force_field_file"])
+    filename = f"{ff_validator.ff_name(ff)}_main.itp"
+    return PlainTextResponse(content, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @router.post("/catalog/refresh", summary="Ručně obnoví lokální katalog force fieldů z IDA")

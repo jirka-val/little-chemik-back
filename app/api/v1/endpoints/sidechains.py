@@ -31,6 +31,7 @@ from app.services.structure.sidechain_service import sidechain_session_service
 from app.services.validation.service import ValidationService
 from app.workspaces.manager import workspace_manager
 from app.core.job_queue import heavy_job
+from app.services.ff_selection import resolve_ff_selections
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -125,6 +126,8 @@ async def start_sidechain_session(workspace_id: str, request: PreparationRequest
 
     start_time = time.time()
     workspace_manager.require_workspace(workspace_id)
+    # Obsah FF souborů jen z katalogu, ne od klienta (app/services/ff_selection.py).
+    request.ff_selections = await run_in_threadpool(resolve_ff_selections, request.ff_selections)
 
     try:
         pdb_path = workspace_manager.get_file_path(workspace_id)

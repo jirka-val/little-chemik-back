@@ -8,6 +8,7 @@ from app.core.exceptions import AppBaseException, InternalError
 from app.services.topology_service import TopologyService
 from app.workspaces.manager import workspace_manager
 from app.core.job_queue import heavy_job
+from app.services.ff_selection import resolve_ff_selections
 
 router = APIRouter()
 topology_service = TopologyService()
@@ -25,6 +26,8 @@ class TopologyRequest(BaseModel):
 @heavy_job("topology")
 async def generate_topology(workspace_id: str, request: TopologyRequest):
     workspace_manager.require_workspace(workspace_id)
+    # Obsah FF souborů jen z katalogu, ne od klienta (app/services/ff_selection.py).
+    ff_selections = await run_in_threadpool(resolve_ff_selections, request.ff_selections)
     logger.info(f"Generating topology for workspace {workspace_id} (ff_selections: {list(request.ff_selections.keys())}, hmr={request.hmr})...")
 
     try:
@@ -35,7 +38,7 @@ async def generate_topology(workspace_id: str, request: TopologyRequest):
             topology_service.generate_topology,
             workspace_id=workspace_id,
             pdb_filename=request.pdb_filename,
-            ff_selections=request.ff_selections,
+            ff_selections=ff_selections,
             hmr=request.hmr,
         )
 
