@@ -86,6 +86,11 @@ def _input_paragraph(records: Dict[str, Dict[str, Any]], refs: _References) -> s
     pdb_id = structure_pdb_id(source)
     if source.get("kind") == "pdb":
         text = f"The starting structure, PDB entry {pdb_id}, was downloaded from the RCSB Protein Data Bank{cited}."
+    elif source.get("kind") == "inputs":
+        box = {"coordinates": ", with the periodic box taken from the coordinate file",
+               "topology": ", with the periodic box taken from the topology"}.get(source.get("box_from"), "")
+        text = (f"The starting structure was written from the uploaded AMBER topology {source.get('topology')} "
+                f"and coordinates {source.get('coordinates')}{box}.")
     elif source.get("filename"):
         entry = f" (PDB entry {pdb_id})" if pdb_id else ""
         text = f"The starting structure was loaded from the uploaded file {source['filename']}{entry}{cited}."

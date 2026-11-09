@@ -1,5 +1,6 @@
 import logging
 import shutil
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, File, UploadFile, Request
@@ -46,20 +47,7 @@ async def upload_molecule(file: UploadFile = File(...)):
         raise InternalError("Failed to save the uploaded file.")
 
 
-@router.post("/{workspace_id}/inputs", summary="Přidá k nahranému PDB topologii a/nebo souřadnice")
-async def upload_inputs(
-    workspace_id: str,
-    topology: Optional[UploadFile] = File(None),
-    coordinates: Optional[UploadFile] = File(None),
-):
-    """
-    Topologie (.prmtop/.parm7/.top) a souřadnice (.crd/.inpcrd/.rst7/.rst/.ncrst)
-    z upload dialogu. Zatím se jen uloží a vrátí se jejich souhrn - viz
-    app/services/input_files.py.
-    """
-    workspace_manager.require_workspace(workspace_id)
-    if topology is None and coordinates is None:
-        raise BadRequestError("No topology or coordinate file was sent.", code="nothing_selected")
+def _check_input_extensions(topology: Optional[UploadFile], coordinates: Optional[UploadFile]) -> None:
     for upload, extensions, kind in ((topology, input_files.TOPOLOGY_EXTENSIONS, "topology"),
                                      (coordinates, input_files.COORDINATE_EXTENSIONS, "coordinates")):
         if upload is not None and not upload.filename.lower().endswith(extensions):
@@ -68,7 +56,8 @@ async def upload_inputs(
                 code=f"unsupported_{kind}_format",
             )
 
-    workspace_dir = workspace_manager.get_workspace_dir(workspace_id)
+
+def _store_inputs(workspace_dir, topology: Optional[UploadFile], coordinates: Optional[UploadFile]) -> dict:
     manifest = input_files.load_manifest(workspace_dir)
     if topology is not None:
         with open(workspace_dir / input_files.UPLOADED_TOPOLOGY, "wb") as fh:
@@ -81,6 +70,69 @@ async def upload_inputs(
             shutil.copyfileobj(coordinates.file, fh)
         manifest["coordinates"] = coordinates.filename
     input_files.save_manifest(workspace_dir, manifest)
+    return manifest
+
+
+@router.post("/upload-inputs", summary="Nový workspace jen z AMBER topologie a souřadnic (bez PDB)")
+async def upload_from_inputs(topology: UploadFile = File(...), coordinates: UploadFile = File(...)):
+    """
+    Uživatel má simulaci (prmtop + rst7/inpcrd/ncrst), ale ne PDB: structure.pdb
+    se zapíše z topologie a souřadnic (input_files.write_pdb_from_inputs,
+    AMBER_topology.savePdb, box ze souřadnic) a dál jde běžná příprava.
+    """
+    _check_input_extensions(topology, coordinates)
+    workspace_id = str(uuid.uuid4())
+    workspace_dir = workspace_manager.get_workspace_dir(workspace_id)
+    try:
+        manifest = _store_inputs(workspace_dir, topology, coordinates)
+        stored = workspace_dir / input_files.coordinates_filename(coordinates.filename)
+        built = await run_in_threadpool(
+            input_files.write_pdb_from_inputs, workspace_dir / input_files.UPLOADED_TOPOLOGY, stored,
+            workspace_dir / "structure.pdb",
+        )
+    except input_files.InputsError as exc:
+        shutil.rmtree(workspace_dir, ignore_errors=True)
+        raise BadRequestError(str(exc), code="inputs_not_convertible")
+    except Exception as exc:
+        shutil.rmtree(workspace_dir, ignore_errors=True)
+        logger.exception(f"PDB from {topology.filename} + {coordinates.filename} failed: {exc}")
+        raise InternalError("Failed to build a structure from the topology and coordinates.")
+
+    label = f"{topology.filename} + {coordinates.filename}"
+    logger.info(f"Workspace {workspace_id}: structure.pdb written from {label} "
+                f"({built['atoms']} atoms, box from {built['box_from']})")
+    await run_in_threadpool(incident_history.record_workspace_created, workspace_id, f"inputs:{label}")
+    report_records.save_record(workspace_id, report_records.SOURCE, {
+        "kind": "inputs", "filename": label, "topology": manifest["topology"],
+        "coordinates": manifest["coordinates"], "box_from": built["box_from"], "citation": None,
+    })
+    summary = await run_in_threadpool(input_files.summarize_inputs, workspace_dir)
+    return {
+        "workspace_id": workspace_id,
+        "filename": label,
+        "built": {k: built[k] for k in ("atoms", "box", "box_from", "renamed")},
+        "summary": summary,
+    }
+
+
+@router.post("/{workspace_id}/inputs", summary="Přidá k nahranému PDB topologii a/nebo souřadnice")
+async def upload_inputs(
+    workspace_id: str,
+    topology: Optional[UploadFile] = File(None),
+    coordinates: Optional[UploadFile] = File(None),
+):
+    """
+    Topologie (.prmtop/.parm7/.top) a souřadnice (.crd/.inpcrd/.rst7/.rst/.ncrst)
+    k nahranému PDB. Jen se uloží a vrátí se jejich souhrn - viz
+    app/services/input_files.py. Bez PDB viz POST /upload-inputs.
+    """
+    workspace_manager.require_workspace(workspace_id)
+    if topology is None and coordinates is None:
+        raise BadRequestError("No topology or coordinate file was sent.", code="nothing_selected")
+    _check_input_extensions(topology, coordinates)
+
+    workspace_dir = workspace_manager.get_workspace_dir(workspace_id)
+    manifest = _store_inputs(workspace_dir, topology, coordinates)
     logger.info(f"Workspace {workspace_id}: uploaded inputs {manifest}")
 
     return await run_in_threadpool(input_files.summarize_inputs, workspace_dir)

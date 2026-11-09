@@ -186,6 +186,8 @@ def _section_input(pdf: _Report, records: Dict[str, Dict[str, Any]]):
     pdf.h2("1. Input structure")
     if source:
         origin = (f"PDB entry {source.get('pdb_code', '').upper()} (RCSB)" if source.get("kind") == "pdb"
+                  else f"AMBER topology {source.get('topology')} + coordinates {source.get('coordinates')}"
+                  if source.get("kind") == "inputs"
                   else f"Uploaded file {source.get('filename')}")
         rows = [("Source", origin)]
         pdb_id = structure_pdb_id(source)

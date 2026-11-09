@@ -201,6 +201,23 @@
     },
     "type": "object"
    },
+   "Body_upload_from_inputs_api_molecules_upload_inputs_post": {
+    "properties": {
+     "coordinates": {
+      "contentMediaType": "application/octet-stream",
+      "type": "string"
+     },
+     "topology": {
+      "contentMediaType": "application/octet-stream",
+      "type": "string"
+     }
+    },
+    "required": [
+     "topology",
+     "coordinates"
+    ],
+    "type": "object"
+   },
    "Body_upload_inputs_api_molecules__workspace_id__inputs_post": {
     "properties": {
      "coordinates": {
@@ -2416,6 +2433,42 @@
       "multipart/form-data": {
        "schema": {
         "$ref": "#/components/schemas/Body_upload_molecule_api_molecules_upload_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "molecules"
+    ]
+   }
+  },
+  "/api/molecules/upload-inputs": {
+   "post": {
+    "operationId": "upload_from_inputs_api_molecules_upload_inputs_post",
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_upload_from_inputs_api_molecules_upload_inputs_post"
        }
       }
      },

@@ -1,7 +1,12 @@
 """
-Topologie a souřadnice nahrané spolu s PDB (upload dialog). Zatím se jen
-uloží do workspace a zobrazí se z nich souhrn - do přípravy ani exportu
-nevstupují (navázání na funkce typu get_box přijde později).
+Topologie a souřadnice nahrané v upload dialogu.
+
+- Spolu s PDB: jen se uloží do workspace a zobrazí se z nich souhrn.
+- Bez PDB (uživatel má jen simulaci z jiného FF): structure.pdb se zapíše
+  z topologie a souřadnic (write_pdb_from_inputs -> AMBER_topology.savePdb)
+  a dál jde běžná příprava. Box se bere ze souřadnic (rst7/inpcrd/ncrst mají
+  aktuální box po NPT, se všemi třemi úhly); prmtop BOX_DIMENSIONS je jen
+  záloha - je to box ze začátku a umí jen jeden úhel.
 
 Ukládají se pod vlastními jmény, aby je nepřepsala topologie, kterou
 generuje TopologyService (structure.prmtop / structure.crd).
@@ -10,12 +15,16 @@ generuje TopologyService (structure.prmtop / structure.crd).
 from __future__ import annotations
 
 import json
+import math
 import struct
+import tempfile
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from app.services.structure.solvated_system import box_shape
+import numpy as np
+
+from app.services.structure.solvated_system import box_shape, format_cryst1
 from app.utils.adams4sims_processing_library.utils import AMBER_topology
 
 TOPOLOGY_EXTENSIONS = (".prmtop", ".parm7", ".top")
@@ -133,67 +142,235 @@ def _water_sites(labels: List[str], sizes: List[int]) -> Optional[int]:
 # Souřadnice
 # ---------------------------------------------------------------------------
 
-def _netcdf_atom_count(data: bytes) -> Optional[int]:
-    """Rozměr "atom" z hlavičky NetCDF3 (classic / 64-bit offset) - restart z pmemd."""
-    if len(data) < 16 or data[:3] != b"CDF":
+class CoordinateError(ValueError):
+    """Souřadnice nejdou přečíst - text je pro uživatele."""
+
+
+_BOX_KEYS = ("a", "b", "c", "alpha", "beta", "gamma")
+# NetCDF3 nc_type -> (struct formát, velikost)
+_NC_TYPES = {1: ("b", 1), 2: ("c", 1), 3: ("h", 2), 4: ("i", 4), 5: ("f", 4), 6: ("d", 8)}
+
+
+def _box_dict(values) -> Optional[Dict[str, float]]:
+    box = {k: float(v) for k, v in zip(_BOX_KEYS, values)}
+    if len(box) != 6 or not all(math.isfinite(v) for v in box.values()):
         return None
+    if min(box["a"], box["b"], box["c"]) <= 0 or not all(0 < box[k] < 180 for k in ("alpha", "beta", "gamma")):
+        return None
+    return box
+
+
+def _read_netcdf3(data: bytes) -> Tuple[Dict[str, int], Dict[str, np.ndarray]]:
+    """Rozměry a proměnné NetCDF3 (classic / 64-bit offset) - restart z pmemd/cpptraj.
+    U proměnných přes neomezený rozměr (trajektorie) jen první záznam."""
+    if len(data) < 8 or data[:3] != b"CDF" or data[3] not in (1, 2):
+        raise CoordinateError("Not a NetCDF3 coordinate file.")
+    offset_size = 4 if data[3] == 1 else 8
     pos = 8  # magic + verze + numrecs
-    tag, count = struct.unpack(">ii", data[pos:pos + 8])
-    pos += 8
-    if tag != 0x0A:  # NC_DIMENSION
-        return None
-    for _ in range(count):
-        (length,) = struct.unpack(">i", data[pos:pos + 4])
-        name = data[pos + 4:pos + 4 + length].decode("ascii", errors="replace")
-        pos += 4 + (length + 3) // 4 * 4
-        (size,) = struct.unpack(">i", data[pos:pos + 4])
-        pos += 4
-        if name == "atom":
-            return size
-    return None
+
+    def take(fmt: str):
+        nonlocal pos
+        size = struct.calcsize(fmt)
+        if pos + size > len(data):
+            raise CoordinateError("The NetCDF file is truncated.")
+        values = struct.unpack(fmt, data[pos:pos + size])
+        pos += size
+        return values
+
+    def name() -> str:
+        nonlocal pos
+        (length,) = take(">i")
+        text = data[pos:pos + length].decode("ascii", errors="replace")
+        pos += (length + 3) // 4 * 4
+        return text
+
+    def skip_attributes():
+        nonlocal pos
+        tag, count = take(">ii")
+        for _ in range(count if tag == 0x0C else 0):
+            name()
+            nc_type, nelems = take(">ii")
+            pos += (nelems * _NC_TYPES.get(nc_type, ("b", 1))[1] + 3) // 4 * 4
+
+    dims: List[Tuple[str, int]] = []
+    tag, count = take(">ii")
+    for _ in range(count if tag == 0x0A else 0):
+        dims.append((name(), take(">i")[0]))
+    skip_attributes()  # globální atributy
+    variables: Dict[str, np.ndarray] = {}
+    tag, count = take(">ii")
+    for _ in range(count if tag == 0x0B else 0):
+        var_name = name()
+        (ndims,) = take(">i")
+        dim_ids = take(f">{ndims}i") if ndims else ()
+        skip_attributes()
+        nc_type, _vsize = take(">ii")
+        (begin,) = take(">i" if offset_size == 4 else ">q")
+        if nc_type not in _NC_TYPES or nc_type == 2:
+            continue
+        shape = [dims[i][1] for i in dim_ids if dims[i][1] != 0]  # 0 = neomezený rozměr
+        fmt, size = _NC_TYPES[nc_type]
+        n = int(np.prod(shape)) if shape else 1
+        if begin + n * size > len(data):
+            continue
+        variables[var_name] = np.frombuffer(data, dtype=f">{fmt}", count=n, offset=begin).reshape(shape)
+    return dict(dims), variables
 
 
-def summarize_coordinates(path: Path) -> Dict[str, Any]:
+def read_coordinates(path: Path) -> Dict[str, Any]:
+    """Souřadnice (n x 3, A) a box z AMBER restartu/inpcrd (ASCII nebo NetCDF3).
+    Vrací {"format", "title", "atoms", "time_ps", "velocities", "xyz", "box"}."""
     data = path.read_bytes()
+    if data[:4] == b"\x89HDF":
+        raise CoordinateError("NetCDF4 (HDF5) coordinates are not supported - convert them to .rst7 with cpptraj.")
     if data[:3] == b"CDF":
-        return {"ok": True, "format": "NetCDF restart", "atoms": _netcdf_atom_count(data), "box": None}
-    if data[:3] == b"\x89HD":
-        return {"ok": True, "format": "NetCDF4 (not inspected)", "atoms": None, "box": None}
+        dims, variables = _read_netcdf3(data)
+        xyz = variables.get("coordinates")
+        if xyz is None or xyz.ndim != 2 or xyz.shape[1] != 3:
+            raise CoordinateError("The NetCDF file has no coordinates (n x 3).")
+        box = None
+        if "cell_lengths" in variables and "cell_angles" in variables:
+            box = _box_dict(list(variables["cell_lengths"].ravel()) + list(variables["cell_angles"].ravel()))
+        time = variables.get("time")
+        return {
+            "format": "NetCDF restart",
+            "title": None,
+            "atoms": int(xyz.shape[0]),
+            "time_ps": float(time.ravel()[0]) if time is not None and time.size else None,
+            "velocities": "velocities" in variables,
+            "xyz": np.asarray(xyz, dtype=float),
+            "box": box,
+        }
 
     lines = data.decode("utf-8", errors="replace").splitlines()
     if len(lines) < 2:
-        return {"ok": False, "error": "The coordinate file is empty or truncated."}
+        raise CoordinateError("The coordinate file is empty or truncated.")
     fields = lines[1].split()
     try:
         natom = int(fields[0])
     except (IndexError, ValueError):
-        return {"ok": False, "error": "Not an AMBER ASCII coordinate file (atom count on line 2 is missing)."}
-    time = float(fields[1]) if len(fields) > 1 else None
+        raise CoordinateError("Not an AMBER ASCII coordinate file (atom count on line 2 is missing).")
+    try:
+        time = float(fields[1]) if len(fields) > 1 else None
+    except ValueError:
+        time = None
 
-    # Box je poslední řádek se 6 hodnotami, pokud soubor má víc než jen
-    # souřadnice (a případně rychlosti).
-    values_per_line = 6
-    coord_lines = (natom * 3 + values_per_line - 1) // values_per_line
-    body = [line for line in lines[2:] if line.strip()]
-    has_velocities = len(body) >= 2 * coord_lines
-    box = None
-    if len(body) in (coord_lines + 1, 2 * coord_lines + 1):
-        last = body[-1]
-        try:
-            vals = [float(last[i:i + 12]) for i in range(0, 72, 12) if last[i:i + 12].strip()]
-            if len(vals) == 6:
-                box = {"a": vals[0], "b": vals[1], "c": vals[2], "alpha": vals[3], "beta": vals[4], "gamma": vals[5]}
-        except ValueError:
-            pass
+    # Formát 6F12.7: pevná pole po 12 znacích. Souřadnice, volitelně rychlosti
+    # a volitelně box (a b c alpha beta gamma) na posledním řádku.
+    values: List[float] = []
+    try:
+        for line in lines[2:]:
+            text = line.rstrip()
+            values.extend(float(text[i:i + 12]) for i in range(0, len(text), 12) if text[i:i + 12].strip())
+    except ValueError:
+        raise CoordinateError("The coordinate file contains a value that is not a number (expected 6F12.7).")
+    n3 = 3 * natom
+    if len(values) not in (n3, n3 + 6, 2 * n3, 2 * n3 + 6):
+        raise CoordinateError(f"The coordinate file should hold {natom} atoms, but it has {len(values)} values "
+                              f"(expected {n3} or {n3 + 6}, with velocities {2 * n3} or {2 * n3 + 6}).")
+    box = _box_dict(values[-6:]) if len(values) in (n3 + 6, 2 * n3 + 6) else None
     return {
-        "ok": True,
-        "format": "ASCII restart" if has_velocities else "ASCII coordinates",
+        "format": "ASCII restart" if len(values) >= 2 * n3 else "ASCII coordinates",
         "title": lines[0].strip() or None,
         "atoms": natom,
         "time_ps": time,
-        "velocities": has_velocities,
+        "velocities": len(values) >= 2 * n3,
+        "xyz": np.array(values[:n3], dtype=float).reshape(natom, 3),
         "box": box,
     }
+
+
+def summarize_coordinates(path: Path) -> Dict[str, Any]:
+    try:
+        coords = read_coordinates(path)
+    except CoordinateError as exc:
+        return {"ok": False, "error": str(exc)}
+    coords.pop("xyz")
+    if coords["box"]:
+        coords["box"] = {**coords["box"], "shape": box_shape(coords["box"])}
+    return {"ok": True, **coords}
+
+
+# ---------------------------------------------------------------------------
+# PDB z topologie a souřadnic (uživatel nemá PDB)
+# ---------------------------------------------------------------------------
+
+class InputsError(ValueError):
+    """Z nahrané topologie a souřadnic nejde zapsat PDB - text je pro uživatele."""
+
+
+_AMINO_ACIDS = {
+    "ALA", "ARG", "ASN", "ASP", "ASH", "CYS", "CYX", "CYM", "GLN", "GLU", "GLH", "GLY", "HIS", "HID", "HIE",
+    "HIP", "ILE", "LEU", "LYS", "LYN", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL",
+}
+# 4znakové vody (CHARMM, OPC ...) -> název, který zná savePdb i zbytek přípravy
+_WATER_ALIASES = {"TIP3", "TIP4", "TIP5", "SPCE", "T3P", "T4P", "T4E", "OPC3"}
+
+
+def _pdb_residue_name(label: str) -> str:
+    """PDB má na název rezidua 3 znaky. AMBER knihovny mají terminály po 4
+    (NTHR, CASN) - jako ambpdb/pdb4amber se zapíše jen reziduum."""
+    if len(label) == 4 and label[0] in "NC" and label[1:] in _AMINO_ACIDS:
+        return label[1:]
+    if label.upper() in _WATER_ALIASES:
+        return "WAT"
+    return label
+
+
+def write_pdb_from_inputs(topology_path: Path, coordinates_path: Path, pdb_path: Path) -> Dict[str, Any]:
+    """structure.pdb z AMBER topologie a souřadnic (AMBER_topology.savePdb).
+
+    Box: ze souřadnic, jinak z prmtopu (getBox), jinak žádný CRYST1. Vrací
+    {"atoms", "box", "box_from": "coordinates" | "topology" | None, "renamed"}.
+    """
+    top = AMBER_topology.read_AMBER_topology(str(topology_path))
+    if not top or "POINTERS" not in top:
+        raise InputsError("The topology could not be read as an AMBER topology (prmtop). "
+                          "GROMACS .top files are not supported.")
+    if not top.get("ATOMIC_NUMBER"):
+        raise InputsError("The topology has no ATOMIC_NUMBER section (written by an old AMBER version) - "
+                          "elements cannot be assigned. Re-save it with ParmEd or tleap.")
+    try:
+        coords = read_coordinates(coordinates_path)
+    except CoordinateError as exc:
+        raise InputsError(str(exc))
+    natom = top["POINTERS"][0]
+    if coords["atoms"] != natom:
+        raise InputsError(f"The topology has {natom} atoms but the coordinates have {coords['atoms']} - "
+                          "they do not belong to the same system.")
+
+    labels = [str(value).strip() for value in top["RESIDUE_LABEL"]]
+    names = [_pdb_residue_name(label) for label in labels]
+    renamed = dict(sorted(Counter(f"{a} -> {b}" for a, b in zip(labels, names) if a != b).items()))
+    too_long = sorted({name for name in names if len(name) > 3})
+    if too_long:
+        raise InputsError(f"Residue names longer than 3 characters cannot be written to a PDB: {', '.join(too_long)}.")
+    long_atoms = sorted({str(a).strip() for a in top["ATOM_NAME"] if len(str(a).strip()) > 4})
+    if long_atoms:
+        raise InputsError(f"Atom names longer than 4 characters cannot be written to a PDB: {', '.join(long_atoms)}.")
+
+    box, box_from = coords["box"], "coordinates" if coords["box"] else None
+    if box is None:
+        try:
+            cell = AMBER_topology.getBox(top)
+        except ValueError:
+            cell = []
+        if cell:
+            box, box_from = dict(zip(_BOX_KEYS, cell)), "topology"
+
+    # CRYST1 se dopíše zvlášť - savePdb by ho vzal z prmtopu (getBox).
+    pdb_top = {k: v for k, v in top.items() if k != "BOX_DIMENSIONS"}
+    pdb_top["RESIDUE_LABEL"] = names
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "structure.pdb"
+        try:
+            AMBER_topology.savePdb(str(out), pdb_top, coords["xyz"].tolist())
+        except ValueError as exc:
+            raise InputsError(f"The PDB could not be written: {exc}.")
+        body = out.read_text(encoding="ascii")
+    header = format_cryst1(box).ljust(80) + "\n" if box else ""
+    pdb_path.write_text(header + body, encoding="utf-8")
+    return {"atoms": natom, "box": box, "box_from": box_from, "renamed": renamed}
 
 
 # ---------------------------------------------------------------------------
