@@ -17,6 +17,7 @@ test bez ní elegantně přeskočí (`pytest.skip`), místo aby cokoliv riskoval
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -28,6 +29,11 @@ from fastapi.testclient import TestClient
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 FIXTURES_PDB_DIR = Path(__file__).resolve().parent / "fixtures" / "pdb"
 REAL_FF_CACHE_DIR = BACKEND_ROOT / "data" / "ff_cache"
+
+# Testy přes TestClient běží bez poolu výpočetních procesů (app/core/process_pool.py):
+# výpočty ve vláknech jako dřív, rychlý start. Pool zkouší tests/unit/test_process_pool.py
+# a zátěžové testy (tests/load - server v samostatném procesu tuhle hodnotu nedědí).
+os.environ.setdefault("HEAVY_JOB_WORKERS", "0")
 
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))

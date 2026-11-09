@@ -122,6 +122,59 @@ Alternativa k 2.1: process pool pro těžké kroky uvnitř jednoho serveru. Je
 složitější kvůli stavu bočních řetězců (objekty builderu by musely žít v
 jiném procesu), proto až druhá volba.
 
+### Jak se fáze 2 nakonec udělala: pool výpočetních procesů (2026-11-09)
+
+Místo 2.1 + 2.2 (víc procesů uvicornu + ukládání relací nebo směrování v
+nginx) jeden webový proces a **pool výpočetních procesů**
+(`app/core/process_pool.py`):
+
+- Do poolu jdou bezstavové těžké výpočty: příprava (`/sidechains/start`),
+  topologie, analýza solvatace (+ check-box), PDB z topologie a souřadnic.
+- Interaktivní dostavování bočních řetězců zůstává ve webovém procesu: když
+  výpočet v poolu narazí na `missing_dof`, vrátí `needs_session` a `/start`
+  ho zopakuje ve webovém procesu, kde relace mezi požadavky přežije
+  (vzácný případ, platí se jen tam). Výsledek přípravy se přenáší pickle
+  (2,5 MB / 2 ms u středního systému, 10 MB / 10 ms u velkého).
+- Proč ne víc procesů uvicornu: relace by se musely ukládat na disk při
+  každém pohybu slideru, nebo by se muselo směrovat v nginx (víc instancí
+  serveru, jiná konfigurace v Dockeru i lokálně). Pool funguje všude stejně
+  a navíc drží výpočty mimo webový proces (žádné čekání event loopu na GIL).
+- `HEAVY_JOB_WORKERS`: -1 = automaticky (jádra - 1, nejvýš 4), 0 = bez
+  poolu (testy přes TestClient), N = N procesů. Fronta (`job_queue.py`)
+  pouští najednou tolik úloh, kolik je procesů.
+- Zprávy konzole z procesů poolu se přeposílají do webového procesu (konzole
+  ve frontendu je dál vidí). Výjimky s HTTP kódem projdou beze změny.
+- Procesy se při startu zahřejí (importy builderu), při vypnutí ukončí a
+  když webový proces spadne natvrdo, ukončí se samy (hlídač rodiče).
+- Katalog FF se v každém procesu načte znovu, když se změní soubor
+  (refresh v jiném procesu).
+- 2.3 hotovo: zátěžový test `test_interactive_sidechain_sessions_under_load`
+  (6 uživatelů najednou start → commit → topologie, s poolem).
+
+Ověřeno: golden testy s poolem (`HEAVY_JOB_WORKERS=2 pytest -m golden`)
+dávají bajtově stejné výsledky jako bez něj; zátěžové testy 17 passed.
+
+### Výsledky fáze 2 (`2026-11-09_1511_phase2-pool4_635f99b.json`, 4 procesy)
+
+| KPI | baseline | fáze 1 + 1.6 | fáze 2 |
+|---|---|---|---|
+| 4 najednou: nejpomalejší | 25 s | 22 s | **8,8 s** |
+| 8 najednou: medián / nejpomalejší | 52 / 52 s | 38 / 46 s | **12,8 / 16,2 s** |
+| 16 najednou: medián / nejpomalejší | 103 / 103 s | 62 / 93 s | **23,9 / 31,1 s** |
+| propustnost (16 najednou) | 9,3 /min | 10,4 /min | **29,7 /min** |
+| sekvence při zátěži, p95 | 0,92 s | 0,45 s | **0,09 s** |
+| uživatel každé 2 s: medián session / p95 zpomalení | 13,9 s / 8,1× | 19,6 s / 15,7× | **2,2 s / 1,5×** |
+| RAM v klidu / špička při 16 | 188 / 684 MB | 188 / 384 MB | **753 / 1413 MB** |
+
+Cena: každý proces poolu má v klidu ~140 MB, při práci podle velikosti
+systému. Se 4 procesy ~0,75 GB v klidu, ~1,4 GB při plném vytížení
+středními systémy - VM s 8 GB RAM má rezervu, velké systémy (300 tis.
+atomů, ~0,8 GB na úlohu) ve 4 procesech najednou ~4 GB.
+
+Přetížení z fáze 1 zmizelo: při uživateli každé 2 s server stíhá (medián
+2,2 s, malé úlohy už nečekají za velkými). Jeden uživatel je pořád ~5 s -
+to je výpočet sám, fáze 3.
+
 ## Fáze 3: zrychlení samotného výpočtu (průběžně)
 
 | # | změna | očekávaný dopad |

@@ -208,6 +208,25 @@ def test_burst_of_light_sessions(live_server, load_report):
 
 
 # ---------------------------------------------------------------------------
+# 5b. Interaktivní dostavování bočních řetězců (start -> commit) při souběhu
+# ---------------------------------------------------------------------------
+
+def test_interactive_sidechain_sessions_under_load(live_server, load_report):
+    """Relace drží objekty builderu v paměti webového procesu - výpočet v poolu
+    (app/core/process_pool.py) ji vrátí jako needs_session a /start ji
+    založí znovu ve webovém procesu. commit pak musí trefit tu samou relaci."""
+    results = run_concurrently(6, lambda _i: run_session(live_server.base_url, "glu_open_branch.pdb"))
+    assert not _errors(results), _errors(results)
+    for result in results:
+        commits = [r for r in result.records if r.endpoint == "POST /api/sidechains/commit/{ws}"]
+        assert len(commits) == 1 and commits[0].status == 200
+    assert len({r.prmtop_sha for r in results}) == 1
+    load_report.add("Interactive side-chain sessions (6 users at once, start -> commit -> topology)", [{
+        **{f"session_{k}": v for k, v in latency_stats([r.seconds for r in results]).items()},
+    }])
+
+
+# ---------------------------------------------------------------------------
 # 6. Velký systém: PDB bez CRYST1 (rekonstrukce boxu) a topologie + souřadnice
 # ---------------------------------------------------------------------------
 

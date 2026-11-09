@@ -8,6 +8,7 @@ from app.core.exceptions import AppBaseException, InternalError
 from app.services.topology_service import TopologyService
 from app.workspaces.manager import workspace_manager
 from app.core.job_queue import heavy_job
+from app.core.process_pool import run_heavy
 from app.services.ff_selection import resolve_ff_selections
 
 router = APIRouter()
@@ -22,6 +23,11 @@ class TopologyRequest(BaseModel):
     hmr: bool = False
 
 
+def topology_job(**kwargs):
+    """Generování topologie v procesu poolu (app/core/process_pool.py)."""
+    return topology_service.generate_topology(**kwargs)
+
+
 @router.post("/{workspace_id}/generate")
 @heavy_job("topology")
 async def generate_topology(workspace_id: str, request: TopologyRequest):
@@ -34,8 +40,8 @@ async def generate_topology(workspace_id: str, request: TopologyRequest):
         # 1. Vygenerujeme soubory na disk (vrátí dict s názvy). V threadpoolu:
         # generování trvá sekundy (u 300k atomů ~6 s) a přímo v event loopu by
         # po tu dobu server neodpověděl nikomu jinému (viz tests/load/).
-        result_dict = await run_in_threadpool(
-            topology_service.generate_topology,
+        result_dict = await run_heavy(
+            topology_job,
             workspace_id=workspace_id,
             pdb_filename=request.pdb_filename,
             ff_selections=ff_selections,

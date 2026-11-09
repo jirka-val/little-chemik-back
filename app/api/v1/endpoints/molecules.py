@@ -14,6 +14,7 @@ from app.services.pdb_service import PDBService, remove_residue_from_pdb
 from app.workspaces.manager import workspace_manager
 from app.services.incidents import history as incident_history
 from app.core.job_queue import heavy_job
+from app.core.process_pool import run_heavy
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -88,7 +89,7 @@ async def upload_from_inputs(topology: UploadFile = File(...), coordinates: Uplo
     try:
         manifest = _store_inputs(workspace_dir, topology, coordinates)
         stored = workspace_dir / input_files.coordinates_filename(coordinates.filename)
-        built = await run_in_threadpool(
+        built = await run_heavy(
             input_files.write_pdb_from_inputs, workspace_dir / input_files.UPLOADED_TOPOLOGY, stored,
             workspace_dir / "structure.pdb",
         )

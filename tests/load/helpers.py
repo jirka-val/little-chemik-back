@@ -71,9 +71,10 @@ def _free_port() -> int:
 
 
 @contextmanager
-def start_server(root: Path, workers: Optional[int] = None) -> Iterator[LiveServer]:
+def start_server(root: Path, workers: Optional[int] = None, pool_workers: Optional[int] = None) -> Iterator[LiveServer]:
     """uvicorn app.main:app v samostatném procesu (jako Dockerfile: bez reloadu),
-    s vlastními WORKSPACE_DIR a INCIDENTS_DIR pod `root`."""
+    s vlastními WORKSPACE_DIR a INCIDENTS_DIR pod `root`. pool_workers =
+    HEAVY_JOB_WORKERS (None = výchozí nastavení serveru, 0 = bez poolu)."""
     import os
     import subprocess
     import sys
@@ -84,6 +85,11 @@ def start_server(root: Path, workers: Optional[int] = None) -> Iterator[LiveServ
     port = _free_port()
     env = {**os.environ, "WORKSPACE_DIR": str(workspace_dir), "INCIDENTS_DIR": str(incidents_dir),
            "PYTHONUNBUFFERED": "1"}
+    # tests/conftest.py vypíná pool výpočetních procesů pro TestClient - server
+    # tady má běžet jako v produkci (výchozí nastavení), pokud ho volající neurčí.
+    env.pop("HEAVY_JOB_WORKERS", None)
+    if pool_workers is not None:
+        env["HEAVY_JOB_WORKERS"] = str(pool_workers)
     cmd = [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(port),
            "--log-level", "warning"] + (["--workers", str(workers)] if workers else [])
     log_path = root / "server.log"
@@ -112,11 +118,23 @@ def start_server(root: Path, workers: Optional[int] = None) -> Iterator[LiveServ
         yield LiveServer(base_url, process.pid, workspace_dir, incidents_dir, log_path, workers or 1)
     finally:
         manager.WORKSPACE_DIR = original_dir
+        # Celý strom procesů: na Windows terminate() ukončí jen server a procesy
+        # poolu (app/core/process_pool.py) by přežily a držely otevřený log.
+        try:
+            children = psutil.Process(process.pid).children(recursive=True)
+        except psutil.Error:
+            children = []
         process.terminate()
         try:
             process.wait(timeout=20)
         except subprocess.TimeoutExpired:
             process.kill()
+        for child in children:
+            try:
+                child.kill()
+            except psutil.Error:
+                pass
+        psutil.wait_procs(children, timeout=10)
         log.close()
 
 
@@ -278,7 +296,10 @@ def run_session(base_url: str, pdb_name: str, **case_kwargs: Any) -> SessionResu
     started = time.perf_counter()
     with TimedClient(base_url, records) as client:
         try:
-            result = run_pipeline(client, PipelineCase(name=pdb_name, pdb_path=GOLDEN_PDB_DIR / pdb_name, **case_kwargs))
+            path = GOLDEN_PDB_DIR / pdb_name
+            if not path.exists():           # další fixtures (např. glu_open_branch.pdb)
+                path = GOLDEN_PDB_DIR.parent / pdb_name
+            result = run_pipeline(client, PipelineCase(name=pdb_name, pdb_path=path, **case_kwargs))
         except BaseException as exc:  # noqa: BLE001 - chyba jednoho uživatele je výsledek, ne pád běhu
             return SessionResult(pdb_name, False, time.perf_counter() - started, error=f"{type(exc).__name__}: {exc}"[:500],
                                  records=records)

@@ -44,12 +44,20 @@ class FFCatalogService:
         # ff_catalog_refresher.py), takže cache je bezpečné invalidovat
         # výhradně tam.
         self._snapshot_cache: Optional[Dict[str, Any]] = None
+        self._snapshot_mtime: Optional[int] = None
         self._buildable_ions_cache: Optional[Dict[str, Set[str]]] = None
 
     def _load(self) -> Dict[str, Any]:
-        if self._snapshot_cache is not None:
+        # Víc procesů (pool výpočetních procesů, app/core/process_pool.py):
+        # refresh zapíše soubor v jednom procesu - ostatní poznají novou verzi
+        # podle času změny a načtou ji znovu.
+        try:
+            mtime = self.path.stat().st_mtime_ns
+        except OSError:
+            mtime = None
+        if self._snapshot_cache is not None and mtime == self._snapshot_mtime:
             return self._snapshot_cache
-        if not self.path.exists():
+        if mtime is None:
             return {"fetched_at": None, "forcefields": []}
         try:
             with open(self.path, "r", encoding="utf-8") as f:
@@ -57,7 +65,8 @@ class FFCatalogService:
         except (json.JSONDecodeError, OSError) as e:
             logger.error(f"FF catalog snapshot at {self.path} is unreadable ({e}), treating as empty.")
             return {"fetched_at": None, "forcefields": []}
-        self._snapshot_cache = snapshot
+        self._snapshot_cache, self._snapshot_mtime = snapshot, mtime
+        self._buildable_ions_cache = None
         return snapshot
 
     def get_forcefields(self) -> List[Dict[str, Any]]:
@@ -89,6 +98,7 @@ class FFCatalogService:
         tmp_path.replace(self.path)
 
         self._snapshot_cache = snapshot
+        self._snapshot_mtime = self.path.stat().st_mtime_ns
         self._buildable_ions_cache = None  # odvozené z obsahu, přepočítat líně při dalším dotazu
 
         added = classification_service.reconcile(all_ffs, self.ff_service.ff_name)
@@ -115,10 +125,11 @@ class FFCatalogService:
 
         Výsledek je cachovaný (base64 decode + regex nad ~60 FF souborů by se
         jinak opakovalo při každém volání - viz cache poznámka v __init__),
-        invalidovaný jedině přes refresh_catalog(). Vrácený dict/set NENÍ
+        invalidovaný při refresh_catalog() nebo změně souboru katalogu. Vrácený dict/set NENÍ
         kopie - volající ho čte, nikdy nemodifikuje (viz stávající použití v
         validation.py).
         """
+        self._load()  # při změně souboru katalogu (jiný proces) se cache níže zahodí
         if self._buildable_ions_cache is not None:
             return self._buildable_ions_cache
 

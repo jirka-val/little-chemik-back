@@ -15,6 +15,7 @@ from app.core.http_client import external_http_client
 from app.workspaces.manager import workspace_manager
 # ZMĚNA 1: Importujeme novou funkci process_structure místo původní clean_pdb_altlocs
 from app.core.job_queue import heavy_job
+from app.core.process_pool import run_heavy
 from app.core.responses import large_json_response
 from app.services.analysis import (
     build_sequence_tokens,
@@ -211,7 +212,7 @@ async def analyze_solvation(workspace_id: str):
     file_path = workspace_manager.get_file_path(workspace_id, "structure.pdb")
     async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
         pdb_text = await f.read()
-    result = await run_in_threadpool(analyze_solvated_system, pdb_text)
+    result = await run_heavy(analyze_solvated_system, pdb_text)
     if result["solvated"]:
         problems = [c["id"] for c in result["checks"] if c["status"] != "ok"]
         logger.info(f"Workspace {workspace_id}: solvated system detected ({result['waters']} waters, "
@@ -231,7 +232,7 @@ async def check_solvation_box(workspace_id: str, box: BoxOverride):
     file_path = workspace_manager.get_file_path(workspace_id, "structure.pdb")
     async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
         pdb_text = await f.read()
-    return await run_in_threadpool(analyze_solvated_system, pdb_text, True, True, box.model_dump())
+    return await run_heavy(analyze_solvated_system, pdb_text, True, True, box.model_dump())
 
 
 @router.post("/solvation/{workspace_id}/remove", summary="Odstraní vodu a monovalentní ionty nahraného solvatovaného systému")

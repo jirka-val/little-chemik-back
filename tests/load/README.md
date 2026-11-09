@@ -8,6 +8,9 @@ exactly like the frontend does (`tests/golden/pipeline.run_pipeline`).
 
 The server gets its own `WORKSPACE_DIR` and `INCIDENTS_DIR` in pytest's tmp
 directory, so `temp_workspaces/` and real incident reports are never touched.
+The server runs with its default process pool (`HEAVY_JOB_WORKERS`, see
+`app/core/process_pool.py`) unless `--pool` says otherwise; the pytest
+`TestClient` tests elsewhere run without it.
 It needs the downloaded FF catalog and `data/ff_cache` (see `tests/README.md`);
 without them the tests are skipped.
 
@@ -39,6 +42,7 @@ so the history stays).
 .venv/Scripts/python.exe -m tests.load.benchmark run --label baseline          # ~7 min
 .venv/Scripts/python.exe -m tests.load.benchmark run --label x --workers 4     # several uvicorn processes
 .venv/Scripts/python.exe -m tests.load.benchmark run --label x --quick         # ~3 min, rough
+.venv/Scripts/python.exe -m tests.load.benchmark run --label x --pool 0        # without the process pool
 .venv/Scripts/python.exe -m tests.load.benchmark compare A.json B.json         # KPIs, % change, better/WORSE
 ```
 

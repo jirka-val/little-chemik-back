@@ -64,3 +64,17 @@ def test_unknown_force_field_is_rejected(selection):
     with pytest.raises(BadRequestError) as exc:
         resolve_ff_selections(selection, CATALOG)
     assert exc.value.code == "unknown_force_field"
+
+
+def test_catalog_reloads_when_another_process_rewrites_the_file(tmp_path):
+    import json
+    import os
+    from app.services.ff_catalog_service import FFCatalogService
+
+    path = tmp_path / "ff_catalog.json"
+    path.write_text(json.dumps({"fetched_at": "a", "forcefields": [{"id": 1}]}))
+    service = FFCatalogService(path=path)
+    assert [ff["id"] for ff in service.get_forcefields()] == [1]
+    path.write_text(json.dumps({"fetched_at": "b", "forcefields": [{"id": 2}]}))
+    os.utime(path, ns=(path.stat().st_mtime_ns + 10**9,) * 2)   # jiný čas změny i na hrubých FS
+    assert [ff["id"] for ff in service.get_forcefields()] == [2]

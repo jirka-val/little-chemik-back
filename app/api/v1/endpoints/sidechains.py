@@ -31,6 +31,7 @@ from app.services.structure.sidechain_service import sidechain_session_service
 from app.services.validation.service import ValidationService
 from app.workspaces.manager import workspace_manager
 from app.core.job_queue import heavy_job
+from app.core.process_pool import heavy_pool, run_heavy
 from app.services.ff_selection import resolve_ff_selections
 
 logger = logging.getLogger(__name__)
@@ -110,6 +111,49 @@ def _with_kept_box(workspace_id: str, pdb_text: str) -> str:
     return restore_cryst1(pdb_text, kept_box.read_text(encoding="utf-8"))
 
 
+def _start_compute(workspace_id: str, request: PreparationRequest, pdb_content: str, keep_session: bool) -> Dict[str, Any]:
+    """Výpočetní část /start: rozhodnutí o solvataci, builder, u hotové
+    struktury i validace. keep_session=False (proces poolu): interaktivní
+    relaci nezakládá - vrátí "needs_session" a /start ji založí ve webovém
+    procesu, kde mezi požadavky přežije (app/core/process_pool.py)."""
+    add_solvent, crystal_water_mode, clean_crystal_ions, pdb_content = _resolve_existing_solvent(
+        workspace_id, pdb_content, request
+    )
+    outcome = sidechain_session_service.start(
+        workspace_id=workspace_id,
+        pdb_text=pdb_content,
+        ff_selections=request.ff_selections,
+        ph=request.ph,
+        add_solvent_and_ions=add_solvent,
+        salts=build_request_salt_specs(request) if add_solvent else [],
+        box_shape=BOX_SHAPE_MAP.get(request.box_shape),
+        box_padding_angstrom=request.box_padding_nm * 10.0,
+        keep_crystal_waters=crystal_water_mode != "remove_all",
+        crystal_water_mode=crystal_water_mode,
+        clean_crystal_ions=clean_crystal_ions,
+        replace_structural_multivalent_with_mg=request.replace_structural_multivalent_with_mg,
+        concentration_mode=request.concentration_mode,
+        protonation_overrides=[o.model_dump() for o in request.protonation_overrides],
+        structure_decisions=request.structure_decisions.model_dump(),
+        review_structure=request.review_structure,
+        auto_amide_flips=request.auto_amide_flips,
+    )
+    if outcome.status == "complete":
+        pdb_text = _with_kept_box(workspace_id, outcome.prepared.pdb_text)
+        validation = validation_service.validate_pdb_content(pdb_text, label="prepared_state")
+        return {"outcome": outcome, "pdb_text": pdb_text, "validation": validation}
+    if outcome.status == "missing_dof" and not keep_session:
+        sidechain_session_service.cancel(workspace_id)
+        return {"needs_session": True}
+    return {"outcome": outcome}
+
+
+def prepare_job(workspace_id: str, request_data: Dict[str, Any], pdb_content: str) -> Dict[str, Any]:
+    """/start v procesu poolu (argumenty i výsledek jdou přes pickle)."""
+    return _start_compute(workspace_id, PreparationRequest.model_validate(request_data), pdb_content,
+                          keep_session=False)
+
+
 @router.post("/start/{workspace_id}", summary="Spustí přípravu; otevře GUI relaci, pokud narazí na bezpečný missing DOF")
 @heavy_job("prepare")
 async def start_sidechain_session(workspace_id: str, request: PreparationRequest):
@@ -134,30 +178,14 @@ async def start_sidechain_session(workspace_id: str, request: PreparationRequest
         async with aiofiles.open(pdb_path, "r", encoding="utf-8") as f:
             pdb_content = await f.read()
 
-        add_solvent, crystal_water_mode, clean_crystal_ions, pdb_content = await run_in_threadpool(
-            _resolve_existing_solvent, workspace_id, pdb_content, request
-        )
-
-        outcome = await run_in_threadpool(
-            sidechain_session_service.start,
-            workspace_id=workspace_id,
-            pdb_text=pdb_content,
-            ff_selections=request.ff_selections,
-            ph=request.ph,
-            add_solvent_and_ions=add_solvent,
-            salts=build_request_salt_specs(request) if add_solvent else [],
-            box_shape=BOX_SHAPE_MAP.get(request.box_shape),
-            box_padding_angstrom=request.box_padding_nm * 10.0,
-            keep_crystal_waters=crystal_water_mode != "remove_all",
-            crystal_water_mode=crystal_water_mode,
-            clean_crystal_ions=clean_crystal_ions,
-            replace_structural_multivalent_with_mg=request.replace_structural_multivalent_with_mg,
-            concentration_mode=request.concentration_mode,
-            protonation_overrides=[o.model_dump() for o in request.protonation_overrides],
-            structure_decisions=request.structure_decisions.model_dump(),
-            review_structure=request.review_structure,
-            auto_amide_flips=request.auto_amide_flips,
-        )
+        # Výpočet v procesu poolu; interaktivní relace (missing DOF) se zakládá
+        # ve webovém procesu, kde přežije mezi požadavky - pak se přepočítá tady.
+        job = None
+        if heavy_pool.enabled:
+            job = await run_heavy(prepare_job, workspace_id, request.model_dump(), pdb_content)
+        if job is None or job.get("needs_session"):
+            job = await run_in_threadpool(_start_compute, workspace_id, request, pdb_content, True)
+        outcome = job["outcome"]
 
         if outcome.status == "structure_review":
             # Krok 3.5 (Expert): structure.pdb se nemění, frontend po kontrole
@@ -174,15 +202,13 @@ async def start_sidechain_session(workspace_id: str, request: PreparationRequest
         if outcome.status == "complete":
             prepared = outcome.prepared
             meta_path = pdb_path.with_name(pdb_path.name.replace(".pdb", ".forge_meta.json"))
-            pdb_text = _with_kept_box(workspace_id, prepared.pdb_text)
+            pdb_text = job["pdb_text"]
             async with aiofiles.open(pdb_path, "w", encoding="utf-8") as f:
                 await f.write(pdb_text)
             async with aiofiles.open(meta_path, "w", encoding="utf-8") as f:
                 await f.write(json.dumps(prepared.forge_meta))
 
-            validation_results = await run_in_threadpool(
-                validation_service.validate_pdb_content, pdb_text, label="prepared_state"
-            )
+            validation_results = job["validation"]
             logger.info(f"Sidechain start: structure already complete for {workspace_id} in {time.time() - start_time:.2f}s.")
             summary = build_preparation_summary(prepared)
             report_records.update_record(workspace_id, report_records.PREPARATION, {"summary": summary})

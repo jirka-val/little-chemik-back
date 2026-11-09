@@ -6,6 +6,7 @@ se porovnává každá optimalizace (baseline -> změna -> znovu benchmark).
     .venv/Scripts/python.exe -m tests.load.benchmark run --label baseline
     .venv/Scripts/python.exe -m tests.load.benchmark run --label 4workers --workers 4
     .venv/Scripts/python.exe -m tests.load.benchmark run --label quick --quick      # ~3 min, orientačně
+    .venv/Scripts/python.exe -m tests.load.benchmark run --label nopool --pool 0    # bez poolu procesů
 
     # porovnat dva běhy (KPI, změna v %, lepší/horší)
     .venv/Scripts/python.exe -m tests.load.benchmark compare tests/load/benchmarks/A.json tests/load/benchmarks/B.json
@@ -222,7 +223,7 @@ def bench_light_burst(server: LiveServer, users: int = 50) -> Dict[str, Any]:
 # Běh, uložení, porovnání
 # ---------------------------------------------------------------------------
 
-def run(label: str, workers: Optional[int], quick: bool) -> Path:
+def run(label: str, workers: Optional[int], quick: bool, pool: Optional[int] = None) -> Path:
     if not ff_data_available():
         sys.exit("Benchmark needs the downloaded FF catalog and data/ff_cache (see tests/README.md).")
     commit = _git("rev-parse", "--short", "HEAD")
@@ -233,6 +234,7 @@ def run(label: str, workers: Optional[int], quick: bool) -> Path:
             "date": datetime.now().isoformat(timespec="seconds"),
             "commit": commit + ("-dirty" if dirty else ""),
             "workers": workers or 1,
+            "pool_workers": "default" if pool is None else pool,
             "quick": quick,
             "os": platform.platform(terse=True),
             "cpu": f"{psutil.cpu_count(logical=False)} cores / {psutil.cpu_count()} threads",
@@ -241,7 +243,7 @@ def run(label: str, workers: Optional[int], quick: bool) -> Path:
         },
     }
     started = time.perf_counter()
-    with tempfile.TemporaryDirectory(prefix="forge_bench_") as tmp, start_server(Path(tmp), workers) as server:
+    with tempfile.TemporaryDirectory(prefix="forge_bench_", ignore_cleanup_errors=True) as tmp, start_server(Path(tmp), workers, pool) as server:
         _log(f"server up ({server.workers} worker(s)), warming up")
         time.sleep(1.0)
         result["idle"] = {"rss_mb": round(ServerMonitor(server.pid, server.workspace_dir)._rss())}
@@ -326,12 +328,14 @@ def main(argv: Optional[List[str]] = None) -> None:
     r.add_argument("--label", default="run")
     r.add_argument("--workers", type=int, default=None, help="uvicorn --workers (default: 1, like the Dockerfile)")
     r.add_argument("--quick", action="store_true", help="fewer repeats and users (~3 min, rough numbers)")
+    r.add_argument("--pool", type=int, default=None,
+                   help="HEAVY_JOB_WORKERS for the server (default: server default, 0 = no process pool)")
     c = sub.add_parser("compare", help="compare two benchmark JSON files")
     c.add_argument("a", type=Path)
     c.add_argument("b", type=Path)
     args = parser.parse_args(argv)
     if args.cmd == "run":
-        print(Path(run(args.label, args.workers, args.quick)).with_suffix(".md").read_text(encoding="utf-8"))
+        print(Path(run(args.label, args.workers, args.quick, args.pool)).with_suffix(".md").read_text(encoding="utf-8"))
     else:
         print(compare(args.a, args.b))
 

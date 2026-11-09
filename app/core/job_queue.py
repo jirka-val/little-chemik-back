@@ -118,7 +118,14 @@ class HeavyJobQueue:
         return {"slots": self.slots, "running": self.running, "waiting": self.waiting}
 
 
-heavy_jobs = HeavyJobQueue(settings.HEAVY_JOB_SLOTS)
+def _configured_slots() -> int:
+    if settings.HEAVY_JOB_SLOTS > 0:
+        return settings.HEAVY_JOB_SLOTS
+    from app.core.process_pool import configured_workers
+    return max(1, configured_workers())
+
+
+heavy_jobs = HeavyJobQueue(_configured_slots())
 
 
 def _workspace_of(kwargs: Dict[str, Any]) -> Optional[str]:

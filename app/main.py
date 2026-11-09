@@ -30,11 +30,17 @@ async def lifespan(app: FastAPI):
     await asyncio.to_thread(catalog_service.ensure_catalog)
     ff_catalog_task = asyncio.create_task(refresh_ff_catalog_periodically())
 
+    # Pool výpočetních procesů (app/core/process_pool.py): procesy se
+    # spustí a naimportují builder hned, ne až při prvním uživateli.
+    from app.core.process_pool import heavy_pool
+    await heavy_pool.warm_up()
+
     yield
 
     # Vypnutí serveru (Ctrl+C, docker stop): smyčky na pozadí bezpečně ukončit.
     cleanup_task.cancel()
     ff_catalog_task.cancel()
+    heavy_pool.shutdown()
     await close_external_http_client()
 
 
