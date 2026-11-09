@@ -74,6 +74,10 @@ class Settings(BaseSettings):
     # ostatní čekají v pořadí podle session. 0 = podle poolu (počet procesů,
     # bez poolu 1 - víc vláken v jednom procesu propustnost nezvýší, GIL).
     HEAVY_JOB_SLOTS: int = 0
+    # Ochrana proti botům: kolik těžkých úloh smí mít jeden klient (IP adresa)
+    # najednou ve frontě (běžící + čekající); další dostane 429. Velkoryse -
+    # celý ústav nebo workshop může chodit z jedné veřejné IP (NAT). 0 = vypnuto.
+    HEAVY_JOBS_PER_CLIENT: int = 20
 
     # extra="ignore": klíč v .env, který Settings nezná (např. FORGE_URL pro
     # scripts/incidents.py), nesmí shodit start backendu.

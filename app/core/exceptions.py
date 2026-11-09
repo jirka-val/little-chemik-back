@@ -86,6 +86,13 @@ class ForbiddenError(AppBaseException):
         super().__init__(message)
 
 
+class TooManyJobsError(AppBaseException):
+    """Jeden klient (IP adresa) má ve frontě těžkých úloh příliš mnoho najednou -
+    ochrana proti botům / zahlcení (HEAVY_JOBS_PER_CLIENT, app/core/job_queue.py)."""
+    status_code = 429
+    code = "too_many_jobs"
+
+
 class InternalError(AppBaseException):
     """
     Generický 500 catch-all pro neočekávané selhání uvnitř zpracování (chyba

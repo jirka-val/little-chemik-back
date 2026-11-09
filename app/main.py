@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.core.http_client import close_external_http_client
 from app.core.incident_middleware import IncidentJournalMiddleware
 from app.core.console_middleware import ConsoleWorkspaceMiddleware
+from app.core.request_context import ClientAddressMiddleware
 
 from app.workspaces.tasks.garbage_collector import cleanup_old_workspaces
 from app.workspaces.tasks.ff_catalog_refresher import refresh_ff_catalog_periodically
@@ -68,6 +69,8 @@ app.add_middleware(IncidentJournalMiddleware)
 
 # Zprávy Console panelu vidí jen workspace, který je vyvolal.
 app.add_middleware(ConsoleWorkspaceMiddleware)
+# Adresa klienta pro limit těžkých úloh na klienta (app/core/job_queue.py).
+app.add_middleware(ClientAddressMiddleware)
 
 app.add_exception_handler(AppBaseException, app_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)

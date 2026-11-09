@@ -39,6 +39,8 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional, Tuple, TypeVar
 
 from app.core.config import settings
+from app.core.exceptions import TooManyJobsError
+from app.core.request_context import client_address
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +156,19 @@ def _workspace_of(kwargs: Dict[str, Any]) -> Optional[str]:
     return getattr(request, "workspace_id", None)
 
 
+# Kolik těžkých úloh (běžících + čekajících) má který klient - ochrana proti botům.
+_client_jobs: Counter = Counter()
+
+
+def _check_client_limit(client: Optional[str]) -> None:
+    limit = settings.HEAVY_JOBS_PER_CLIENT
+    if limit > 0 and client and _client_jobs[client] >= limit:
+        logger.warning(f"Job queue: client {client} already has {_client_jobs[client]} heavy jobs - rejected.")
+        raise TooManyJobsError(
+            f"Too many calculations from your address at once ({_client_jobs[client]}). "
+            "Please wait until some of them finish and try again.")
+
+
 # Rozpracované těžké požadavky: (druh, workspace, otisk požadavku) -> výsledek.
 _inflight: Dict[Tuple[str, str, str], asyncio.Future] = {}
 
@@ -185,9 +200,12 @@ def heavy_job(kind: str, dedupe: bool = True) -> Callable[[Callable[..., Awaitab
             if running is not None and running.get_loop() is asyncio.get_running_loop():
                 logger.info(f"Job queue: identical {kind} for {workspace_id} already in progress - sharing its result.")
                 return await asyncio.shield(running)
+            client = client_address.get()
+            _check_client_limit(client)
             shared = asyncio.get_running_loop().create_future() if key else None
             if key:
                 _inflight[key] = shared
+            _client_jobs[client] += 1
             try:
                 async with heavy_jobs.slot(kind, workspace_id):
                     result = await func(*args, **kwargs)
@@ -203,6 +221,9 @@ def heavy_job(kind: str, dedupe: bool = True) -> Callable[[Callable[..., Awaitab
                         shared.exception()     # označit jako převzatou, ať asyncio nevaruje
                 raise
             finally:
+                _client_jobs[client] -= 1
+                if _client_jobs[client] <= 0:
+                    del _client_jobs[client]
                 if key and _inflight.get(key) is shared:
                     del _inflight[key]
         return wrapper

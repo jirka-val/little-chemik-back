@@ -175,3 +175,33 @@ async def test_shared_request_gets_the_same_error():
     results = await asyncio.gather(endpoint(workspace_id="ws-e"), endpoint(workspace_id="ws-e"),
                                    return_exceptions=True)
     assert all(isinstance(r, ValueError) for r in results)
+
+
+async def test_one_client_cannot_flood_the_queue(monkeypatch):
+    from app.core.config import settings
+    from app.core.exceptions import TooManyJobsError
+    from app.core.request_context import client_address
+
+    monkeypatch.setattr(settings, "HEAVY_JOBS_PER_CLIENT", 2)
+    gate = asyncio.Event()
+
+    @heavy_job("limit-test", dedupe=False)
+    async def endpoint(workspace_id: str):
+        await gate.wait()
+        return workspace_id
+
+    token = client_address.set("10.0.0.1")
+    try:
+        held = [asyncio.create_task(endpoint(workspace_id=f"ws-{i}")) for i in range(2)]
+        await asyncio.sleep(0)
+        with pytest.raises(TooManyJobsError):                  # třetí od stejné adresy
+            await endpoint(workspace_id="ws-3")
+    finally:
+        client_address.reset(token)
+    other = client_address.set("10.0.0.2")                      # jiný klient projde
+    try:
+        other_task = asyncio.create_task(endpoint(workspace_id="ws-other"))
+    finally:
+        client_address.reset(other)
+    gate.set()
+    assert await asyncio.gather(*held, other_task) == ["ws-0", "ws-1", "ws-other"]
