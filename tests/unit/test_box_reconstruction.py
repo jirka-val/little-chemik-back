@@ -5,6 +5,7 @@ syntetické periodické vodní boxy v náhodné orientaci, CRYST1 se "zahodí".
 
 import itertools
 import math
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -100,3 +101,15 @@ def test_too_few_waters():
     fit = reconstruct_box(np.zeros((50, 3)))
     assert not fit.ok and "too few" in fit.reason
     assert math.isfinite(fit.volume)
+
+
+def test_large_builder_box_with_a_false_face_is_recognized():
+    """Skutečný případ: 3SKR s 1 nm vody z našeho builderu (komolý oktaedr,
+    a = 81.439 A). Oblak vody nemá přesně tvar buňky, mezi kandidáty na stěny
+    je užší "falešná stěna" (75 A) a vytlačí skutečnou - hlavní cesta selže,
+    box najde až záložní cesta ze čtyř šestiúhelníkových stěn."""
+    oxygens = np.load(Path(__file__).resolve().parents[1] / "fixtures" / "box" / "3skr_1nm_water_oxygens.npz")["xyz"]
+    fit = reconstruct_box(oxygens.astype(float))
+    assert fit.ok, fit.reason
+    assert fit.shape == "truncated octahedron"
+    assert fit.params["a"] == pytest.approx(81.439, rel=0.01)

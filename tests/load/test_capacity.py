@@ -243,11 +243,6 @@ def large_system(live_server):
     }
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "Známá chyba (2026-11-09): u velkých RNA boxů z našeho builderu (3SKR, 1 a 3 nm vody) má vodní oblak v "
-    "jednom směru užší místo (112.5 A proti 121.4 A mezi šestiúhelníkovými stěnami), find_face_pairs ho vezme "
-    "jako stěnu, vytlačí skutečnou čtvercovou stěnu a rekonstrukce komolého oktaedru selže. Box sám je "
-    "periodicky v pořádku. Po opravě box_reconstruction.py xfail smazat."))
 def test_large_pdb_without_cryst1(live_server, load_report, large_system):
     pdb = "".join(line + "\n" for line in large_system["pdb"].splitlines() if not line.startswith("CRYST1"))
     with TimedClient(live_server.base_url) as client, \

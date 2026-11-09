@@ -361,7 +361,9 @@ def _ws_face_vectors(params: Dict[str, float], n_pairs: int) -> np.ndarray:
 def _orient_ws(normals: List[np.ndarray], widths: List[float], shape: str):
     """Natočení a velikost ideálního TO/RD podle naměřených normál stěn."""
     unit = {"a": 1.0, "b": 1.0, "c": 1.0, **IDEAL_PARAMS[shape]}
-    V = _ws_face_vectors(unit, len(normals))
+    # Vždy všechny stěny tělesa (TO 7, RD 6 párů) - naměřených může být i méně
+    # (_fit_from_face_subset), přiřazení vybere ty odpovídající.
+    V = _ws_face_vectors(unit, {"truncated octahedron": 7, "rhombic dodecahedron": 6}[shape])
     Q = V / np.linalg.norm(V, axis=1)[:, None]
     Nm = np.array(normals)
     m1, m2 = Nm[0], Nm[1]
@@ -437,19 +439,61 @@ def reconstruct_box(water_oxygens: np.ndarray, seed: int = 0) -> BoxReconstructi
             if fit.ok:
                 return fit
             first_failure = first_failure or fit
+    fit = _fit_from_face_subset(P, normals, wcloud, target, seed)
+    if fit is not None:
+        return fit
     return first_failure or BoxReconstruction(
         False, f"the water does not form a periodic cell ({k} pairs of parallel faces)", n_face_pairs=k)
 
 
+# Záložní cesta: čtveřice stěn, která sama určí mřížku TO/RD.
+# |cos| úhlů mezi normálami: šestiúhelníkové stěny TO 1/3, kosočtverečné RD 1/2 nebo 0.
+_SUBSET_SHAPES = (("truncated octahedron", (COS_TO,)), ("rhombic dodecahedron", (0.5, 0.0)))
+_SUBSET_COS_TOL = 0.05
+_SUBSET_WIDTH_TOL = 0.06
+
+
+def _fit_from_face_subset(P: np.ndarray, normals: List[np.ndarray], wcloud: List[float], target: float,
+                          seed: int) -> Optional[BoxReconstruction]:
+    """Když oblak vody nemá přesně tvar Wigner-Seitzovy buňky (u velkých boxů z
+    builderu se mezi kandidáty objeví užší "falešná stěna" a vytlačí skutečnou -
+    3SKR s 1 a 3 nm vody), stačí čtyři správné stěny: u komolého oktaedru jsou
+    to šestiúhelníkové stěny podél nejkratších mřížkových vektorů, u
+    dodekaedru libovolné čtyři kosočtverečné. Mřížka z nich musí projít
+    stejným testem periodicity jako hlavní cesta."""
+    k = len(normals)
+    # Jen když kandidátů je jako u skutečného boxu (7 stěn + pár falešných) -
+    # kulatý oblak (kapka) má desítky kandidátů a nějaká čtveřice by se našla vždy.
+    if not 4 <= k <= 7 + MAX_DROPPED_FACES:
+        return None
+    Nm = np.array(normals)
+    cos = np.abs(Nm @ Nm.T)
+    for shape, allowed in _SUBSET_SHAPES:
+        for combo in itertools.combinations(range(k), 4):
+            pairs = [cos[i, j] for i, j in itertools.combinations(combo, 2)]
+            if not all(min(abs(c - a) for a in allowed) < _SUBSET_COS_TOL for c in pairs):
+                continue
+            widths = np.array([wcloud[i] for i in combo])
+            if np.ptp(widths) > _SUBSET_WIDTH_TOL * widths.mean():
+                continue
+            fit = _fit_faces(P, [normals[i] for i in combo], list(widths), target, seed, shape=shape)
+            if fit.ok:
+                fit.n_face_pairs = k
+                return fit
+    return None
+
+
 def _fit_faces(P: np.ndarray, normals: List[np.ndarray], wcloud: List[float], target: float,
-               seed: int) -> BoxReconstruction:
+               seed: int, shape: Optional[str] = None) -> BoxReconstruction:
+    """shape: vynutit TO/RD z dané podmnožiny stěn (_fit_from_face_subset),
+    jinak tvar podle počtu párů stěn (7 = TO, 6 = RD, 3 = rovnoběžnostěn)."""
     k = len(normals)
     Nm = np.array(normals)
     proj = P @ Nm.T
     center = np.linalg.lstsq(Nm, (proj.min(axis=0) + proj.max(axis=0)) / 2, rcond=None)[0]
 
-    if k in (6, 7):
-        shape = "rhombic dodecahedron" if k == 6 else "truncated octahedron"
+    if shape is not None or k in (6, 7):
+        shape = shape or ("rhombic dodecahedron" if k == 6 else "truncated octahedron")
         oriented = _orient_ws(normals, wcloud, shape)
         if oriented is None:
             return BoxReconstruction(False, f"the faces do not match a {shape}", n_face_pairs=k)
