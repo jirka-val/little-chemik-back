@@ -3,6 +3,10 @@ terminals and missing/extra atoms per residue."""
 
 from __future__ import annotations
 
+import copy
+import hashlib
+import threading
+from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from app.utils.adams4sims_processing_library.utils.alias import name_alias
@@ -258,7 +262,34 @@ def _reterminate_as_gap_end(
         )
 
 
+_SEQUENCE_CACHE: "OrderedDict[tuple, Any]" = OrderedDict()
+_SEQUENCE_CACHE_SIZE = 8
+_SEQUENCE_CACHE_LOCK = threading.Lock()
+
+
 def build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps: bool = True):
+    """
+    Tokeny sekvence pro PDB (viz _build_sequence_tokens) s cache podle obsahu.
+
+    Za jednu přípravu se volá ~8x (endpoint sekvence, validace, výběr FF,
+    builder), ale jen pro ~3 různé verze PDB - stejný text se tak počítá
+    jednou. Vrací se hluboká kopie: volající (builder) výsledek dál upravují.
+    """
+    key = (hashlib.sha1(pdb_text.encode("utf-8", "surrogatepass")).hexdigest(), chain, fill_gaps)
+    with _SEQUENCE_CACHE_LOCK:
+        cached = _SEQUENCE_CACHE.get(key)
+        if cached is not None:
+            _SEQUENCE_CACHE.move_to_end(key)
+    if cached is None:
+        cached = _build_sequence_tokens(pdb_text, chain, fill_gaps)
+        with _SEQUENCE_CACHE_LOCK:
+            _SEQUENCE_CACHE[key] = cached
+            while len(_SEQUENCE_CACHE) > _SEQUENCE_CACHE_SIZE:
+                _SEQUENCE_CACHE.popitem(last=False)
+    return copy.deepcopy(cached)
+
+
+def _build_sequence_tokens(pdb_text: str, chain: Optional[str] = None, fill_gaps: bool = True):
     """
     SESTAVUJE KOMPLETNÍ SEZNAM TOKENS PRO DANÝ ŘETĚZEC, PROVÁDÍ ANALÝZU VARIANT A DETEKCI CHYBĚJÍCÍCH ČÁSTÍ STRUKTURY.
     """

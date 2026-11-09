@@ -7,6 +7,7 @@ from typing import Dict, Any
 from app.core.exceptions import AppBaseException, InternalError
 from app.services.topology_service import TopologyService
 from app.workspaces.manager import workspace_manager
+from app.core.job_queue import heavy_job
 
 router = APIRouter()
 topology_service = TopologyService()
@@ -21,6 +22,7 @@ class TopologyRequest(BaseModel):
 
 
 @router.post("/{workspace_id}/generate")
+@heavy_job("topology")
 async def generate_topology(workspace_id: str, request: TopologyRequest):
     workspace_manager.require_workspace(workspace_id)
     logger.info(f"Generating topology for workspace {workspace_id} (ff_selections: {list(request.ff_selections.keys())}, hmr={request.hmr})...")

@@ -30,6 +30,7 @@ from app.services.structure.solvated_system import (
 from app.services.structure.sidechain_service import sidechain_session_service
 from app.services.validation.service import ValidationService
 from app.workspaces.manager import workspace_manager
+from app.core.job_queue import heavy_job
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -109,6 +110,7 @@ def _with_kept_box(workspace_id: str, pdb_text: str) -> str:
 
 
 @router.post("/start/{workspace_id}", summary="Spustí přípravu; otevře GUI relaci, pokud narazí na bezpečný missing DOF")
+@heavy_job("prepare")
 async def start_sidechain_session(workspace_id: str, request: PreparationRequest):
     """
     Spustí kompletní přípravu (protonace, stavba atomů, solvatace, ionty).
@@ -262,6 +264,7 @@ async def optimize_sidechain(workspace_id: str, request: SidechainOptimizeReques
 
 
 @router.post("/commit/{workspace_id}", summary="Přijme aktuální GUI hodnoty a dokončí zbytek přípravy (solvatace, ionty)")
+@heavy_job("prepare-commit")
 async def commit_sidechains(workspace_id: str):
     start_time = time.time()
     try:

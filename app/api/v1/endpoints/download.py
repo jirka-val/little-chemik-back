@@ -17,6 +17,7 @@ from app.services.run_protocol import RunProtocol, protocol_filename, protocol_f
 from app.services.report.pdf import REPORT_FILENAME, render_report_pdf
 from app.services.report.procedure import PROCEDURE_FILENAME, render_procedure_pdf
 from app.workspaces.manager import workspace_manager
+from app.core.job_queue import heavy_job
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,7 @@ FILE_MAPPING = {
 
 
 @router.post("/{workspace_id}/export", summary="Export vybraných souborů (jednotlivě nebo jako ZIP)")
+@heavy_job("export")
 async def export_workspace_files(workspace_id: str, req: DownloadRequest):
     """
     Tento endpoint přijímá JSON z frontendu, kde uživatel vybral,

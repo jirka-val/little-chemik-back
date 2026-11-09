@@ -13,6 +13,7 @@ from app.core.exceptions import BadRequestError, InternalError, NotFoundError, R
 from app.services.pdb_service import PDBService, remove_residue_from_pdb
 from app.workspaces.manager import workspace_manager
 from app.services.incidents import history as incident_history
+from app.core.job_queue import heavy_job
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -74,6 +75,7 @@ def _store_inputs(workspace_dir, topology: Optional[UploadFile], coordinates: Op
 
 
 @router.post("/upload-inputs", summary="Nový workspace jen z AMBER topologie a souřadnic (bez PDB)")
+@heavy_job("inputs-to-pdb")
 async def upload_from_inputs(topology: UploadFile = File(...), coordinates: UploadFile = File(...)):
     """
     Uživatel má simulaci (prmtop + rst7/inpcrd/ncrst), ale ne PDB: structure.pdb

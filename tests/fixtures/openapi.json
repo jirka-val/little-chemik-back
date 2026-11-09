@@ -2615,6 +2615,23 @@
     ]
    }
   },
+  "/api/queue": {
+   "get": {
+    "operationId": "api_queue_api_queue_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    },
+    "tags": [
+     "Health Check"
+    ]
+   }
+  },
   "/api/sidechains/cancel/{workspace_id}": {
    "post": {
     "operationId": "cancel_sidechains_api_sidechains_cancel__workspace_id__post",

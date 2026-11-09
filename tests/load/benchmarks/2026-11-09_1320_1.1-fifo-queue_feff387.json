@@ -1,0 +1,340 @@
+{
+ "label": "1.1-fifo-queue",
+ "meta": {
+  "date": "2026-11-09T13:13:58",
+  "commit": "feff387-dirty",
+  "workers": 1,
+  "quick": false,
+  "os": "Windows-11",
+  "cpu": "24 cores / 32 threads",
+  "ram_gb": 31.7,
+  "python": "3.12.10",
+  "duration_s": 403
+ },
+ "idle": {
+  "rss_mb": 188
+ },
+ "single": {
+  "small": {
+   "pdb": "1CRN.pdb",
+   "padding_nm": 1.0,
+   "atoms": 9442,
+   "repeats": 3,
+   "session_s": 1.79,
+   "server_cpu_s": 1.5,
+   "rss_over_idle_mb": 19,
+   "workspace_mb": 4.7,
+   "endpoints": [
+    {
+     "endpoint": "POST /api/sidechains/start/{ws}",
+     "n": 3,
+     "p50_s": 0.894,
+     "p95_s": 0.916,
+     "max_s": 0.919,
+     "total_s": 2.7
+    },
+    {
+     "endpoint": "POST /api/topology/{ws}/generate",
+     "n": 3,
+     "p50_s": 0.313,
+     "p95_s": 0.32,
+     "max_s": 0.321,
+     "total_s": 0.9
+    },
+    {
+     "endpoint": "POST /api/download/{ws}/export",
+     "n": 3,
+     "p50_s": 0.155,
+     "p95_s": 0.174,
+     "max_s": 0.176,
+     "total_s": 0.5
+    },
+    {
+     "endpoint": "GET /api/analysis/sequence/{ws}",
+     "n": 9,
+     "p50_s": 0.005,
+     "p95_s": 0.111,
+     "max_s": 0.125,
+     "total_s": 0.3
+    },
+    {
+     "endpoint": "POST /api/molecules/upload",
+     "n": 3,
+     "p50_s": 0.028,
+     "p95_s": 0.028,
+     "max_s": 0.029,
+     "total_s": 0.1
+    },
+    {
+     "endpoint": "GET /api/forcefields/{ws}",
+     "n": 3,
+     "p50_s": 0.039,
+     "p95_s": 0.054,
+     "max_s": 0.056,
+     "total_s": 0.1
+    }
+   ]
+  },
+  "medium": {
+   "pdb": "HIS_1CA2_carbonic_anhydrase_zinc.pdb",
+   "padding_nm": 1.0,
+   "atoms": 29675,
+   "repeats": 3,
+   "session_s": 6.091,
+   "server_cpu_s": 5.6,
+   "rss_over_idle_mb": 64,
+   "workspace_mb": 11.6,
+   "endpoints": [
+    {
+     "endpoint": "POST /api/sidechains/start/{ws}",
+     "n": 3,
+     "p50_s": 3.852,
+     "p95_s": 4.017,
+     "max_s": 4.035,
+     "total_s": 11.7
+    },
+    {
+     "endpoint": "POST /api/topology/{ws}/generate",
+     "n": 3,
+     "p50_s": 0.88,
+     "p95_s": 0.92,
+     "max_s": 0.925,
+     "total_s": 2.7
+    },
+    {
+     "endpoint": "POST /api/download/{ws}/export",
+     "n": 3,
+     "p50_s": 0.447,
+     "p95_s": 0.466,
+     "max_s": 0.468,
+     "total_s": 1.4
+    },
+    {
+     "endpoint": "GET /api/analysis/sequence/{ws}",
+     "n": 9,
+     "p50_s": 0.034,
+     "p95_s": 0.361,
+     "max_s": 0.374,
+     "total_s": 1.2
+    },
+    {
+     "endpoint": "GET /api/forcefields/{ws}",
+     "n": 3,
+     "p50_s": 0.055,
+     "p95_s": 0.066,
+     "max_s": 0.067,
+     "total_s": 0.2
+    },
+    {
+     "endpoint": "POST /api/validation/check",
+     "n": 3,
+     "p50_s": 0.054,
+     "p95_s": 0.069,
+     "max_s": 0.071,
+     "total_s": 0.2
+    }
+   ]
+  },
+  "rna": {
+   "pdb": "3SKR.pdb",
+   "padding_nm": 1.0,
+   "atoms": 36078,
+   "repeats": 3,
+   "session_s": 7.539,
+   "server_cpu_s": 7.1,
+   "rss_over_idle_mb": 52,
+   "workspace_mb": 41.6,
+   "endpoints": [
+    {
+     "endpoint": "POST /api/sidechains/start/{ws}",
+     "n": 3,
+     "p50_s": 5.098,
+     "p95_s": 5.138,
+     "max_s": 5.142,
+     "total_s": 15.3
+    },
+    {
+     "endpoint": "POST /api/topology/{ws}/generate",
+     "n": 3,
+     "p50_s": 1.144,
+     "p95_s": 1.274,
+     "max_s": 1.289,
+     "total_s": 3.5
+    },
+    {
+     "endpoint": "GET /api/analysis/sequence/{ws}",
+     "n": 9,
+     "p50_s": 0.021,
+     "p95_s": 0.462,
+     "max_s": 0.463,
+     "total_s": 1.5
+    },
+    {
+     "endpoint": "POST /api/download/{ws}/export",
+     "n": 3,
+     "p50_s": 0.394,
+     "p95_s": 0.413,
+     "max_s": 0.415,
+     "total_s": 1.2
+    },
+    {
+     "endpoint": "GET /api/forcefields/{ws}",
+     "n": 3,
+     "p50_s": 0.054,
+     "p95_s": 0.071,
+     "max_s": 0.073,
+     "total_s": 0.2
+    },
+    {
+     "endpoint": "POST /api/simulation/{ws}/amber-mdin",
+     "n": 3,
+     "p50_s": 0.053,
+     "p95_s": 0.06,
+     "max_s": 0.061,
+     "total_s": 0.2
+    }
+   ]
+  },
+  "large": {
+   "pdb": "3SKR.pdb",
+   "padding_nm": 3.0,
+   "atoms": 124261,
+   "repeats": 3,
+   "session_s": 15.471,
+   "server_cpu_s": 14.7,
+   "rss_over_idle_mb": 303,
+   "workspace_mb": 67.9,
+   "endpoints": [
+    {
+     "endpoint": "POST /api/sidechains/start/{ws}",
+     "n": 3,
+     "p50_s": 8.831,
+     "p95_s": 8.882,
+     "max_s": 8.887,
+     "total_s": 26.3
+    },
+    {
+     "endpoint": "POST /api/topology/{ws}/generate",
+     "n": 3,
+     "p50_s": 3.072,
+     "p95_s": 3.099,
+     "max_s": 3.102,
+     "total_s": 9.2
+    },
+    {
+     "endpoint": "GET /api/analysis/sequence/{ws}",
+     "n": 9,
+     "p50_s": 0.017,
+     "p95_s": 1.645,
+     "max_s": 1.661,
+     "total_s": 5.0
+    },
+    {
+     "endpoint": "POST /api/download/{ws}/export",
+     "n": 3,
+     "p50_s": 1.234,
+     "p95_s": 1.422,
+     "max_s": 1.442,
+     "total_s": 3.8
+    },
+    {
+     "endpoint": "POST /api/simulation/{ws}/amber-mdin",
+     "n": 3,
+     "p50_s": 0.146,
+     "p95_s": 0.176,
+     "max_s": 0.179,
+     "total_s": 0.5
+    },
+    {
+     "endpoint": "GET /api/forcefields/{ws}",
+     "n": 3,
+     "p50_s": 0.055,
+     "p95_s": 0.065,
+     "max_s": 0.066,
+     "total_s": 0.2
+    }
+   ]
+  }
+ },
+ "concurrency": {
+  "1": {
+   "users": 1,
+   "wall_s": 6.53,
+   "session_p50_s": 6.513,
+   "session_p95_s": 6.513,
+   "session_max_s": 6.513,
+   "throughput_per_min": 9.2,
+   "cpu_mean_cores": 0.91,
+   "rss_peak_mb": 333
+  },
+  "2": {
+   "users": 2,
+   "wall_s": 11.92,
+   "session_p50_s": 11.838,
+   "session_p95_s": 11.886,
+   "session_max_s": 11.891,
+   "throughput_per_min": 10.1,
+   "cpu_mean_cores": 0.97,
+   "rss_peak_mb": 339
+  },
+  "4": {
+   "users": 4,
+   "wall_s": 23.4,
+   "session_p50_s": 23.345,
+   "session_p95_s": 23.374,
+   "session_max_s": 23.378,
+   "throughput_per_min": 10.3,
+   "cpu_mean_cores": 0.98,
+   "rss_peak_mb": 351
+  },
+  "8": {
+   "users": 8,
+   "wall_s": 51.38,
+   "session_p50_s": 51.328,
+   "session_p95_s": 51.367,
+   "session_max_s": 51.374,
+   "throughput_per_min": 9.3,
+   "cpu_mean_cores": 1.0,
+   "rss_peak_mb": 378
+  },
+  "16": {
+   "users": 16,
+   "wall_s": 100.06,
+   "session_p50_s": 99.921,
+   "session_p95_s": 100.007,
+   "session_max_s": 100.038,
+   "throughput_per_min": 9.6,
+   "cpu_mean_cores": 1.0,
+   "rss_peak_mb": 437
+  }
+ },
+ "responsiveness": {
+  "preparing_users": 8,
+  "samples": 104,
+  "health_p50_s": 0.007,
+  "health_p95_s": 0.114,
+  "health_max_s": 0.899,
+  "sequence_p50_s": 0.034,
+  "sequence_p95_s": 0.728,
+  "sequence_max_s": 0.851
+ },
+ "arrivals": {
+  "interval_s": 2.0,
+  "users": 15,
+  "rate_per_hour": 1800,
+  "session_p50_s": 36.918,
+  "session_p95_s": 45.34,
+  "slowdown_p50": 6.8,
+  "slowdown_p95": 24.2,
+  "cpu_mean_cores": 1.01
+ },
+ "light_burst": {
+  "users": 50,
+  "requests": 250,
+  "wall_s": 3.75,
+  "p50_s": 0.084,
+  "p95_s": 0.23,
+  "max_s": 0.312,
+  "requests_per_s": 66.7
+ }
+}

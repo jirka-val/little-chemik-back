@@ -2,6 +2,7 @@ import logging
 from typing import Any, Dict, List
 
 import aiofiles
+from app.core.responses import large_json_response
 from fastapi import APIRouter, Header, Query
 from fastapi.concurrency import run_in_threadpool
 
@@ -207,7 +208,8 @@ async def get_my_forcefields(
 
         water_profiles = _build_water_profiles(ffs_by_group, mode) if "W" in required else []
 
-        return {
+        # ~7 MB (obsahy FF souborů) - kódování mimo event loop (app/core/responses.py).
+        return await large_json_response({
             "mode": mode,
             "catalog_fetched_at": catalog_service.fetched_at(),
             "detected_types": sorted(key for key, info in required.items() if info["needed"]),
@@ -216,7 +218,7 @@ async def get_my_forcefields(
             "water_profiles": water_profiles,
             # Zachováno pro zpětnou kompatibilitu s dosavadním plochým seznamem.
             "forcefields": [{**ff, **correction_flags(ff)} for ff in ffs],
-        }
+        })
 
     except AppBaseException:
         raise

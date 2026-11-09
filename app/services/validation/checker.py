@@ -6,6 +6,34 @@ from typing import Dict, Any, List
 from app.services.analysis import build_sequence_tokens
 
 
+_WATER_NAMES = ("HOH", "WAT")
+
+
+def _split_water(pdb_text: str):
+    """Text bez vody (pro PDBFixer) + počty atomů/reziduí a řetězce vody.
+
+    PDBFixer u vody nic nenajde (chybějící atomy, segmenty), ale u
+    solvatovaného systému je to většina atomů - parsování 36k atomů trvalo
+    0.57 s, bez vody 0.03 s (tests/load). Statistiky se pak skládají z obou částí.
+    """
+    kept = []
+    water_atoms = water_residues = 0
+    water_chains = set()
+    previous = None
+    for line in pdb_text.splitlines(keepends=True):
+        if line.startswith(("ATOM", "HETATM")) and line[17:20].strip() in _WATER_NAMES:
+            water_atoms += 1
+            key = (line[21], line[22:27])
+            if key != previous:   # nové reziduum jako u čtečky PDB: změna řetězce/čísla
+                water_residues += 1
+                previous = key
+            water_chains.add(line[21])
+            continue
+        previous = None
+        kept.append(line)
+    return "".join(kept), water_atoms, water_residues, water_chains
+
+
 class StructureChecker:
     def __init__(self, pdb_content: str):
         self.pdb_content = pdb_content
@@ -13,8 +41,8 @@ class StructureChecker:
         # To allow the frontend to offer a selection, we must detect them in the raw text.
         self.detected_alt_locs = self._scan_for_alt_locs(pdb_content)
 
-        f = io.StringIO(pdb_content)
-        self.fixer = PDBFixer(pdbfile=f)
+        solute_text, self.water_atoms, self.water_residues, self.water_chains = _split_water(pdb_content)
+        self.fixer = PDBFixer(pdbfile=io.StringIO(solute_text))
 
     def _scan_for_alt_locs(self, pdb_text: str) -> List[Dict]:
         """
@@ -127,25 +155,24 @@ class StructureChecker:
                     "message": f"Unexpected hydrogens not in force-field template: {', '.join(hydrogen_extra)}"
                 })
 
-        # 6. Water check
-        has_water = any(r.name in ['HOH', 'WAT'] for r in self.fixer.topology.residues())
-        if has_water:
+        # 6. Water check (voda do PDBFixeru nejde - viz _split_water)
+        if self.water_atoms:
             warnings.append({
                 "type": "CLEANUP",
                 "issue": "water_detected",
                 "message": "Structure contains crystal water. It is recommended to remove it before simulation."
             })
 
-        # Statistics for frontend
-        chain_ids = sorted(list(set(c.id for c in self.fixer.topology.chains())))
+        # Statistics for frontend (rozpuštěná látka z PDBFixeru + voda z textu)
+        chain_ids = sorted(set(c.id for c in self.fixer.topology.chains()) | self.water_chains)
 
         return {
             "errors": errors,
             "warnings": warnings,
             "tokens": all_tokens,  # Key that was missing and caused KeyError
             "stats": {
-                "atom_count": sum(1 for _ in self.fixer.topology.atoms()),
-                "residue_count": sum(1 for _ in self.fixer.topology.residues()),
+                "atom_count": sum(1 for _ in self.fixer.topology.atoms()) + self.water_atoms,
+                "residue_count": sum(1 for _ in self.fixer.topology.residues()) + self.water_residues,
                 "chain_ids": chain_ids
             }
         }

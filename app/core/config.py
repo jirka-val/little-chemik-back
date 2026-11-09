@@ -63,6 +63,13 @@ class Settings(BaseSettings):
     # Strop pro jeden report - snímky PDB nad něj se vynechají (od nejstarších).
     INCIDENT_MAX_MB: int = 300
 
+    # Fronta těžkých úloh (příprava, topologie, export ... - app/core/job_queue.py):
+    # kolik jich v jednom procesu běží najednou, ostatní čekají v pořadí, jak
+    # přišly. Výpočty jsou v Pythonu (GIL), takže víc než 1 na proces
+    # propustnost nezvýší (změřeno tests/load), jen zpomalí všechny stejně.
+    # Víc jader = víc procesů (uvicorn --workers).
+    HEAVY_JOB_SLOTS: int = 1
+
     # extra="ignore": klíč v .env, který Settings nezná (např. FORGE_URL pro
     # scripts/incidents.py), nesmí shodit start backendu.
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")

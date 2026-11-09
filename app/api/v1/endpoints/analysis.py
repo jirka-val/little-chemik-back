@@ -14,6 +14,8 @@ from app.core.exceptions import AppBaseException, ExternalServiceError, Internal
 from app.core.http_client import external_http_client
 from app.workspaces.manager import workspace_manager
 # ZMĚNA 1: Importujeme novou funkci process_structure místo původní clean_pdb_altlocs
+from app.core.job_queue import heavy_job
+from app.core.responses import large_json_response
 from app.services.analysis import (
     build_sequence_tokens,
     analyze_pdb_altlocs,
@@ -69,10 +71,11 @@ async def analyze_sequence(workspace_id: str, chain: str | None = None, fill_gap
 
         logger.info(f"Sequence analysis for workspace {workspace_id} successfully completed.")
 
-        return {
+        # Až jednotky MB - kódování mimo event loop (app/core/responses.py).
+        return await large_json_response({
             "workspace_id": workspace_id,
             "sequence": sequence_data
-        }
+        })
 
     except AppBaseException:
         raise
@@ -197,6 +200,7 @@ async def analyze_altlocs(workspace_id: str):
 
 
 @router.get("/solvation/{workspace_id}", summary="Je struktura už solvatovaný systém (box, voda, ionty)? + kontroly")
+@heavy_job("solvation-analysis")
 async def analyze_solvation(workspace_id: str):
     """
     Rozpozná nahraný hotový systém - frontend pak nabídne ponechat box
@@ -217,6 +221,7 @@ async def analyze_solvation(workspace_id: str):
 
 @router.post("/solvation/{workspace_id}/check-box",
              summary="Expert: kontroly solvatovaného systému s boxem upraveným nebo zadaným ručně")
+@heavy_job("solvation-check-box")
 async def check_solvation_box(workspace_id: str, box: BoxOverride):
     """
     PDB bez CRYST1: stejná analýza jako GET /solvation/{ws}, ale s boxem od

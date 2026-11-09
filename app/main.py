@@ -77,3 +77,11 @@ async def root():
 @app.get("/api/health", tags=["Health Check"])
 async def api_health():
     return await root()
+
+
+# Fronta těžkých úloh (app/core/job_queue.py) - kolik jich běží a kolik čeká;
+# frontend z toho ukáže "server je vytížený" místo tichého čekání.
+@app.get("/api/queue", tags=["Health Check"])
+async def api_queue():
+    from app.core.job_queue import heavy_jobs
+    return heavy_jobs.status()

@@ -60,6 +60,38 @@ Vývojové PC (24 jader), 1 worker uvicornu jako v Dockerfile, střední systém
 | 1.4 | **JSON mimo event loop**: velké odpovědi (příprava, sekvence, FF) serializovat přes `orjson` / `ORJSONResponse`, případně zmenšit payload | −5 % CPU, menší špičky lehkých požadavků | responsiveness |
 | 1.5 | **gzip odpovědí** (nginx `gzip on` pro JSON/PDB/prmtop) | rychlejší přenos u pomalejšího připojení; lokálně se neprojeví | velikost odpovědí (doplnit do benchmarku) |
 
+| 1.6 | **Zúžit odpověď silových polí** (nově zjištěno): `GET /api/forcefields` posílá celé obsahy FF souborů (7,1 MB) a frontend je posílá zpátky v `ff_selections` při přípravě i topologii. Frontend by měl posílat jen identifikátor FF, backend obsah vezme z katalogu (zároveň bezpečnější - klient teď může podstrčit libovolný obsah FF). | −7 MB stahování a −1–2 MB uploadu na session | velikost požadavků/odpovědí |
+
+### Výsledky fáze 1 (2026-11-09, `2026-11-09_1329_phase1_feff387.json`)
+
+Hotovo: 1.1 fronta (pořadí podle session), 1.2 validace bez vody v PDBFixeru,
+1.3 cache sekvence, 1.4 velké JSON odpovědi mimo event loop, 1.5 gzip v nginx.
+
+| KPI | baseline | fáze 1 | změna |
+|---|---|---|---|
+| 1 uživatel, střední / velký systém | 5,5 / 13,8 s | 5,3 / 12,4 s | −4 / −10 % |
+| 1 uživatel, velký systém: RAM navíc | 299 MB | 168 MB | −44 % |
+| 8 najednou: medián / nejpomalejší | 52 / 52 s | 37 / 45 s | −29 / −14 % |
+| 16 najednou: medián / nejpomalejší | 103 / 103 s | 62 / 93 s | −40 / −10 % |
+| 16 najednou: špička RAM | 684 MB | 493 MB | −28 % |
+| health / sekvence při zátěži, p95 | 0,20 / 0,92 s | 0,14 / 0,65 s | −32 / −29 % |
+| uživatel každé 2 s: medián session | 13,9 s | 22,4 s | **+62 %** |
+| uživatel každé 2 s: p95 zpomalení | 8,1× | 19,7× | **+143 %** |
+
+Gzip se lokálně neprojeví; spočítáno: silová pole 7,1 → 0,45 MB, připravené
+PDB 2,8 → 0,4 MB, sekvence 3,6 → 0,07 MB (na 20 Mbit/s 3,0 s → 0,2 s u FF).
+
+Poučení:
+- Fronta po jednotlivých požadavcích nepomohla (session má víc těžkých
+  požadavků, střídaly se dál). Pořadí podle session zkrátilo medián o 40 %.
+- Za přetížení (uživatel každé 2 s je víc, než jedno jádro stihne) fronta
+  znevýhodní malé úlohy: čekají za celými velkými. Dřív se o CPU dělily
+  rovnoměrně. Na jednom jádře je to jen přerozdělení čekání - skutečné řešení
+  je víc jader (fáze 2). Případně řadit malé úlohy přednostně (podle velikosti
+  PDB), pokud to bude v provozu vadit.
+- Samotné zrychlení výpočtu je zatím malé (−4 až −10 %), velký zbytek je v
+  builderu (fáze 3).
+
 ## Fáze 2: víc jader (2–4 dny)
 
 | # | změna | očekávaný dopad | KPI |
