@@ -88,6 +88,9 @@ def start_server(root: Path, workers: Optional[int] = None, pool_workers: Option
     # tests/conftest.py vypíná pool výpočetních procesů pro TestClient - server
     # tady má běžet jako v produkci (výchozí nastavení), pokud ho volající neurčí.
     env.pop("HEAVY_JOB_WORKERS", None)
+    # Všichni simulovaní uživatelé chodí z 127.0.0.1 - limit na klienta (ochrana
+    # proti botům) by měření kapacity zkreslil.
+    env["HEAVY_JOBS_PER_CLIENT"] = "0"
     if pool_workers is not None:
         env["HEAVY_JOB_WORKERS"] = str(pool_workers)
     cmd = [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(port),
