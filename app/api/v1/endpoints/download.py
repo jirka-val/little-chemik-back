@@ -80,7 +80,7 @@ FILE_MAPPING = {
 
 
 @router.post("/{workspace_id}/export", summary="Export vybraných souborů (jednotlivě nebo jako ZIP)")
-@heavy_job("export")
+@heavy_job("export", dedupe=False)  # vrací stream souboru - nejde sdílet
 async def export_workspace_files(workspace_id: str, req: DownloadRequest):
     """
     Tento endpoint přijímá JSON z frontendu, kde uživatel vybral,

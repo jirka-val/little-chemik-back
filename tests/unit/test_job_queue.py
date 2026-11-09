@@ -122,3 +122,56 @@ def test_decorator_keeps_the_endpoint_signature():
 
 def test_queue_endpoint(client):
     assert client.get("/api/queue").json() == {"slots": 1, "running": 0, "waiting": 0}
+
+
+async def test_status_reports_how_many_jobs_are_ahead():
+    queue = HeavyJobQueue(slots=1)
+    gate = asyncio.Event()
+
+    async def job(ws):
+        async with queue.slot("test", ws):
+            await gate.wait()
+
+    tasks = []
+    for ws in ("ws-a", "ws-b", "ws-c"):
+        tasks.append(asyncio.create_task(job(ws)))
+        await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert queue.status("ws-a")["state"] == "running"
+    assert queue.status("ws-b") == {"slots": 1, "running": 1, "waiting": 2, "state": "waiting", "ahead": 1}
+    assert queue.status("ws-c")["ahead"] == 2
+    assert queue.status("ws-other")["state"] is None
+    gate.set()
+    await asyncio.gather(*tasks)
+
+
+async def test_identical_request_shares_the_result_but_a_changed_one_runs_again():
+    calls = []
+    gate = asyncio.Event()
+
+    @heavy_job("dedupe-test")
+    async def endpoint(workspace_id: str, setting: int):
+        calls.append(setting)
+        await gate.wait()
+        return {"setting": setting, "call": len(calls)}
+
+    first = asyncio.create_task(endpoint(workspace_id="ws-x", setting=1))
+    await asyncio.sleep(0)
+    double_click = asyncio.create_task(endpoint(workspace_id="ws-x", setting=1))
+    changed = asyncio.create_task(endpoint(workspace_id="ws-x", setting=2))
+    await asyncio.sleep(0)
+    gate.set()
+    a, b, c = await asyncio.gather(first, double_click, changed)
+    assert a == b == {"setting": 1, "call": 1}      # dvojklik: spočítáno jednou
+    assert c["setting"] == 2 and calls == [1, 2]     # jiné nastavení: nová úloha
+
+
+async def test_shared_request_gets_the_same_error():
+    @heavy_job("dedupe-error")
+    async def endpoint(workspace_id: str):
+        await asyncio.sleep(0.01)
+        raise ValueError("boom")
+
+    results = await asyncio.gather(endpoint(workspace_id="ws-e"), endpoint(workspace_id="ws-e"),
+                                   return_exceptions=True)
+    assert all(isinstance(r, ValueError) for r in results)

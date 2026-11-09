@@ -1,4 +1,5 @@
 import asyncio
+from typing import Optional
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -88,6 +89,7 @@ async def api_health():
 # Fronta těžkých úloh (app/core/job_queue.py) - kolik jich běží a kolik čeká;
 # frontend z toho ukáže "server je vytížený" místo tichého čekání.
 @app.get("/api/queue", tags=["Health Check"])
-async def api_queue():
+async def api_queue(workspace_id: Optional[str] = None):
+    """S workspace_id i `state` (running/waiting/None) a `ahead` - kolik úloh je před ním."""
     from app.core.job_queue import heavy_jobs
-    return heavy_jobs.status()
+    return heavy_jobs.status(workspace_id)

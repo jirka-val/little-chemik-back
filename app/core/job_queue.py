@@ -28,10 +28,13 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import hashlib
 import heapq
+import json
 import itertools
 import logging
 import time
+from collections import Counter
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional, Tuple, TypeVar
 
@@ -49,7 +52,8 @@ class HeavyJobQueue:
     def __init__(self, slots: int):
         self.slots = max(1, slots)
         self.running = 0
-        self._heap: List[Tuple[int, int, asyncio.Future]] = []
+        self._heap: List[Tuple[int, int, Optional[str], asyncio.Future]] = []
+        self._running_ws: Counter = Counter()
         self._seq = itertools.count()
         self._arrival = itertools.count()
         self._first_seen: Dict[str, Tuple[int, float]] = {}  # workspace -> (pořadí, čas)
@@ -63,7 +67,7 @@ class HeavyJobQueue:
         # Fronta patří k event loopu; testy (TestClient) můžou loop měnit.
         loop = asyncio.get_running_loop()
         if self._loop is not loop:
-            self._loop, self.running, self._heap = loop, 0, []
+            self._loop, self.running, self._heap, self._running_ws = loop, 0, [], Counter()
 
     def _priority(self, workspace_id: Optional[str]) -> int:
         """Pořadí příchodu session (čítač - time.monotonic má na Windows
@@ -96,7 +100,7 @@ class HeavyJobQueue:
             self.running += 1
         else:
             fut = asyncio.get_running_loop().create_future()
-            heapq.heappush(self._heap, (priority, next(self._seq), fut))
+            heapq.heappush(self._heap, (priority, next(self._seq), workspace_id, fut))
             try:
                 await fut
             except BaseException:
@@ -108,14 +112,29 @@ class HeavyJobQueue:
         waited = time.perf_counter() - queued_at
         if waited > 1.0:
             logger.info(f"Job queue: {kind} waited {waited:.1f} s ({self.waiting} still waiting).")
+        self._running_ws[workspace_id] += 1
         try:
             yield
         finally:
+            self._running_ws[workspace_id] -= 1
+            if self._running_ws[workspace_id] <= 0:
+                del self._running_ws[workspace_id]
             self.running -= 1
             self._wake_next()
 
-    def status(self) -> Dict[str, Any]:
-        return {"slots": self.slots, "running": self.running, "waiting": self.waiting}
+    def status(self, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+        """Celkový stav; s workspace_id i stav jeho úlohy a kolik úloh je před ní
+        (pro hlášku "server je vytížený, před vámi jsou N" ve frontendu)."""
+        out: Dict[str, Any] = {"slots": self.slots, "running": self.running, "waiting": self.waiting}
+        if workspace_id is None:
+            return out
+        waiting = sorted((p, seq, ws) for p, seq, ws, fut in self._heap if not fut.done())
+        mine = next(((p, seq) for p, seq, ws in waiting if ws == workspace_id), None)
+        if mine is not None:
+            out.update(state="waiting", ahead=self.running + sum(1 for p, seq, _ in waiting if (p, seq) < mine))
+        else:
+            out.update(state="running" if self._running_ws.get(workspace_id) else None, ahead=0)
+        return out
 
 
 def _configured_slots() -> int:
@@ -135,12 +154,56 @@ def _workspace_of(kwargs: Dict[str, Any]) -> Optional[str]:
     return getattr(request, "workspace_id", None)
 
 
-def heavy_job(kind: str) -> Callable[[Callable[..., Awaitable[T]]], Callable[..., Awaitable[T]]]:
-    """Async endpoint poběží až po získání slotu ve frontě (podpis zůstává, FastAPI ho vidí)."""
+# Rozpracované těžké požadavky: (druh, workspace, otisk požadavku) -> výsledek.
+_inflight: Dict[Tuple[str, str, str], asyncio.Future] = {}
+
+
+def _fingerprint(kwargs: Dict[str, Any]) -> str:
+    """Otisk parametrů požadavku - stejné nastavení = stejný otisk."""
+    def plain(value: Any) -> Any:
+        dump = getattr(value, "model_dump", None)
+        return dump(mode="json") if callable(dump) else value
+    data = json.dumps({k: plain(v) for k, v in kwargs.items()}, sort_keys=True, default=str)
+    return hashlib.sha1(data.encode("utf-8")).hexdigest()
+
+
+def heavy_job(kind: str, dedupe: bool = True) -> Callable[[Callable[..., Awaitable[T]]], Callable[..., Awaitable[T]]]:
+    """Async endpoint poběží až po získání slotu ve frontě (podpis zůstává, FastAPI ho vidí).
+
+    dedupe: když stejný workspace pošle PŘESNĚ stejný požadavek (dvojklik,
+    znovu odeslání po obnovení stránky) a předchozí ještě běží nebo čeká,
+    nepočítá se znovu - oba dostanou stejný výsledek. Jiné nastavení = jiný
+    otisk = normální nová úloha (uživatel to chce jinak). Vypnout u
+    endpointů, které vrací stream (export), ten nejde poslat dvakrát.
+    """
     def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> T:
-            async with heavy_jobs.slot(kind, _workspace_of(kwargs)):
-                return await func(*args, **kwargs)
+            workspace_id = _workspace_of(kwargs)
+            key = (kind, workspace_id, _fingerprint(kwargs)) if dedupe and workspace_id else None
+            running = _inflight.get(key) if key else None
+            if running is not None and running.get_loop() is asyncio.get_running_loop():
+                logger.info(f"Job queue: identical {kind} for {workspace_id} already in progress - sharing its result.")
+                return await asyncio.shield(running)
+            shared = asyncio.get_running_loop().create_future() if key else None
+            if key:
+                _inflight[key] = shared
+            try:
+                async with heavy_jobs.slot(kind, workspace_id):
+                    result = await func(*args, **kwargs)
+                if shared is not None:
+                    shared.set_result(result)
+                return result
+            except BaseException as exc:
+                if shared is not None and not shared.done():
+                    if isinstance(exc, asyncio.CancelledError):
+                        shared.cancel()
+                    else:
+                        shared.set_exception(exc)
+                        shared.exception()     # označit jako převzatou, ať asyncio nevaruje
+                raise
+            finally:
+                if key and _inflight.get(key) is shared:
+                    del _inflight[key]
         return wrapper
     return decorator
