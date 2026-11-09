@@ -12,8 +12,10 @@ The module contains:
 from __future__ import annotations
 
 import heapq
+import threading
 import time
 from collections import defaultdict, deque
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple, Union
 
@@ -357,6 +359,26 @@ def require_resolved_ref(mol: Molecule, residue: Residue, ref: Mapping[str, Any]
     return resolved
 
 
+# Cache of resolve_refs() results, active only while plan_build_steps() runs
+# (see _planning_ref_cache). The result depends only on which atom names a
+# residue has, and that set never changes while a molecule is built: missing
+# atoms are placeholders whose coordinates get filled in. Planning resolves the
+# same template reference sets hundreds of thousands of times (~15 % of a
+# whole preparation, little-chemik-back/tests/load profile). Per thread, since
+# preparations run concurrently.
+_ref_cache_state = threading.local()
+
+
+@contextmanager
+def _planning_ref_cache():
+    previous = getattr(_ref_cache_state, "cache", None)
+    _ref_cache_state.cache = {}
+    try:
+        yield
+    finally:
+        _ref_cache_state.cache = previous
+
+
 def resolve_refs(
     mol: Molecule,
     residue: Residue,
@@ -368,10 +390,22 @@ def resolve_refs(
     residue contexts (for example, generic and proline-specific peptide rules).
     A rule is contextually usable only when all of its references resolve.
     """
+    cache = getattr(_ref_cache_state, "cache", None)
+    if cache is not None:
+        # The objects in the key stay alive for the whole planning call, so
+        # their ids cannot be reused by other objects meanwhile.
+        key = (id(mol), residue.chain_id, residue.index_in_chain, id(refs))
+        hit = cache.get(key, _MISSING)
+        if hit is not _MISSING:
+            return None if hit is None else list(hit)
     resolved = [resolve_ref(mol, residue, ref) for ref in refs]
-    if any(ref is None for ref in resolved):
-        return None
-    return [ref for ref in resolved if ref is not None]
+    result = None if any(ref is None for ref in resolved) else [ref for ref in resolved if ref is not None]
+    if cache is not None:
+        cache[key] = None if result is None else tuple(result)
+    return result
+
+
+_MISSING = object()
 
 
 def _same_atom(a: ResolvedRef, b: ResolvedRef) -> bool:
@@ -1394,6 +1428,16 @@ def analyze_and_reorder_missing_dof_branches(
 # -----------------------------------------------------------------------------
 
 def plan_build_steps(
+    mol: Molecule,
+    template: Mapping[str, Any],
+    *,
+    stats: Optional[PlannerStats] = None,
+) -> BuildPlan:
+    with _planning_ref_cache():
+        return _plan_build_steps(mol, template, stats=stats)
+
+
+def _plan_build_steps(
     mol: Molecule,
     template: Mapping[str, Any],
     *,

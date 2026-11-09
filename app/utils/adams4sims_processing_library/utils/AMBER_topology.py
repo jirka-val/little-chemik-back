@@ -349,31 +349,26 @@ def write_flag(file, title, format):
     file.write(f"{format_str:80s}" + "\n")
 
 
+def _write_block(file, values, fmt, per_line):
+    """Hodnoty po `per_line` na řádek, každá podle `fmt`; jeden zápis místo
+    jednoho na hodnotu (prmtop má statisíce čísel). Výstup stejný jako dřív:
+    poslední neúplný řádek ukončen, prázdný seznam nezapíše nic."""
+    lines = ["".join(format(val, fmt) for val in values[i:i + per_line])
+             for i in range(0, len(values), per_line)]
+    if lines:
+        file.write("\n".join(lines) + "\n")
+
+
 def write_int(file, values):
-    for i, val in enumerate(values):
-        file.write(f"{val:8d}")
-        if (i + 1) % 10 == 0:
-            file.write("\n")
-    if len(values) % 10 != 0:
-        file.write("\n")
+    _write_block(file, values, "8d", 10)
 
 
 def write_str(file, values):
-    for i, val in enumerate(values):
-        file.write(f"{val:4s}")
-        if (i + 1) % 20 == 0:
-            file.write("\n")
-    if len(values) % 20 != 0:
-        file.write("\n")
+    _write_block(file, values, "4s", 20)
 
 
 def write_dbl(file, values):
-    for i, val in enumerate(values):
-        file.write(f"{val:16.8E}")
-        if (i + 1) % 5 == 0:
-            file.write("\n")
-    if len(values) % 5 != 0:
-        file.write("\n")
+    _write_block(file, values, "16.8E", 5)
 
 
 def write_AMBER_topology(file_name, topology):

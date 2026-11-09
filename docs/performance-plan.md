@@ -184,6 +184,26 @@ to je výpočet sám, fáze 3.
 | 3.3 | **Topologie**: parsované silové pole (FF_IDA) cachovat v paměti podle verze FF; rychlejší zápis prmtop (`write_int`/`write_dbl` po blocích) | −5 až −8 % |
 | 3.4 | Velké systémy: profil pro 124–300 tis. atomů (solvatace, ionty, zápis) | velké systémy |
 
+### Fáze 3 - co je hotové (2026-11-09)
+
+Měřeno v jednom procesu, medián ze 3 příprav (`time_prep`), výstupy bajtově
+stejné (golden testy):
+
+| změna | střední systém (1CA2) | velký (3SKR, 124k atomů) |
+|---|---|---|
+| před | 4,80 s | 11,72 s |
+| 3.1 cache `resolve_refs` během plánování (`_planning_ref_cache`) | 4,48 s | 11,54 s |
+| + 3.3 zápis prmtop po blocích (`AMBER_topology._write_block`) | **4,38 s (−9 %)** | **11,05 s (−6 %)** |
+
+Zbývá (vyžaduje dohodu s autorem builderu - mění numeriku nebo algoritmus):
+- 3.2 MM hledání volných rotorů (~24 % přípravy): 2 144 zkušebních
+  konformací, každá přes numpy operace nad 3prvkovými vektory
+  (`compute_dihedral_deg`, `place_atom_from_internal` - režie numpy, ne
+  výpočet). Přepis do čistého Pythonu nebo vektorizace přes všechny
+  zkušební úhly najednou by mohla posunout výsledky v posledních bitech a
+  při téměř shodných energiích změnit vybranou konformaci.
+- Zbytek plánování (`build_planner_dependency_index`, `refresh_full`).
+
 Builder (`app/builder/`) a `AMBER_topology.py` jsou citlivé: každá změna musí
 projít golden testy (`pytest -m golden`), výstupy musí zůstat bajtově stejné.
 
