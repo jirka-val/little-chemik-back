@@ -91,6 +91,9 @@ def _input_paragraph(records: Dict[str, Dict[str, Any]], refs: _References) -> s
                "topology": ", with the periodic box taken from the topology"}.get(source.get("box_from"), "")
         text = (f"The starting structure was written from the uploaded AMBER topology {source.get('topology')} "
                 f"and coordinates {source.get('coordinates')}{box}.")
+        if source.get("as_is"):
+            text += (" The uploaded topology and coordinates were used as they are; no new topology was "
+                     "generated in FORGE.")
     elif source.get("filename"):
         entry = f" (PDB entry {pdb_id})" if pdb_id else ""
         text = f"The starting structure was loaded from the uploaded file {source['filename']}{entry}{cited}."

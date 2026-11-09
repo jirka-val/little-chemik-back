@@ -432,6 +432,58 @@ def write_pdb_from_inputs(topology_path: Path, coordinates_path: Path, pdb_path:
 
 
 # ---------------------------------------------------------------------------
+# "Continue as is": nahraná topologie a souřadnice bez přegenerování
+# ---------------------------------------------------------------------------
+
+AS_IS_MARKER = "inputs_as_is.json"
+
+
+def _write_inpcrd(path: Path, xyz: np.ndarray, box: Optional[Dict[str, float]], title: str) -> None:
+    """AMBER inpcrd stejně jako TopologyService._generate_amber_crd: 6F12.7, box na konci."""
+    values = np.asarray(xyz, dtype=float).ravel()
+    lines = [title[:80], f"{len(xyz):6d}"]
+    lines += ["".join(f"{v:12.7f}" for v in values[i:i + 6]) for i in range(0, len(values), 6)]
+    if box:
+        lines.append("".join(f"{box[k]:12.7f}" for k in _BOX_KEYS))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def use_inputs_as_is(workspace_dir: Path) -> Dict[str, Any]:
+    """Nahranou topologii a souřadnice použije beze změny: structure.prmtop je
+    jejich prmtop, structure.crd jejich souřadnice (ASCII inpcrd, i z NetCDF
+    restartu; box ze souřadnic, jinak z prmtopu). Export a MD protokol pak
+    pracují s nimi - FORGE nic nepřipravuje ani negeneruje topologii.
+
+    Vrací {"atoms", "hmr", "box_from"}; hmr = topologie má těžké vodíky -
+    nastavení simulace (časový krok) s tím musí souhlasit.
+    """
+    manifest = load_manifest(workspace_dir)
+    if "topology" not in manifest or "coordinates" not in manifest:
+        raise InputsError("This workspace has no uploaded topology and coordinates.")
+    topology_path = workspace_dir / UPLOADED_TOPOLOGY
+    summary = summarize_topology(topology_path)
+    if not summary.get("ok"):
+        raise InputsError(summary.get("error") or "The topology could not be read.")
+    try:
+        coords = read_coordinates(workspace_dir / coordinates_filename(manifest["coordinates"]))
+    except CoordinateError as exc:
+        raise InputsError(str(exc))
+    if coords["atoms"] != summary["atoms"]:
+        raise InputsError(f"The topology has {summary['atoms']} atoms but the coordinates have {coords['atoms']}.")
+
+    box, box_from = coords["box"], "coordinates" if coords["box"] else None
+    if box is None and summary.get("box"):
+        box, box_from = {k: summary["box"][k] for k in _BOX_KEYS}, "topology"
+    (workspace_dir / "structure.prmtop").write_bytes(topology_path.read_bytes())
+    _write_inpcrd(workspace_dir / "structure.crd", coords["xyz"], box,
+                  f"FORGE: coordinates from {manifest['coordinates']}")
+    info = {"atoms": summary["atoms"], "hmr": bool(summary.get("hmr")), "box_from": box_from,
+            "topology": manifest["topology"], "coordinates": manifest["coordinates"]}
+    (workspace_dir / AS_IS_MARKER).write_text(json.dumps(info), encoding="utf-8")
+    return info
+
+
+# ---------------------------------------------------------------------------
 # Celkový souhrn
 # ---------------------------------------------------------------------------
 

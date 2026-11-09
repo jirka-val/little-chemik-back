@@ -2612,6 +2612,42 @@
     ]
    }
   },
+  "/api/molecules/{workspace_id}/use-inputs-as-is": {
+   "post": {
+    "operationId": "use_inputs_as_is_api_molecules__workspace_id__use_inputs_as_is_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "workspace_id",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    },
+    "tags": [
+     "molecules"
+    ]
+   }
+  },
   "/api/protocols/check": {
    "post": {
     "operationId": "check_protocol_api_protocols_check_post",

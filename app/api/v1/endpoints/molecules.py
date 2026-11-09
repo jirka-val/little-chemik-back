@@ -118,6 +118,25 @@ async def upload_from_inputs(topology: UploadFile = File(...), coordinates: Uplo
     }
 
 
+@router.post("/{workspace_id}/use-inputs-as-is",
+             summary="Continue as is: nahraná topologie a souřadnice beze změny (bez přípravy a nové topologie)")
+async def use_inputs_as_is(workspace_id: str):
+    """
+    Uživatel má hotovou simulaci (prmtop + souřadnice) a chce jen MD protokol:
+    structure.prmtop / structure.crd budou jeho soubory (input_files.use_inputs_as_is).
+    Výběr silových polí ve frontendu tenhle režim ukončí (nová příprava).
+    """
+    workspace_manager.require_workspace(workspace_id)
+    workspace_dir = workspace_manager.get_workspace_dir(workspace_id)
+    try:
+        info = await run_in_threadpool(input_files.use_inputs_as_is, workspace_dir)
+    except input_files.InputsError as exc:
+        raise BadRequestError(str(exc), code="inputs_not_usable")
+    report_records.update_record(workspace_id, report_records.SOURCE, {"as_is": True, "hmr": info["hmr"]})
+    logger.info(f"Workspace {workspace_id}: using uploaded topology and coordinates as is ({info})")
+    return info
+
+
 @router.post("/{workspace_id}/inputs", summary="Přidá k nahranému PDB topologii a/nebo souřadnice")
 async def upload_inputs(
     workspace_id: str,

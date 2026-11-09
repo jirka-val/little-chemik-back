@@ -284,3 +284,36 @@ def test_pdb_from_inputs_splits_water_over_9999_residues(tmp_path, monkeypatch):
     assert len(atoms) == 3 * n_water + 1
     assert lines[-1].startswith("END")
     assert sum(line.startswith("TER") for line in lines) == 3     # ion + 2 vodní řetězce
+
+
+def test_continue_as_is_uses_the_uploaded_files(client, topology):
+    import io
+    import zipfile
+    rst7 = _rst7(10, box=(41.5, 41.5, 41.5, 90.0, 90.0, 90.0))
+    created = client.post("/api/molecules/upload-inputs", files={
+        "topology": ("sim.prmtop", b"uploaded prmtop bytes"), "coordinates": ("sim.rst7", rst7)})
+    ws = created.json()["workspace_id"]
+
+    response = client.post(f"/api/molecules/{ws}/use-inputs-as-is")
+    assert response.status_code == 200, response.text
+    assert response.json() == {"atoms": 10, "hmr": False, "box_from": "coordinates",
+                               "topology": "sim.prmtop", "coordinates": "sim.rst7"}
+
+    export = client.post(f"/api/download/{ws}/export", json={"wants_top": True, "wants_crd": True, "as_zip": True})
+    assert export.status_code == 200, export.text
+    files = zipfile.ZipFile(io.BytesIO(export.content))
+    assert files.read("structure.prmtop") == b"uploaded prmtop bytes"
+    crd = files.read("structure.crd").decode()
+    assert crd.splitlines()[1].strip() == "10"
+    assert crd.splitlines()[-1].split()[:3] == ["41.5000000"] * 3
+
+    # report a popis postupu i bez kroku přípravy
+    report = client.post(f"/api/download/{ws}/export", json={"report": True, "procedure": True, "as_zip": True})
+    assert report.status_code == 200, report.text
+
+
+def test_continue_as_is_needs_uploaded_inputs(client):
+    pdb = b"ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\nEND\n"
+    ws = client.post("/api/molecules/upload", files={"file": ("a.pdb", pdb)}).json()["workspace_id"]
+    response = client.post(f"/api/molecules/{ws}/use-inputs-as-is")
+    assert response.status_code == 400 and response.json()["code"] == "inputs_not_usable"
