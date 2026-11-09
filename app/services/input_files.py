@@ -317,6 +317,64 @@ def _pdb_residue_name(label: str) -> str:
     return label
 
 
+_CHAIN_IDS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+_MAX_RESIDUES_PER_CHAIN = 9999
+
+
+def _split_long_chains(pdb_text: str) -> str:
+    """savePdb dá všechnu vodu (ionty) do jednoho řetězce a čísla reziduí za
+    9999 začnou znovu od 1 - různé vody pak mají stejné (řetězec, číslo) a
+    analýza je slije dohromady. Jako náš builder (forge_molecule_solvation):
+    nad 9999 reziduí se řetězec rozdělí na další s čísly 1-9999."""
+    sections: List[List[List[str]]] = [[]]   # sekce (do TER) -> rezidua -> řádky ATOM
+    previous = None
+    tail: List[str] = []
+    for line in pdb_text.splitlines():
+        if line.startswith(("ATOM", "HETATM")):
+            key = (line[17:20], line[21], line[22:27])
+            if key != previous:
+                sections[-1].append([])
+                previous = key
+            sections[-1][-1].append(line)
+        elif line.startswith("TER"):
+            sections.append([])
+            previous = None
+        elif line.strip() and not line.startswith("END"):
+            tail.append(line)
+    sections = [s for s in sections if s]
+    if all(len(s) <= _MAX_RESIDUES_PER_CHAIN for s in sections):
+        return pdb_text
+
+    used = {s[0][0][21] for s in sections}
+    spare = iter(c for c in _CHAIN_IDS if c not in used)
+    out: List[str] = list(tail)
+    serial = 0
+
+    def next_serial() -> int:
+        nonlocal serial
+        serial = serial % 99999 + 1
+        return serial
+
+    for section in sections:
+        chain = section[0][0][21]
+        for start in range(0, len(section), _MAX_RESIDUES_PER_CHAIN):
+            chunk = section[start:start + _MAX_RESIDUES_PER_CHAIN]
+            if start:
+                chain = next(spare, None)
+                if chain is None:
+                    raise InputsError("The system has too many residues to be written to a PDB (out of chain IDs).")
+            renumber = len(section) > _MAX_RESIDUES_PER_CHAIN
+            for number, residue in enumerate(chunk, start=1):
+                for line in residue:
+                    resseq = f"{number:4d} " if renumber else line[22:27]
+                    out.append(f"{line[:6]}{next_serial():5d}{line[11:21]}{chain}{resseq}{line[27:]}")
+            last = chunk[-1][0]
+            ter = f"TER   {next_serial():5d}      {last[17:20]} {chain}{(len(chunk) if renumber else int(last[22:26])):4d}"
+            out.append(ter.ljust(80))
+    out.append("END".ljust(80))
+    return "\n".join(out) + "\n"
+
+
 def write_pdb_from_inputs(topology_path: Path, coordinates_path: Path, pdb_path: Path) -> Dict[str, Any]:
     """structure.pdb z AMBER topologie a souřadnic (AMBER_topology.savePdb).
 
@@ -367,7 +425,7 @@ def write_pdb_from_inputs(topology_path: Path, coordinates_path: Path, pdb_path:
             AMBER_topology.savePdb(str(out), pdb_top, coords["xyz"].tolist())
         except ValueError as exc:
             raise InputsError(f"The PDB could not be written: {exc}.")
-        body = out.read_text(encoding="ascii")
+        body = _split_long_chains(out.read_text(encoding="ascii"))
     header = format_cryst1(box).ljust(80) + "\n" if box else ""
     pdb_path.write_text(header + body, encoding="utf-8")
     return {"atoms": natom, "box": box, "box_from": box_from, "renamed": renamed}

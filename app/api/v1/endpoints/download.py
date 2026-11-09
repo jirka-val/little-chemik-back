@@ -246,8 +246,10 @@ async def download_workspace_single_file(
         # Odlehčená verze se počítá za běhu (jeden průchod textem, řádově
         # desítky ms i na desítky MB) - nemá smysl ji cachovat na disk, "light"
         # je čistě prezentační ořez pro viewer, ne artefakt výpočtu.
-        pdb_text = file_path.read_text(encoding="utf-8")
-        stripped = _strip_bulk_solvent(pdb_text)
+        # V threadpoolu - u velkých systémů (desítky MB) by čtení a ořez
+        # zdržely event loop a s ním všechny ostatní uživatele.
+        pdb_text = await run_in_threadpool(file_path.read_text, encoding="utf-8")
+        stripped = await run_in_threadpool(_strip_bulk_solvent, pdb_text)
         logger.info(
             f"Serving lightweight (solvent-stripped) PDB via GET for workspace: {workspace_id} "
             f"({len(pdb_text.splitlines())} -> {len(stripped.splitlines())} lines)"

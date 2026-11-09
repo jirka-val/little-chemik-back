@@ -1,5 +1,6 @@
 import logging
 from fastapi import APIRouter
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from typing import Dict, Any
 
@@ -25,8 +26,11 @@ async def generate_topology(workspace_id: str, request: TopologyRequest):
     logger.info(f"Generating topology for workspace {workspace_id} (ff_selections: {list(request.ff_selections.keys())}, hmr={request.hmr})...")
 
     try:
-        # 1. Vygenerujeme soubory na disk (vrátí dict s názvy)
-        result_dict = topology_service.generate_topology(
+        # 1. Vygenerujeme soubory na disk (vrátí dict s názvy). V threadpoolu:
+        # generování trvá sekundy (u 300k atomů ~6 s) a přímo v event loopu by
+        # po tu dobu server neodpověděl nikomu jinému (viz tests/load/).
+        result_dict = await run_in_threadpool(
+            topology_service.generate_topology,
             workspace_id=workspace_id,
             pdb_filename=request.pdb_filename,
             ff_selections=request.ff_selections,

@@ -1,13 +1,43 @@
 import logging
+import os
 import requests
 import shutil
 import base64
+import threading
+import time
 from typing import List, Dict, Any
 from pathlib import Path
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _write_if_changed(path: Path, data: bytes) -> None:
+    """Zapíše sdílený soubor FF cache jen při změně obsahu, a atomicky.
+
+    Cache čtou souběžně příprava (threadpool) i generování topologie - dřív se
+    soubory při každém volání přepisovaly přes open("w"), takže čtenář mohl
+    dostat prázdný/useknutý soubor ("Bad atoms line in residue lib",
+    "Incorrect number of filed in ghbfix_nbfix file" - viz tests/load/).
+    Zápis jde do dočasného souboru ve stejné složce a pak os.replace: čtenář
+    vidí vždy celý starý, nebo celý nový soubor.
+    """
+    try:
+        if path.read_bytes() == data:
+            return
+    except OSError:
+        pass
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    tmp.write_bytes(data)
+    for attempt in range(20):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:  # Windows: cíl má zrovna otevřený jiný proces
+            time.sleep(0.05 * (attempt + 1))
+    tmp.unlink(missing_ok=True)
+    raise PermissionError(f"Could not replace force field cache file {path}")
 
 
 class ForceFieldService:
@@ -110,8 +140,7 @@ class ForceFieldService:
         }
 
         for fname, data in files.items():
-            with open(target_dir / fname, "w", encoding="utf-8") as f:
-                f.write(data)
+            _write_if_changed(target_dir / fname, data.encode("utf-8"))
 
         logger.info(f"Force field {ff_name} successfully prepared and saved to disk.")
         return target_dir
@@ -141,10 +170,9 @@ class ForceFieldService:
         # Celý flattened .rtp obsahuje jak [ defaults ] (fudgeLJ/fudgeQQ), tak
         # sekce [ resname ] s [ atoms ]/[ bonds ] - vyhovuje tedy zároveň roli
         # "residue_lib" i "forcefield" souboru, jen pod dvěma různými jmény.
-        shutil.copyfile(rtp_path, target_dir / f"residue_lib_{ff_name}.rtp")
-        shutil.copyfile(rtp_path, target_dir / f"forcefield_{ff_name}.itp")
-        shutil.copyfile(nb_path, target_dir / f"nonbonded_{ff_name}.itp")
-        shutil.copyfile(b_path, target_dir / f"bonded_{ff_name}.itp")
+        for source, name in ((rtp_path, f"residue_lib_{ff_name}.rtp"), (rtp_path, f"forcefield_{ff_name}.itp"),
+                             (nb_path, f"nonbonded_{ff_name}.itp"), (b_path, f"bonded_{ff_name}.itp")):
+            _write_if_changed(target_dir / name, source.read_bytes())
 
         logger.info(f"Forge-compatible force field view ready: {target_dir}")
         return target_dir

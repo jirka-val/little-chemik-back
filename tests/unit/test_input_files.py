@@ -4,6 +4,7 @@ Souřadnice nahrané v upload dialogu a souhrn vstupů (app/services/input_files
 """
 
 import struct
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -170,7 +171,7 @@ def _topology(box_beta=109.4712190):
 
 
 def _rst7(natom: int, box=None) -> str:
-    values = [float(i) for i in range(natom * 3)]
+    values = [float(i % 100) for i in range(natom * 3)]  # 6F12.7: hodnota se musí vejít do 12 znaků
     lines = ["sim", f"{natom:6d}"]
     lines += ["".join(f"{v:12.7f}" for v in values[i:i + 6]) for i in range(0, len(values), 6)]
     if box:
@@ -256,3 +257,30 @@ def test_upload_inputs_endpoint_reports_errors_and_cleans_up(client, topology, m
 
     missing = client.post("/api/molecules/upload-inputs", files={"topology": ("sim.prmtop", b"x")})
     assert missing.status_code in (400, 422)
+
+
+def test_pdb_from_inputs_splits_water_over_9999_residues(tmp_path, monkeypatch):
+    """savePdb číslo rezidua za 9999 přetočí - bez rozdělení na řetězce by
+    se různé vody slily do jednoho rezidua a systém by nevypadal solvatovaný."""
+    n_water = 10050
+    pointers = [0] * 31
+    pointers[0], pointers[27] = 3 * n_water + 1, 0
+    top = {
+        "POINTERS": pointers,
+        "ATOM_NAME": ["Na+"] + ["O", "H1", "H2"] * n_water,
+        "RESIDUE_LABEL": ["Na+"] + ["WAT"] * n_water,
+        "RESIDUE_POINTER": [1] + [2 + 3 * i for i in range(n_water)],
+        "ATOMIC_NUMBER": [11] + [8, 1, 1] * n_water,
+        "ATOMS_PER_MOLECULE": [1] + [3] * n_water,
+    }
+    monkeypatch.setattr(input_files.AMBER_topology, "read_AMBER_topology", lambda _path: top)
+    info, lines = _write(tmp_path, _rst7(3 * n_water + 1))
+    assert info["atoms"] == 3 * n_water + 1
+    atoms = [line for line in lines if line.startswith("ATOM")]
+    waters = Counter((line[21], line[22:26]) for line in atoms if line[17:20] == "WAT")
+    assert len(waters) == n_water and set(waters.values()) == {3}
+    assert len({chain for chain, _ in waters}) == 2               # 9999 + 51 reziduí
+    assert max(int(number) for _, number in waters) == 9999
+    assert len(atoms) == 3 * n_water + 1
+    assert lines[-1].startswith("END")
+    assert sum(line.startswith("TER") for line in lines) == 3     # ion + 2 vodní řetězce
