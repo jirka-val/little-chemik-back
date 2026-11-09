@@ -13,7 +13,9 @@ tests/
   integration/         through the FastAPI TestClient, local workspace lifecycle
   golden/              whole pipeline vs. recorded baseline   (marker: golden)
   network/             needs the real RCSB/IDA APIs            (marker: network)
-  performance/         long-running load tests                 (marker: slow)
+  performance/         long-running in-process performance tests (marker: slow)
+  load/                real server process under concurrent users: capacity,
+                       memory, CPU, disk (marker: load, see load/README.md)
 ```
 
 **Where a test goes:** if it imports and calls a function or class directly
@@ -41,8 +43,11 @@ pytest -m network
 # performance tests
 pytest -m slow
 
+# load tests against a real server process (~10-20 min, report in tests/load/results/)
+pytest -m load tests/load -s
+
 # everything
-pytest -m "unit or integration or golden or network or slow"
+pytest -m "unit or integration or golden or network or slow or load"
 ```
 
 Markers are registered in `pytest.ini` (`--strict-markers`, so a typo in a

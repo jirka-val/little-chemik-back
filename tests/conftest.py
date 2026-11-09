@@ -5,7 +5,8 @@ Rozvržení testů (viz tests/README.md pro detaily):
 - tests/unit/         čistá logika, žádné I/O, žádná síť
 - tests/integration/  přes FastAPI TestClient, lokální workspace lifecycle
 - tests/network/      potřebuje skutečné RCSB/IDA API (mark: network)
-- tests/performance/  dlouho běžící zátěžové testy (mark: slow)
+- tests/performance/  dlouho běžící výkonnostní testy v procesu (mark: slow)
+- tests/load/         zátěž skutečného serveru v samostatném procesu (mark: load)
 
 Klíčová bezpečnostní zásada těchto testů: NIKDY nezapisovat do reálné
 `data/ff_cache/` ani `data/ff_cache_forge/` (jsou to skutečná, draze stažená

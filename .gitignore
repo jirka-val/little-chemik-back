@@ -26,3 +26,6 @@ data/incidents/
 
 # Golden testy - plné výstupní soubory jen lokálně (viz tests/golden/)
 tests/golden/.baseline/
+
+# Zátěžové testy - naměřené výsledky (tests/load/), závisí na stroji
+tests/load/results/
