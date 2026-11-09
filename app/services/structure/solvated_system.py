@@ -19,6 +19,7 @@ možné - zbývá "rebuild".
 
 from __future__ import annotations
 
+import itertools
 import math
 from dataclasses import dataclass, field, replace
 from typing import Any, Dict, List, Optional, Tuple
@@ -182,6 +183,57 @@ def _close_pairs(coords: np.ndarray, cutoff: float) -> np.ndarray:
                 hit = d < cutoff
                 pairs.append(np.stack([i[hit], j[hit]], axis=1))
     return np.concatenate(pairs) if pairs else np.empty((0, 2), dtype=np.int64)
+
+
+# O-O vody blíž = dvě molekuly přes sebe (v kapalině nejblíž ~2,5 A).
+WATER_OVERLAP_DISTANCE = 2.2
+
+
+def periodic_water_overlaps(oxygens: np.ndarray, vectors: np.ndarray,
+                            cutoff: float = WATER_OVERLAP_DISTANCE) -> int:
+    """Kolik molekul vody se překrývá s periodickým obrazem jiné molekuly.
+
+    Ve správném boxu voda přes hranu plynule navazuje - žádné překryvy. Box,
+    který k souřadnicím nepatří (jiná mřížka, box z jiného snímku simulace,
+    prmtop s jedním úhlem místo celé buňky), dá na hranách stovky překryvů,
+    přitom ostatní kontroly (hustota, překryvy uvnitř) projdou.
+    Kyslíky se zabalí do rovnoběžnostěnu mřížky (platí pro každý tvar buňky)
+    a k těm u stěn se přidají obrazy.
+    """
+    if len(oxygens) < 2:
+        return 0
+    vectors = np.asarray(vectors, dtype=float)
+    frac = np.asarray(oxygens, dtype=float) @ np.linalg.inv(vectors)
+    frac -= np.floor(frac)
+    wrapped = frac @ vectors
+    volume = abs(np.linalg.det(vectors))
+    heights = [volume / np.linalg.norm(np.cross(vectors[(i + 1) % 3], vectors[(i + 2) % 3])) for i in range(3)]
+    margin = np.array([cutoff / h for h in heights])
+    near_low, near_high = frac < margin, frac > 1.0 - margin
+    images, owners = [], []
+    for shift in itertools.product((-1, 0, 1), repeat=3):
+        if shift == (0, 0, 0):
+            continue
+        # obraz posunutý o +1 je blízko spodní stěny, jen když atom leží u horní
+        mask = np.ones(len(frac), dtype=bool)
+        for axis, step in enumerate(shift):
+            if step == 1:
+                mask &= near_high[:, axis]
+            elif step == -1:
+                mask &= near_low[:, axis]
+        if mask.any():
+            images.append(wrapped[mask] - np.asarray(shift, dtype=float) @ vectors)
+            owners.append(np.flatnonzero(mask))
+    if not images:
+        return 0
+    n = len(wrapped)
+    owner = np.concatenate([np.arange(n)] + owners)
+    pairs = _close_pairs(np.vstack([wrapped] + images), cutoff)
+    across = (pairs[:, 0] >= n) ^ (pairs[:, 1] >= n)          # původní atom vs. obraz
+    pairs = pairs[across]
+    a, b = owner[pairs[:, 0]], owner[pairs[:, 1]]
+    keep = a != b
+    return int(len(np.unique(np.concatenate([a[keep], b[keep]]))))
 
 
 def min_image_distance(solute: np.ndarray, vectors: np.ndarray) -> float:
@@ -473,7 +525,24 @@ def _checks(box, volume, waters, ion_counts, solute_atoms, all_atoms) -> List[Di
     else:
         checks.append(_check("clashes", "Overlapping atoms", "ok", "none"))
 
-    # 6. ionty - známé FF a jejich náboj
+    # 6. voda navazuje přes hranu boxu (box patří k souřadnicím)
+    oxygens = np.array([a.xyz for atoms in waters.values() for a in atoms if a.element == "O"], dtype=float)
+    if len(oxygens):
+        overlapping = periodic_water_overlaps(oxygens, box_vectors(box))
+        if overlapping > max(3, 0.002 * len(oxygens)):
+            checks.append(_check("periodic_continuity", "Water across the box boundary", "error",
+                                 f"{overlapping} water molecules overlap with a periodic image of another one - "
+                                 "the box (CRYST1) does not belong to these coordinates (different lattice, or "
+                                 "the box comes from another frame of the simulation)."))
+        elif overlapping:
+            checks.append(_check("periodic_continuity", "Water across the box boundary", "warning",
+                                 f"{overlapping} water molecules are closer than {WATER_OVERLAP_DISTANCE} A to a "
+                                 "periodic image of another one - minimization should resolve it."))
+        else:
+            checks.append(_check("periodic_continuity", "Water across the box boundary", "ok",
+                                 "continuous - no overlaps with periodic images"))
+
+    # 7. ionty - známé FF a jejich náboj
     if ion_counts:
         unknown = [name for name in ion_counts if ion_group_for_resname(name) is None]
         charges = [(_ion_charge(name), n) for name, n in ion_counts.items()]

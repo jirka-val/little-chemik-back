@@ -245,3 +245,31 @@ def test_manual_box_for_water_without_a_recognizable_shape():
 def test_override_is_ignored_when_cryst1_exists():
     result = analyze_solvated_system(_system(box=34.0), box_override=_cube(50.0, "manual"))
     assert result["box_source"] == "cryst1" and result["box"]["a"] == 34.0 and "box_override" not in result
+
+
+# ---------------------------------------------------------------------------
+# Voda navazuje přes hranu boxu (periodic_water_overlaps)
+# ---------------------------------------------------------------------------
+
+def _periodic_oxygens(vectors, spacing=3.1, jitter=0.15, seed=0):
+    import itertools as it
+    rng = np.random.default_rng(seed)
+    n = [max(2, round(np.linalg.norm(v) / spacing)) for v in vectors]
+    frac = np.array(list(it.product(*[(np.arange(k) + 0.5) / k for k in n])))
+    return frac @ vectors + rng.normal(scale=jitter, size=(len(frac), 3))
+
+
+@pytest.mark.parametrize("angles", [(90.0, 90.0, 90.0), (109.4712, 109.4712, 109.4712), (60.0, 60.0, 90.0)])
+def test_correct_box_has_no_periodic_overlaps(angles):
+    from app.services.structure.solvated_system import periodic_water_overlaps
+    box = dict(zip(("a", "b", "c", "alpha", "beta", "gamma"), (40.0, 40.0, 40.0, *angles)))
+    vectors = box_vectors(box)
+    assert periodic_water_overlaps(_periodic_oxygens(vectors), vectors) == 0
+
+
+def test_box_that_does_not_belong_to_the_coordinates_is_detected():
+    from app.services.structure.solvated_system import periodic_water_overlaps
+    box = {"a": 40.0, "b": 40.0, "c": 40.0, "alpha": 90.0, "beta": 90.0, "gamma": 90.0}
+    oxygens = _periodic_oxygens(box_vectors(box))
+    smaller = box_vectors({**box, "a": 38.5, "b": 38.5, "c": 38.5})      # box z jiného snímku NPT
+    assert periodic_water_overlaps(oxygens, smaller) > 20
